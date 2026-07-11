@@ -13,6 +13,8 @@ new class extends Component
      */
     public function deleteUser(Logout $logout): void
     {
+        abort(403, 'Account lifecycle is managed in Microsoft Entra ID.');
+
         $this->validate([
             'password' => ['required', 'string', 'current_password'],
         ]);

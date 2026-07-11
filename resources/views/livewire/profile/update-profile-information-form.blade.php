@@ -25,6 +25,8 @@ new class extends Component
      */
     public function updateProfileInformation(): void
     {
+        abort(403, 'Profile information is managed in Microsoft Entra ID.');
+
         $user = Auth::user();
 
         $validated = $this->validate([
@@ -48,6 +50,8 @@ new class extends Component
      */
     public function sendVerification(): void
     {
+        abort(403, 'Email verification is managed in Microsoft Entra ID.');
+
         $user = Auth::user();
 
         if ($user->hasVerifiedEmail()) {

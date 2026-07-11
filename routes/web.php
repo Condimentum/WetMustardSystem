@@ -55,11 +55,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('manufacturing-orders', 'pages.manufacturing-orders.search')
         ->name('manufacturing-orders.search');
 
+    Volt::route('manufacturing-orders/{winmanMo}', 'pages.manufacturing-orders.show')
+        ->name('manufacturing-orders.show');
+
     Volt::route('batches/{batch}', 'pages.batches.show')
         ->name('batches.show');
-
-    Volt::route('batches/{batch}/metal-detector', 'pages.batches.metal-detector')
-        ->name('batches.metal-detector');
 
     Volt::route('batches/{batch}/pallecons', 'pages.batches.pallecons')
         ->name('batches.pallecons');
@@ -67,11 +67,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('batches/{batch}/packing', 'pages.batches.packing')
         ->name('batches.packing');
 
-    Volt::route('batches/{batch}/drum', 'pages.batches.drum')
-        ->name('batches.drum');
-
-    Volt::route('batches/{batch}/packaging', 'pages.batches.packaging')
-        ->name('batches.packaging');
 
     Volt::route('traceability', 'pages.traceability.search')
         ->name('traceability.search');

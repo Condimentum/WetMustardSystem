@@ -25,6 +25,8 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
 
     public ?int $variantId = null;
 
+    public string $batchPlannedQuantity = '';
+
     public ?string $error = null;
 
     public function mount(): void
@@ -59,8 +61,32 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
             ->map(fn (RecipeVariant $v): array => [
                 'id' => $v->id,
                 'label' => $v->variant_name.' ('.rtrim(rtrim((string) $v->batch_size, '0'), '.').' kg)',
+                'batch_size' => (float) $v->batch_size,
             ])
             ->all();
+
+        $defaultQty = (float) ($order['quantity_outstanding'] ?? 0);
+        $this->batchPlannedQuantity = $defaultQty > 0
+            ? rtrim(rtrim((string) $defaultQty, '0'), '.')
+            : '';
+    }
+
+    public function updatedVariantId($value): void
+    {
+        $variantId = (int) ($value ?? 0);
+        if ($variantId <= 0) {
+            return;
+        }
+
+        $selected = collect($this->variantOptions)->firstWhere('id', $variantId);
+        if (! is_array($selected)) {
+            return;
+        }
+
+        $batchSize = (float) ($selected['batch_size'] ?? 0);
+        if ($batchSize > 0) {
+            $this->batchPlannedQuantity = rtrim(rtrim((string) $batchSize, '0'), '.');
+        }
     }
 
     public function prepareAndStart(int $winmanMo): void
@@ -75,6 +101,7 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
         $this->selectedLabel = null;
         $this->variantOptions = [];
         $this->variantId = null;
+        $this->batchPlannedQuantity = '';
         $this->error = null;
     }
 
@@ -83,6 +110,20 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
         $this->error = null;
 
         if ($this->selectedWinmanMo === null) {
+            return;
+        }
+
+        $validated = $this->validate([
+            'batchPlannedQuantity' => ['required', 'numeric', 'min:0.001'],
+        ]);
+
+        $plannedQuantity = (float) $validated['batchPlannedQuantity'];
+
+        $selectedOrder = collect($this->orders)->firstWhere('winman_manufacturing_order', $this->selectedWinmanMo);
+        $outstanding = is_array($selectedOrder) ? (float) ($selectedOrder['quantity_outstanding'] ?? 0) : 0.0;
+        if ($outstanding > 0 && $plannedQuantity > $outstanding + 0.0001) {
+            $this->error = 'Batch quantity cannot exceed MO outstanding quantity.';
+
             return;
         }
 
@@ -97,6 +138,7 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
             $batch = app(StartBatchFromManufacturingOrderFeature::class)(
                 $this->selectedWinmanMo,
                 $this->variantId,
+                $plannedQuantity,
                 auth()->user(),
             );
         } catch (WinManException|BatchException $e) {
@@ -166,15 +208,23 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
         </div>
 
         @if ($selectedWinmanMo)
-            <div class="bg-indigo-700 text-white rounded-lg p-4 shadow-lg">
-                <div class="text-sm font-semibold uppercase tracking-wide text-indigo-200 mb-1">Creating batch for:</div>
+            <div class="bg-indigo-700 text-white rounded-lg p-4 shadow-lg" x-data="{ moTab: 'batch' }">
+                <div class="text-sm font-semibold uppercase tracking-wide text-indigo-200 mb-1">Manufacturing Order Workspace</div>
                 <div class="text-lg font-bold">{{ $selectedLabel }}</div>
 
                 @if ($error)
                     <div class="mt-2 text-sm bg-red-500/20 border border-red-300/40 rounded px-3 py-2 text-red-100">{{ $error }}</div>
                 @endif
 
-                <div class="mt-4 flex flex-wrap items-end gap-3">
+                <div class="mt-4 border-b border-indigo-500/60">
+                    <nav class="-mb-px flex gap-6 text-sm font-medium">
+                        <button type="button" @click="moTab = 'batch'"
+                            :class="moTab === 'batch' ? 'border-white text-white' : 'border-transparent text-indigo-200 hover:text-white'"
+                            class="py-2 border-b-2">Batch</button>
+                    </nav>
+                </div>
+
+                <div class="mt-4 flex flex-wrap items-end gap-3" x-show="moTab === 'batch'">
                     @if (count($variantOptions) > 0)
                         <div>
                             <label class="block text-sm text-indigo-200 mb-1">Batch-size variant <span class="text-red-300">*</span></label>
@@ -187,9 +237,15 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                         </div>
                     @endif
 
+                    <div>
+                        <label class="block text-sm text-indigo-200 mb-1">Batch quantity (kg) <span class="text-red-300">*</span></label>
+                        <input wire:model="batchPlannedQuantity" type="number" step="0.001" min="0.001" class="border-0 rounded-md text-gray-800 text-sm w-40" />
+                        @error('batchPlannedQuantity') <span class="block text-xs text-red-100 mt-1">{{ $message }}</span> @enderror
+                    </div>
+
                     <button wire:click="start" wire:loading.attr="disabled"
                         class="inline-flex items-center px-5 py-2.5 bg-white text-indigo-700 font-semibold rounded-lg hover:bg-indigo-50 disabled:opacity-50">
-                        <span wire:loading.remove wire:target="start">✓ Create batch</span>
+                        <span wire:loading.remove wire:target="start">+ Add batch</span>
                         <span wire:loading wire:target="start">Creating…</span>
                     </button>
                     <button wire:click="cancel" type="button"
@@ -219,15 +275,14 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                             30 => 'Intermediate',
                             29 => 'Wet Packed',
                         ];
-                        $wetPackedUomLabels = [
-                            2 => 'IBC',
+                        $uomLabels = [
+                            2 => 'Pallecon',
                             44 => 'Buckets',
                         ];
 
                         $renderOrderRow = function (array $order): string {
-                            $actionButton = $order['has_variants']
-                                ? '<button wire:click="prepare('.$order['winman_manufacturing_order'].')" type="button" class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md font-semibold text-xs text-gray-700 uppercase tracking-widest shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-25 transition ease-in-out duration-150">Select variant</button>'
-                                : '<button wire:click="prepareAndStart('.$order['winman_manufacturing_order'].')" type="button" class="inline-flex items-center px-4 py-2 bg-gray-800 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">Start batch</button>';
+                            $startUrl = route('manufacturing-orders.show', ['winmanMo' => (int) $order['winman_manufacturing_order']]);
+                            $actionButton = '<a href="'.e($startUrl).'" wire:navigate class="inline-flex items-center px-4 py-2 bg-gray-800 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">Start</a>';
 
                             $productDescription = e(\Illuminate\Support\Str::limit((string) $order['product_description'], 40));
                             $dbmtsName = e($order['dbmts_product_name'] ?? '—');
@@ -282,8 +337,8 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                                         $uomLabel = $uomInt === null
                                             ? 'Unknown'
                                             : ($classification === 29
-                                                ? ($wetPackedUomLabels[$uomInt] ?? ('Other ('.number_format($uomInt).')'))
-                                                : number_format($uomInt));
+                                                ? ($uomLabels[$uomInt] ?? ('Other ('.number_format($uomInt).')'))
+                                                : ($uomLabels[$uomInt] ?? number_format($uomInt)));
                                     @endphp
                                     <tr class="bg-gray-50">
                                         <td colspan="7" class="px-4 py-2 text-xs font-medium uppercase tracking-wide text-gray-600">

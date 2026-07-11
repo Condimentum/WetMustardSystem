@@ -40,6 +40,7 @@ class StartBatchFromManufacturingOrderFeatureTest extends TestCase
             'product_id' => $product->id,
             'planned_quantity' => $plannedQuantity,
             'quantity_outstanding' => $plannedQuantity,
+            'winman_classification' => 30,
             'winman_system_type' => 'F',
             'status' => 'selected',
         ]);
@@ -90,6 +91,38 @@ class StartBatchFromManufacturingOrderFeatureTest extends TestCase
         $this->assertSame($variant->id, $batch->variant_id);
         $this->assertSame('500.000', (string) $batch->planned_quantity);
         $this->assertSame($variant->id, $order->fresh()->variant_id);
+    }
+
+    public function test_it_allows_partial_batch_quantity_when_requested(): void
+    {
+        $order = $this->makeOrder('R-NO-VARIANTS', 1000);
+        $this->fakeSelection($order);
+
+        $batch = app(StartBatchFromManufacturingOrderFeature::class)(999001, null, 250.0);
+
+        $this->assertSame('250.000', (string) $batch->planned_quantity);
+    }
+
+    public function test_it_rejects_batch_quantity_above_mo_outstanding(): void
+    {
+        $order = $this->makeOrder('R-NO-VARIANTS', 1000);
+        $order->update(['quantity_outstanding' => 300]);
+        $this->fakeSelection($order->fresh());
+
+        $this->expectException(BatchException::class);
+
+        app(StartBatchFromManufacturingOrderFeature::class)(999001, null, 350.0);
+    }
+
+    public function test_it_rejects_non_intermediate_classification(): void
+    {
+        $order = $this->makeOrder('R-NO-VARIANTS', 1000);
+        $order->update(['winman_classification' => 29]);
+        $this->fakeSelection($order->fresh());
+
+        $this->expectException(BatchException::class);
+
+        app(StartBatchFromManufacturingOrderFeature::class)(999001, null, 250.0);
     }
 
     protected function tearDown(): void

@@ -17,6 +17,8 @@ new class extends Component
      */
     public function updatePassword(): void
     {
+        abort(403, 'Password is managed in Microsoft Entra ID.');
+
         try {
             $validated = $this->validate([
                 'current_password' => ['required', 'string', 'current_password'],

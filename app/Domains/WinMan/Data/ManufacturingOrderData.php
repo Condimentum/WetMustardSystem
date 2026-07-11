@@ -22,6 +22,7 @@ final readonly class ManufacturingOrderData
         public float $quantityOutstanding,
         public ?int $classification,
         public ?int $unitOfMeasure,
+        public ?string $unitOfMeasureDescription,
         public ?string $dueDate,
         public ?string $lastModifiedDate,
     ) {
@@ -37,6 +38,10 @@ final readonly class ManufacturingOrderData
             ? (int) $row->UnitOfMeasure
             : null;
 
+        $unitOfMeasureDescription = property_exists($row, 'UnitOfMeasureDescription') && $row->UnitOfMeasureDescription !== null
+            ? (string) $row->UnitOfMeasureDescription
+            : null;
+
         return new self(
             winmanManufacturingOrder: (int) $row->ManufacturingOrder,
             winmanManufacturingOrderId: (string) $row->ManufacturingOrderId,
@@ -48,6 +53,7 @@ final readonly class ManufacturingOrderData
             quantityOutstanding: (float) $row->QuantityOutstanding,
             classification: $classification,
             unitOfMeasure: $unitOfMeasure,
+            unitOfMeasureDescription: $unitOfMeasureDescription,
             dueDate: $row->DueDate !== null ? (string) $row->DueDate : null,
             lastModifiedDate: $row->LastModifiedDate !== null ? (string) $row->LastModifiedDate : null,
         );
@@ -67,6 +73,7 @@ final readonly class ManufacturingOrderData
             'quantity_outstanding' => $this->quantityOutstanding,
             'classification' => $this->classification,
             'unit_of_measure' => $this->unitOfMeasure,
+            'unit_of_measure_description' => $this->unitOfMeasureDescription,
             'due_date' => $this->dueDate,
             'last_modified_date' => $this->lastModifiedDate,
         ];

@@ -23,7 +23,10 @@ class ManufacturingOrder extends Model
         'product_id',
         'planned_quantity',
         'quantity_outstanding',
+        'winman_classification',
         'winman_system_type',
+        'winman_unit_of_measure',
+        'winman_unit_of_measure_description',
         'winman_last_modified_date',
         'status',
         'selected_by',
@@ -35,6 +38,8 @@ class ManufacturingOrder extends Model
             'winman_manufacturing_order' => 'integer',
             'planned_quantity' => 'decimal:3',
             'quantity_outstanding' => 'decimal:3',
+            'winman_classification' => 'integer',
+            'winman_unit_of_measure' => 'integer',
             'winman_last_modified_date' => 'datetime',
         ];
     }

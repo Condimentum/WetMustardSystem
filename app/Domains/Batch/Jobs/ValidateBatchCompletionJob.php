@@ -6,8 +6,7 @@ use App\Models\BatchRecord;
 
 /**
  * Validates a batch is ready for completion (scope §11 validation): mandatory
- * ingredient lots, lot numbers, actual quantities, weighed/tipped sign-offs and
- * completion of all required process steps.
+ * ingredient lots, lot numbers, actual quantities, and weighed/tipped sign-offs.
  *
  * @return array<int, string> Human-readable issues; empty when ready.
  */
@@ -18,7 +17,7 @@ class ValidateBatchCompletionJob
      */
     public function __invoke(BatchRecord $batch): array
     {
-        $batch->loadMissing('ingredientLots', 'processSteps');
+        $batch->loadMissing('ingredientLots');
 
         $issues = [];
 
@@ -40,12 +39,6 @@ class ValidateBatchCompletionJob
             }
             if ($lot->tipped_by === null) {
                 $issues[] = "Ingredient '{$label}' is missing a tipped sign-off.";
-            }
-        }
-
-        foreach ($batch->processSteps->where('required_flag', true) as $step) {
-            if ($step->completed_by === null) {
-                $issues[] = "Process step '{$step->step_name}' is not complete.";
             }
         }
 

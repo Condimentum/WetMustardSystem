@@ -119,7 +119,7 @@ class ShowDashboardFeature
 
         if ($classification === 29) {
             return match ($uom) {
-                2 => 'IBC',
+                2 => 'Pallecon',
                 44 => 'Buckets',
                 default => 'Other ('.number_format($uom).')',
             };

@@ -25,9 +25,11 @@ class FetchManufacturingOrderJob
         $row = $this->winman->connection()->selectOne(
             'SELECT mo.ManufacturingOrder, mo.ManufacturingOrderId, mo.Product,
                     mo.SystemType, mo.Quantity, mo.QuantityOutstanding, mo.DueDate, mo.LastModifiedDate,
-                    p.ProductId, p.ProductDescription, p.Classification, p.UnitOfMeasure
+                    p.ProductId, p.ProductDescription, p.Classification, p.UnitOfMeasure,
+                    u.UnitOfMeasureDescription
              FROM ManufacturingOrders mo
              JOIN Products p ON p.Product = mo.Product
+             LEFT JOIN UnitsOfMeasure u ON u.UnitOfMeasure = p.UnitOfMeasure
              WHERE mo.ManufacturingOrder = ?',
             [$winmanManufacturingOrder],
         );

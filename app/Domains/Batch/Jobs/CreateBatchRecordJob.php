@@ -22,6 +22,7 @@ class CreateBatchRecordJob
         ?RecipeVariant $variant = null,
         ?User $user = null,
         ?string $shift = null,
+        ?float $plannedQuantityKg = null,
     ): BatchRecord {
         return BatchRecord::create([
             'manufacturing_order_id' => $order->id,
@@ -30,7 +31,7 @@ class CreateBatchRecordJob
             'batch_number' => $batchNumber,
             'production_date' => now()->toDateString(),
             'shift' => $shift,
-            'planned_quantity' => $variant?->batch_size ?? $order->planned_quantity,
+            'planned_quantity' => $plannedQuantityKg ?? ($variant?->batch_size ?? $order->planned_quantity),
             'status' => BatchRecord::STATUS_IN_PROGRESS,
             'created_by' => $user?->id,
         ]);

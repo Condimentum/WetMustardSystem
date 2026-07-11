@@ -4,7 +4,6 @@ namespace App\Domains\WinMan\Jobs;
 
 use App\Domains\WinMan\Data\ManufacturingOrderData;
 use App\Domains\WinMan\Support\WinManConnection;
-use App\Models\Product;
 
 /**
  * Fetches outstanding, eligible WinMan manufacturing orders (scope §11.2).
@@ -27,17 +26,12 @@ class SearchOutstandingManufacturingOrdersJob
      */
     public function __invoke(?string $search = null, int $limit = 50): array
     {
-        $mappedProductIds = $this->mappedProductIds();
-
-        if ($mappedProductIds === []) {
-            return [];
-        }
-
         $eligibleTypes = array_values((array) config('winman.eligible_system_types', ['F', 'I', 'R']));
+        $eligibleClassifications = [29, 30];
 
         $bindings = [$limit];
         $typePlaceholders = $this->placeholders($eligibleTypes, $bindings);
-        $productPlaceholders = $this->placeholders($mappedProductIds, $bindings);
+        $classificationPlaceholders = $this->placeholders($eligibleClassifications, $bindings);
 
         $searchClause = '';
         if ($search !== null && trim($search) !== '') {
@@ -48,12 +42,15 @@ class SearchOutstandingManufacturingOrdersJob
 
         $sql = "SELECT TOP (?) mo.ManufacturingOrder, mo.ManufacturingOrderId, mo.Product,
                    mo.SystemType, mo.Quantity, mo.QuantityOutstanding, mo.DueDate, mo.LastModifiedDate,
-                   p.ProductId, p.ProductDescription, p.Classification, p.UnitOfMeasure
+                         p.ProductId, p.ProductDescription, p.Classification, p.UnitOfMeasure,
+                         u.UnitOfMeasureDescription
                 FROM ManufacturingOrders mo
                 JOIN Products p ON p.Product = mo.Product
-                WHERE mo.QuantityOutstanding > 0
+                     LEFT JOIN UnitsOfMeasure u ON u.UnitOfMeasure = p.UnitOfMeasure
+                                WHERE mo.QuantityOutstanding <> 0
                   AND mo.SystemType IN ({$typePlaceholders})
-                  AND p.ProductId IN ({$productPlaceholders})
+                                    AND p.Classification IN ({$classificationPlaceholders})
+                                    AND p.Classification <> 0
                   {$searchClause}
                 ORDER BY mo.DueDate ASC, mo.ManufacturingOrder DESC";
 
@@ -63,30 +60,6 @@ class SearchOutstandingManufacturingOrdersJob
             static fn (object $row): ManufacturingOrderData => ManufacturingOrderData::fromRow($row),
             $rows,
         );
-    }
-
-    /**
-     * WinMan ProductId values mapped in the DBMTS ProductMaster.
-     *
-     * @return array<int, string>
-     */
-    private function mappedProductIds(): array
-    {
-        return Product::query()
-            ->where('active_flag', true)
-            ->where(function ($query): void {
-                $query->whereNotNull('winman_product_id')
-                    ->orWhereNotNull('finished_goods_code');
-            })
-            ->get(['winman_product_id', 'finished_goods_code'])
-            ->flatMap(fn (Product $product): array => [
-                $product->winman_product_id,
-                $product->finished_goods_code,
-            ])
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
     }
 
     /**

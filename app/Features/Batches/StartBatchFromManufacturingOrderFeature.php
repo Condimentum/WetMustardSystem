@@ -27,12 +27,19 @@ class StartBatchFromManufacturingOrderFeature
     public function __invoke(
         int $winmanManufacturingOrder,
         ?int $variantId = null,
+        ?float $plannedQuantityKg = null,
         ?User $user = null,
         ?string $shift = null,
     ): BatchRecord {
         $order = ($this->selectManufacturingOrder)($winmanManufacturingOrder, $user);
 
+        if ((int) ($order->winman_classification ?? 0) !== 30) {
+            throw new BatchException('Batch production workflow is available for Intermediate manufacturing orders only (classification 30).');
+        }
+
         $variant = $this->resolveVariant($order->recipe_code, $variantId);
+
+        $plannedQuantity = $this->resolvePlannedQuantity($order, $variant, $plannedQuantityKg);
 
         if ($variant !== null) {
             $order->forceFill(['variant_id' => $variant->id])->save();
@@ -40,7 +47,27 @@ class StartBatchFromManufacturingOrderFeature
 
         $batchNumber = ($this->generateBatchNumber)();
 
-        return ($this->createBatchRecord)($order, $batchNumber, $variant, $user, $shift);
+        return ($this->createBatchRecord)($order, $batchNumber, $variant, $user, $shift, $plannedQuantity);
+    }
+
+    private function resolvePlannedQuantity(
+        \App\Models\ManufacturingOrder $order,
+        ?RecipeVariant $variant,
+        ?float $requestedPlannedQuantity,
+    ): float {
+        $defaultPlanned = (float) ($variant?->batch_size ?? $order->planned_quantity ?? 0);
+        $planned = $requestedPlannedQuantity !== null ? (float) $requestedPlannedQuantity : $defaultPlanned;
+
+        if ($planned <= 0) {
+            throw new BatchException('Batch quantity must be greater than zero.');
+        }
+
+        $outstanding = (float) ($order->quantity_outstanding ?? 0);
+        if ($outstanding > 0 && $planned > $outstanding + 0.0001) {
+            throw new BatchException('Batch quantity cannot exceed MO outstanding quantity.');
+        }
+
+        return round($planned, 3);
     }
 
     private function resolveVariant(?string $recipeCode, ?int $variantId): ?RecipeVariant
