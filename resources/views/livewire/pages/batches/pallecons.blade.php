@@ -1,6 +1,7 @@
 <?php
 
 use App\Features\Pallecon\AddPalleconRecordFeature;
+use App\Features\Pallecon\PrintPalleconLabelFeature;
 use App\Models\BatchRecord;
 use Illuminate\Support\Carbon;
 use Livewire\Attributes\Layout;
@@ -18,26 +19,39 @@ new #[Layout('layouts.app')] #[Title('Pallecon Filling')] class extends Componen
         'bottom_seal_number' => '',
         'liner_number' => '',
         'liner_batch_code' => '',
-        'fill_weight' => '',
+        'fill_weight' => '1',
         'start_time' => '',
         'finish_time' => '',
     ];
 
+    public bool $print_after_save = false;
+    public bool $bartender_enabled = false;
+    public string $label_production_date = '';
+    public ?string $print_message = null;
+    public bool $print_failed = false;
+
     public function mount(BatchRecord $batch): void
     {
         $this->batch = $batch->load(['pallecons.checkedBy', 'manufacturingOrder']);
+        $this->bartender_enabled = (bool) config('services.bartender.enabled', false);
+        $this->print_after_save = $this->bartender_enabled;
+        $this->label_production_date = now()->toDateString();
     }
 
     public function addPallecon(): void
     {
+        if ((string) ($this->form['fill_weight'] ?? '') === '') {
+            $this->form['fill_weight'] = '1';
+        }
+
         $validated = $this->validate([
             'form.ticket_number' => ['nullable', 'string', 'max:255'],
-            'form.serial_number' => ['required', 'string', 'max:255'],
+            'form.serial_number' => ['nullable', 'string', 'max:255'],
             'form.top_seal_number' => ['nullable', 'string', 'max:255'],
             'form.bottom_seal_number' => ['nullable', 'string', 'max:255'],
             'form.liner_number' => ['nullable', 'string', 'max:255'],
             'form.liner_batch_code' => ['nullable', 'string', 'max:255'],
-            'form.fill_weight' => ['nullable', 'numeric', 'min:0'],
+            'form.fill_weight' => ['required', 'numeric', 'min:0'],
             'form.start_time' => ['nullable', 'date'],
             'form.finish_time' => ['nullable', 'date'],
         ])['form'];
@@ -46,10 +60,59 @@ new #[Layout('layouts.app')] #[Title('Pallecon Filling')] class extends Componen
         $validated['finish_time'] = $validated['finish_time'] ? Carbon::parse($validated['finish_time']) : null;
         $validated['fill_weight'] = $validated['fill_weight'] !== '' ? $validated['fill_weight'] : null;
 
-        app(AddPalleconRecordFeature::class)($this->batch, $validated, auth()->user());
+        $pallecon = app(AddPalleconRecordFeature::class)($this->batch, $validated, auth()->user());
+
+        $this->print_message = null;
+        $this->print_failed = false;
+
+        if ($this->print_after_save && $this->bartender_enabled) {
+            try {
+                $result = app(PrintPalleconLabelFeature::class)($pallecon, 1, [
+                    'production_date' => $this->label_production_date,
+                ]);
+                $this->print_message = $this->formatPrintMessage($result);
+            } catch (\Throwable $e) {
+                $this->print_failed = true;
+                $this->print_message = 'Pallecon saved, but label print failed: '.$e->getMessage();
+            }
+        }
 
         $this->reset('form');
+        $this->form['fill_weight'] = '1';
         $this->batch = $this->batch->fresh(['pallecons.checkedBy', 'manufacturingOrder']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $result
+     */
+    private function formatPrintMessage(array $result): string
+    {
+        $requestId = isset($result['printRequestID']) ? (string) $result['printRequestID'] : null;
+        $messages = isset($result['messages']) && is_array($result['messages']) ? $result['messages'] : [];
+        $printer = null;
+
+        foreach ($messages as $message) {
+            if (! is_string($message)) {
+                continue;
+            }
+
+            if (preg_match('/Printer:\s*(.+)$/m', $message, $matches) === 1) {
+                $printer = trim($matches[1]);
+                break;
+            }
+        }
+
+        $parts = ['Pallecon saved and BarTender sent the job to the spooler.'];
+
+        if ($requestId) {
+            $parts[] = 'Request ID: '.$requestId.'.';
+        }
+
+        if ($printer) {
+            $parts[] = 'Printer: '.$printer.'.';
+        }
+
+        return implode(' ', $parts);
     }
 }; ?>
 
@@ -65,28 +128,31 @@ new #[Layout('layouts.app')] #[Title('Pallecon Filling')] class extends Componen
         </div>
 
         <form wire:submit="addPallecon" class="bg-white shadow-sm rounded-lg p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-            @foreach ([
-                'serial_number' => 'Serial number *',
-                'ticket_number' => 'Ticket number',
-                'fill_weight' => 'Fill weight (kg)',
-                'top_seal_number' => 'Top seal number',
-                'bottom_seal_number' => 'Bottom seal number',
-                'liner_number' => 'Liner number',
-                'liner_batch_code' => 'Liner batch code',
-            ] as $field => $label)
-                <div>
-                    <label class="block text-xs text-gray-600 mb-1">{{ $label }}</label>
-                    <input wire:model="form.{{ $field }}" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
-                    @error('form.'.$field) <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+            @if ($print_message)
+                <div class="md:col-span-3 rounded-md p-3 text-sm {{ $print_failed ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200' }}">
+                    {{ $print_message }}
                 </div>
-            @endforeach
+            @endif
+
             <div>
-                <label class="block text-xs text-gray-600 mb-1">Start time</label>
-                <input type="datetime-local" wire:model="form.start_time" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+                <label class="block text-xs text-gray-600 mb-1">Fill weight (kg)</label>
+                <input type="number" step="0.001" min="0" wire:model="form.fill_weight" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+                @error('form.fill_weight') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
             </div>
-            <div>
-                <label class="block text-xs text-gray-600 mb-1">Finish time</label>
-                <input type="datetime-local" wire:model="form.finish_time" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+            <div class="md:col-span-2 flex items-end">
+                <div class="space-y-2">
+                    <label class="block text-xs text-gray-600 mb-1">Label production date (BBE uses +5 months)</label>
+                    <input type="date" wire:model="label_production_date" class="border-gray-300 rounded-md shadow-sm text-sm" />
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                        <input type="checkbox" wire:model="print_after_save" class="rounded border-gray-300" {{ $bartender_enabled ? '' : 'disabled' }} />
+                        Print Wet Mustard test label after save (WetMustard LabelNew.btw)
+                    </label>
+                    @if (! $bartender_enabled)
+                        <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                            Printing is disabled. Set <strong>BARTENDER_ENABLED=true</strong> in the environment to enable label printing.
+                        </p>
+                    @endif
+                </div>
             </div>
             <div class="flex items-end">
                 <x-primary-button type="submit" class="w-full justify-center">Add pallecon</x-primary-button>

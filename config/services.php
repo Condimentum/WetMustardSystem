@@ -51,4 +51,21 @@ return [
         'username' => env('OFFICE365_MAIL_USERNAME'),
     ],
 
+    'bartender' => [
+        'enabled' => env('BARTENDER_ENABLED', false),
+        'base_url' => env('BARTENDER_BASE_URL', 'http://192.168.27.4/BarTender'),
+        'authenticate_path' => env('BARTENDER_AUTH_PATH', '/api/v1/Authenticate'),
+        'print_path' => env('BARTENDER_PRINT_PATH', '/api/v1/print'),
+        'username' => env('BARTENDER_USERNAME'),
+        'password' => env('BARTENDER_PASSWORD'),
+        'library_id' => env('BARTENDER_LIBRARY_ID'),
+        'default_printer' => env('BARTENDER_DEFAULT_PRINTER'),
+        'enforce_printer_match' => env('BARTENDER_ENFORCE_PRINTER_MATCH', false),
+        'timeout_seconds' => (int) env('BARTENDER_TIMEOUT_SECONDS', 30),
+        'labels' => [
+            'wet_mustard_test' => env('BARTENDER_LABEL_WET_MUSTARD_TEST', 'WetMustard LabelNew.btw'),
+        ],
+        'wet_mustard_shelf_life_months' => (int) env('BARTENDER_WET_MUSTARD_SHELF_LIFE_MONTHS', 5),
+    ],
+
 ];
