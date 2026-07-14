@@ -49,6 +49,7 @@ class BookFinishedGoodsToMoOperation
         CarbonInterface $finishedDate,
         CarbonInterface $expiryDate,
         ?User $user = null,
+        bool $allowMultiplePerBatch = false,
     ): WinManBookingLog {
         if (! config('winman.booking.enabled')) {
             throw new WinManException('WinMan finished-goods booking is disabled.');
@@ -62,7 +63,7 @@ class BookFinishedGoodsToMoOperation
         $winmanMo = (int) $mo->winman_manufacturing_order;
         $base = $this->baseAttributes($batch, $mo, $lotNumber, $user);
 
-        if (($this->hasBatchBeenBooked)($batch)) {
+        if (! $allowMultiplePerBatch && ($this->hasBatchBeenBooked)($batch)) {
             return ($this->recordLog)($base + ['booking_status' => WinManBookingLog::STATUS_REJECTED, 'error_message' => 'Batch has already been booked.']);
         }
 

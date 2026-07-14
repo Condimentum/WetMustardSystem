@@ -32,6 +32,7 @@ class BookFinishedGoodsFeature
         CarbonInterface $finishedDate,
         CarbonInterface $expiryDate,
         ?User $user = null,
+        bool $allowMultiplePerBatch = false,
     ): WinManBookingLog {
         $log = ($this->bookFinishedGoods)(
             $batch,
@@ -41,6 +42,7 @@ class BookFinishedGoodsFeature
             $finishedDate,
             $expiryDate,
             $user,
+            $allowMultiplePerBatch,
         );
 
         ($this->recordAuditEntry)($log, 'winman_booking', $user, 'booking_status', null, $log->booking_status);

@@ -23,6 +23,7 @@ class PrintWetMustardLabelTestCommand extends Command
         {--bottom-seal=BOTTOM-TEST : Test bottom seal number}
         {--liner=LINER-TEST : Test liner number}
         {--liner-batch=LINER-BATCH-TEST : Test liner batch code}
+        {--product-id= : Override ProductId used for label mapping/query prompt}
         {--fill-weight=800 : Test fill weight}
         {--production-date= : Label production date (Y-m-d). Defaults to today}
         {--shelf-life-months=5 : Months to add for Best Before End derivation}';
@@ -55,16 +56,28 @@ class PrintWetMustardLabelTestCommand extends Command
         ]);
         $pallecon->setRelation('batchRecord', new BatchRecord(['batch_number' => (string) $this->option('batch')]));
 
+        /** @var mixed $payloadBuilder */
+        $payloadBuilder = $printLabel;
+        $payload = $payloadBuilder->buildPrintPayload($pallecon, (int) $this->option('copies'), [
+            'label' => $label,
+            'printer' => $printer,
+            'product_id' => $this->option('product-id') ?: null,
+            'production_date' => $this->option('production-date') ?: now()->toDateString(),
+            'shelf_life_months' => (int) $this->option('shelf-life-months'),
+        ]);
+
         if (! (bool) $this->option('send')) {
             $this->warn('Dry run only. Add --send to call BarTender.');
+            $this->line(json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) ?: '{}');
 
             return self::SUCCESS;
         }
 
         try {
             $result = $printLabel($pallecon, (int) $this->option('copies'), [
-                'label' => $label,
+                'label' => (string) $payload['label'],
                 'printer' => $printer,
+                'product_id' => $this->option('product-id') ?: null,
                 'production_date' => $this->option('production-date') ?: now()->toDateString(),
                 'shelf_life_months' => (int) $this->option('shelf-life-months'),
             ]);

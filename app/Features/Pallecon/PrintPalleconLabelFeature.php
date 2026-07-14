@@ -23,6 +23,20 @@ class PrintPalleconLabelFeature
      */
     public function __invoke(PalleconRecord $pallecon, int $copies = 1, array $overrides = []): array
     {
+        $payload = $this->buildPrintPayload($pallecon, $copies, $overrides);
+
+        return $this->client->printFromLibrary(
+            (string) $payload['label'],
+            is_array($payload['options'] ?? null) ? $payload['options'] : [],
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array{label:string, options:array<string, mixed>}
+     */
+    public function buildPrintPayload(PalleconRecord $pallecon, int $copies = 1, array $overrides = []): array
+    {
         $label = (string) ($overrides['label'] ?? config('services.bartender.labels.wet_mustard_test', ''));
 
         if ($label === '') {
@@ -35,10 +49,18 @@ class PrintPalleconLabelFeature
             $namedDataSources = array_merge($namedDataSources, $overrides['named_data_sources']);
         }
 
-        $dataEntryControls = $this->defaultDataEntryControls($pallecon, $overrides, $namedDataSources);
+        $useDataEntryControls = array_key_exists('use_data_entry_controls', $overrides)
+            ? (bool) $overrides['use_data_entry_controls']
+            : (bool) config('services.bartender.use_data_entry_controls', true);
 
-        if (! empty($overrides['data_entry_controls']) && is_array($overrides['data_entry_controls'])) {
-            $dataEntryControls = array_merge($dataEntryControls, $overrides['data_entry_controls']);
+        $dataEntryControls = [];
+
+        if ($useDataEntryControls) {
+            $dataEntryControls = $this->defaultDataEntryControls($pallecon, $overrides, $namedDataSources);
+
+            if (! empty($overrides['data_entry_controls']) && is_array($overrides['data_entry_controls'])) {
+                $dataEntryControls = array_merge($dataEntryControls, $overrides['data_entry_controls']);
+            }
         }
 
         $queryPrompts = $this->defaultQueryPrompts($namedDataSources, $overrides);
@@ -47,14 +69,22 @@ class PrintPalleconLabelFeature
             $queryPrompts = array_merge($queryPrompts, $overrides['query_prompts']);
         }
 
-        return $this->client->printFromLibrary($label, [
+        $printOptions = [
             'copies' => $copies,
             'printer' => $overrides['printer'] ?? null,
             'serial_numbers' => $overrides['serial_numbers'] ?? 1,
             'named_data_sources' => $namedDataSources,
-            'data_entry_controls' => $dataEntryControls,
             'query_prompts' => $queryPrompts,
-        ]);
+        ];
+
+        if (! empty($dataEntryControls)) {
+            $printOptions['data_entry_controls'] = $dataEntryControls;
+        }
+
+        return [
+            'label' => $label,
+            'options' => $printOptions,
+        ];
     }
 
     /**
@@ -66,10 +96,7 @@ class PrintPalleconLabelFeature
         $batchProduct = $pallecon->batchRecord?->product;
         $productionDate = isset($overrides['production_date'])
             ? Carbon::parse((string) $overrides['production_date'])
-            : ($pallecon->start_time ? $pallecon->start_time->copy() : now());
-
-        $shelfLifeMonths = max(1, (int) ($overrides['shelf_life_months'] ?? config('services.bartender.wet_mustard_shelf_life_months', 5)));
-        $bestBeforeEnd = $productionDate->copy()->addMonthsNoOverflow($shelfLifeMonths)->endOfMonth();
+            : now();
 
         $julianCode = sprintf('%02d%03d', (int) $productionDate->format('y'), $productionDate->dayOfYear);
 
@@ -83,16 +110,20 @@ class PrintPalleconLabelFeature
             null,
             $resolvedProductId !== '' ? $resolvedProductId : ($mo?->winman_product_id ?? null),
         );
+        $bestBefore = $this->resolveBestBefore($productionDate, $labelRow, $overrides);
 
         return [
             'BatchNumber' => $pallecon->batchRecord?->batch_number,
             'MoNumber' => $pallecon->mo_number,
             'ManufacturingOrder' => $pallecon->mo_number,
+            'ManufacturingOrderId' => $pallecon->mo_number,
             'ProductID' => $resolvedProductId !== '' ? $resolvedProductId : ($labelRow['ProductId'] ?? null),
             'ProductIdParam' => $resolvedProductId !== '' ? $resolvedProductId : ($labelRow['ProductId'] ?? null),
-            'DateOfProduction' => $productionDate->format('d/m/Y'),
-            'BestBeforeEnd' => $bestBeforeEnd->format('d/m/Y'),
-            'BestBeforeEndMonthYear' => $bestBeforeEnd->format('m/Y'),
+            'DateOfProduction' => $productionDate->format('Y-m-d'),
+            'DatePacked' => $productionDate->format('Y-m-d'),
+            'BestBeforeEnd' => $bestBefore['display'],
+            'BestBeforeEndMonthYear' => $bestBefore['month_year'],
+            'LotNumber' => $julianCode,
             'BatchCode' => $julianCode,
             'BatchCodeJulian' => $julianCode,
             'FillWeight' => $pallecon->fill_weight,
@@ -108,17 +139,63 @@ class PrintPalleconLabelFeature
             'Ingredients' => $labelRow['Ingredients'] ?? null,
             'BBEformat' => $labelRow['BBEformat'] ?? null,
             'BBE' => $labelRow['BBE'] ?? null,
-            'EnergyKJ' => $labelRow['EnergyKJ'] ?? null,
-            'EnergyKcal' => $labelRow['EnergyKcal'] ?? null,
-            'Protein' => $labelRow['Protein'] ?? null,
-            'TotalCarbohydrates' => $labelRow['TotalCarbohydrates'] ?? null,
-            'OfWhichSugar' => $labelRow['OfWhichSugar'] ?? null,
-            'Fibre' => $labelRow['Fibre'] ?? null,
-            'Fat' => $labelRow['Fat'] ?? null,
-            'Saturates' => $labelRow['Saturates'] ?? null,
-            'Salt' => $labelRow['Salt'] ?? null,
+            'EnergyKJ' => $this->roundOneDecimal($labelRow['EnergyKJ'] ?? null),
+            'EnergyKcal' => $this->roundOneDecimal($labelRow['EnergyKcal'] ?? null),
+            'Protein' => $this->roundOneDecimal($labelRow['Protein'] ?? null),
+            'TotalCarbohydrates' => $this->roundOneDecimal($labelRow['TotalCarbohydrates'] ?? null),
+            'OfWhichSugar' => $this->roundOneDecimal($labelRow['OfWhichSugar'] ?? null),
+            'Fibre' => $this->roundOneDecimal($labelRow['Fibre'] ?? null),
+            'Fat' => $this->roundOneDecimal($labelRow['Fat'] ?? null),
+            'Saturates' => $this->roundOneDecimal($labelRow['Saturates'] ?? null),
+            'Saturatess' => $this->roundOneDecimal($labelRow['Saturates'] ?? null),
+            'Salt' => $this->roundOneDecimal($labelRow['Salt'] ?? null),
             'Kosher' => $labelRow['Kosher'] ?? null,
             'Halal' => $labelRow['Halal'] ?? null,
+        ];
+    }
+
+    /**
+     * @return string|null
+     */
+    private function roundOneDecimal(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (! is_numeric((string) $value)) {
+            return null;
+        }
+
+        return number_format((float) $value, 1, '.', '');
+    }
+
+    /**
+     * @param  array<string, mixed>  $labelRow
+     * @param  array<string, mixed>  $overrides
+     * @return array{display:string, month_year:string}
+     */
+    private function resolveBestBefore(Carbon $productionDate, array $labelRow, array $overrides = []): array
+    {
+        $format = strtoupper(trim((string) ($labelRow['BBEformat'] ?? '')));
+        $shelfLifeValue = isset($labelRow['BBE']) && is_numeric((string) $labelRow['BBE'])
+            ? max(1, (int) $labelRow['BBE'])
+            : max(1, (int) ($overrides['shelf_life_months'] ?? config('services.bartender.wet_mustard_shelf_life_months', 5)));
+
+        if ($format === 'DDMMYYYY') {
+            $bestBeforeDate = $productionDate->copy()->addDays($shelfLifeValue);
+
+            return [
+                'display' => $bestBeforeDate->format('d/m/Y'),
+                'month_year' => $bestBeforeDate->format('m/Y'),
+            ];
+        }
+
+        $bestBeforeDate = $productionDate->copy()->addMonthsNoOverflow($shelfLifeValue)->endOfMonth();
+
+        return [
+            'display' => $format === 'MMYYYY' ? $bestBeforeDate->format('m/Y') : $bestBeforeDate->format('d/m/Y'),
+            'month_year' => $bestBeforeDate->format('m/Y'),
         ];
     }
 
@@ -130,7 +207,7 @@ class PrintPalleconLabelFeature
     {
         $productionDate = isset($overrides['production_date'])
             ? Carbon::parse((string) $overrides['production_date'])
-            : ($pallecon->start_time ? $pallecon->start_time->copy() : now());
+            : now();
 
         $fillWeight = $pallecon->fill_weight !== null
             ? rtrim(rtrim(number_format((float) $pallecon->fill_weight, 3, '.', ''), '0'), '.')

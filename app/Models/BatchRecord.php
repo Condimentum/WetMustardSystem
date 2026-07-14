@@ -18,6 +18,7 @@ class BatchRecord extends Model
     public const STATUS_COMPLETED = 'completed';
     public const STATUS_QA_REVIEW = 'qa_review';
     public const STATUS_CLOSED = 'closed';
+    public const STATUS_CANCELLED = 'cancelled';
 
     protected $fillable = [
         'manufacturing_order_id',

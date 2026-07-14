@@ -61,6 +61,7 @@ return [
         'library_id' => env('BARTENDER_LIBRARY_ID'),
         'default_printer' => env('BARTENDER_DEFAULT_PRINTER'),
         'enforce_printer_match' => env('BARTENDER_ENFORCE_PRINTER_MATCH', false),
+        'use_data_entry_controls' => env('BARTENDER_USE_DATA_ENTRY_CONTROLS', true),
         'timeout_seconds' => (int) env('BARTENDER_TIMEOUT_SECONDS', 30),
         'labels' => [
             'wet_mustard_test' => env('BARTENDER_LABEL_WET_MUSTARD_TEST', 'WetMustard LabelNew.btw'),

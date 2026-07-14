@@ -8,9 +8,11 @@ use App\Features\Batches\RejectBatchQaFeature;
 use App\Features\Batches\GetAvailableIngredientLotsFeature;
 use App\Features\Booking\BookFinishedGoodsFeature;
 use App\Domains\WinMan\Exceptions\WinManException;
+use App\Domains\WinMan\Jobs\FetchManufacturingOrderJob;
 use App\Domains\WinMan\Jobs\ListIssuedLotsForWorkInProgressJob;
 use App\Operations\AllocateBomIngredientOperation;
 use App\Models\BatchRecord;
+use App\Models\WinManIssueLog;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -51,6 +53,25 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
     public ?string $bookFlash = null;
 
     public ?string $moUnitOfMeasureDescription = null;
+
+    public ?string $moProductDescription = null;
+
+    public ?string $moReleaseDate = null;
+
+    public ?string $moDueDate = null;
+
+    public ?string $moWinManStatus = null;
+
+    public bool $showAmendBatchForm = false;
+
+    public bool $showStartOverConfirm = false;
+
+    /** @var array<string, string> */
+    public array $amendForm = [
+        'planned_quantity' => '',
+    ];
+
+    public string $startOverQuantity = '';
 
     public function mount(BatchRecord $batch): void
     {
@@ -222,6 +243,18 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         return (float) ($this->batch->manufacturingOrder?->planned_quantity ?? 0);
     }
 
+    public function getMoQuantityOutstandingProperty(): float
+    {
+        return (float) ($this->batch->manufacturingOrder?->quantity_outstanding ?? 0);
+    }
+
+    public function getMoQuantityMadeProperty(): float
+    {
+        $made = $this->moPlannedQuantity - $this->moQuantityOutstanding;
+
+        return $made > 0 ? $made : 0.0;
+    }
+
     public function getMoBatchCountProperty(): int
     {
         $moId = (int) ($this->batch->manufacturing_order_id ?? 0);
@@ -334,6 +367,157 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         session()->flash('status', 'Batch completed.');
     }
 
+    public function getHasIssuedIngredientsProperty(): bool
+    {
+        return $this->batch->issueLogs
+            ->where('issue_status', WinManIssueLog::STATUS_SUCCESS)
+            ->isNotEmpty();
+    }
+
+    public function getCanResetBatchProperty(): bool
+    {
+        return ! $this->hasIssuedIngredients;
+    }
+
+    public function openAmendBatch(): void
+    {
+        if (! $this->canResetBatch) {
+            return;
+        }
+
+        $this->showAmendBatchForm = true;
+    }
+
+    public function closeAmendBatch(): void
+    {
+        $this->showAmendBatchForm = false;
+    }
+
+    public function saveAmendBatch(): void
+    {
+        if (! $this->canResetBatch) {
+            session()->flash('status', 'Batch details cannot be amended after ingredients are issued to WinMan.');
+
+            return;
+        }
+
+        $validated = $this->validate([
+            'amendForm.planned_quantity' => ['required', 'numeric', 'min:0.001'],
+        ]);
+
+        $this->batch->update([
+            'planned_quantity' => (float) $validated['amendForm']['planned_quantity'],
+        ]);
+
+        $this->showAmendBatchForm = false;
+        $this->reload();
+        session()->flash('status', 'Batch details amended.');
+    }
+
+    public function openStartOverBatch(): void
+    {
+        if (! $this->canResetBatch) {
+            session()->flash('status', 'Batch cannot be restarted after ingredients are issued to WinMan.');
+
+            return;
+        }
+
+        $this->showStartOverConfirm = true;
+        $this->startOverQuantity = '';
+    }
+
+    public function closeStartOverBatch(): void
+    {
+        $this->showStartOverConfirm = false;
+        $this->startOverQuantity = '';
+    }
+
+    public function confirmStartOverBatch(): void
+    {
+        if (! $this->canResetBatch) {
+            session()->flash('status', 'Batch cannot be restarted after ingredients are issued to WinMan.');
+
+            return;
+        }
+
+        $validated = $this->validate([
+            'startOverQuantity' => ['required', 'numeric', 'min:0.001'],
+        ]);
+
+        $newPlannedQty = (float) $validated['startOverQuantity'];
+
+        DB::transaction(function (): void {
+            $this->purgeBatchChildren();
+
+            $this->batch->update([
+                'status' => BatchRecord::STATUS_IN_PROGRESS,
+                'planned_quantity' => $newPlannedQty,
+                'completed_by' => null,
+                'completed_at' => null,
+            ]);
+        });
+
+        $this->showAmendBatchForm = false;
+        $this->showStartOverConfirm = false;
+        $this->startOverQuantity = '';
+        $this->reload();
+        session()->flash('status', 'Batch restarted. You can enter details again.');
+    }
+
+    public function deleteBatch(): void
+    {
+        if (! $this->canResetBatch) {
+            session()->flash('status', 'Batch cannot be deleted after ingredients are issued to WinMan.');
+
+            return;
+        }
+
+        $winmanMo = (int) ($this->batch->manufacturingOrder?->winman_manufacturing_order ?? 0);
+
+        DB::transaction(function (): void {
+            $this->purgeBatchChildren();
+            $this->batch->delete();
+        });
+
+        if ($winmanMo > 0) {
+            $this->redirectRoute('manufacturing-orders.show', ['winmanMo' => $winmanMo], navigate: true);
+
+            return;
+        }
+
+        $this->redirectRoute('manufacturing-orders.search', navigate: true);
+    }
+
+    private function purgeBatchChildren(): void
+    {
+        $this->batch->issueLogs()->delete();
+        $this->batch->bookingLogs()->delete();
+        $this->batch->ingredientLots()->delete();
+        $this->batch->processSteps()->delete();
+        $this->batch->processParameters()->delete();
+        $this->batch->metalDetectorChecks()->delete();
+
+        foreach ($this->batch->packingRuns as $packingRun) {
+            $packingRun->ibcs()->delete();
+            $packingRun->hourlyChecks()->delete();
+            $packingRun->weightChecks()->delete();
+            $packingRun->pallets()->delete();
+        }
+        $this->batch->packingRuns()->delete();
+
+        foreach ($this->batch->drumProcessingRuns as $drumRun) {
+            foreach ($drumRun->pallets as $drumPallet) {
+                $drumPallet->drumRecords()->delete();
+            }
+            $drumRun->pallets()->delete();
+            $drumRun->palletRecords()->delete();
+        }
+        $this->batch->drumProcessingRuns()->delete();
+
+        $this->batch->packagingLots()->delete();
+        $this->batch->pallecons()->delete();
+    }
+
     public function approve(): void
     {
         if ($this->batch->status !== BatchRecord::STATUS_COMPLETED) {
@@ -416,6 +600,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         ]);
 
         $this->loadMoUnitOfMeasureDescription();
+        $this->loadMoHeaderDates();
 
         if (trim($this->bookLotNumber) === '') {
             $this->bookLotNumber = $this->derivedLotNumber;
@@ -428,44 +613,147 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
             }
         }
 
+        $this->amendForm = [
+            'planned_quantity' => $this->formatQty((float) ($this->batch->planned_quantity ?? 0)),
+        ];
+
         $this->completionIssues = app(ValidateBatchCompletionJob::class)($this->batch);
     }
 
     private function loadMoUnitOfMeasureDescription(): void
     {
+        $this->moProductDescription = null;
         $this->moUnitOfMeasureDescription = $this->batch->manufacturingOrder?->winman_unit_of_measure_description;
 
-        if (filled($this->moUnitOfMeasureDescription)) {
-            return;
-        }
+        $winmanMo = (int) ($this->batch->manufacturingOrder?->winman_manufacturing_order ?? 0);
+        $winmanMoId = trim((string) ($this->batch->manufacturingOrder?->mo_number
+            ?? $this->batch->manufacturingOrder?->winman_manufacturing_order_id
+            ?? ''));
 
-        $internalProduct = (int) ($this->batch->manufacturingOrder?->winman_product_internal ?? 0);
-
-        if ($internalProduct <= 0) {
+        if ($winmanMo <= 0 && $winmanMoId === '') {
             return;
         }
 
         try {
-            $row = DB::connection('winman')->selectOne(
-                'SELECT p.UnitOfMeasure, u.UnitOfMeasureDescription
-                 FROM Products p
-                 LEFT JOIN UnitsOfMeasure u ON u.UnitOfMeasure = p.UnitOfMeasure
-                 WHERE p.Product = ?',
-                [$internalProduct],
-            );
+            if ($winmanMo > 0) {
+                $moData = app(FetchManufacturingOrderJob::class)($winmanMo);
+
+                if ($moData !== null) {
+                    $fetchedDescription = trim((string) $moData->productDescription);
+                    $fetchedUomDescription = trim((string) ($moData->unitOfMeasureDescription ?? ''));
+
+                    if ($fetchedDescription !== '') {
+                        $this->moProductDescription = $fetchedDescription;
+                    }
+
+                    if ($fetchedUomDescription !== '') {
+                        $this->moUnitOfMeasureDescription = $fetchedUomDescription;
+                    }
+
+                    if ($this->batch->manufacturingOrder !== null) {
+                        $this->batch->manufacturingOrder->update([
+                            'winman_unit_of_measure' => $moData->unitOfMeasure,
+                            'winman_unit_of_measure_description' => $this->moUnitOfMeasureDescription,
+                        ]);
+                    }
+                }
+            }
+
+            if ($this->moProductDescription !== null && filled($this->moUnitOfMeasureDescription)) {
+                return;
+            }
+
+            $row = null;
+            if ($winmanMoId !== '') {
+                $row = DB::connection('winman')->selectOne(
+                    'SELECT p.UnitOfMeasure, u.UnitOfMeasureDescription, p.ProductDescription
+                     FROM ManufacturingOrders mo
+                     JOIN Products p ON p.Product = mo.Product
+                     LEFT JOIN UnitsOfMeasure u ON u.UnitOfMeasure = p.UnitOfMeasure
+                     WHERE mo.ManufacturingOrderId = ?',
+                    [$winmanMoId],
+                );
+            }
+
+            if ($row === null && $winmanMo > 0) {
+                $row = DB::connection('winman')->selectOne(
+                    'SELECT p.UnitOfMeasure, u.UnitOfMeasureDescription, p.ProductDescription
+                     FROM ManufacturingOrders mo
+                     JOIN Products p ON p.Product = mo.Product
+                     LEFT JOIN UnitsOfMeasure u ON u.UnitOfMeasure = p.UnitOfMeasure
+                     WHERE mo.ManufacturingOrder = ?',
+                    [$winmanMo],
+                );
+            }
 
             if ($row !== null) {
                 $uomCode = isset($row->UnitOfMeasure) ? (int) $row->UnitOfMeasure : null;
-                $description = isset($row->UnitOfMeasureDescription)
+                $uomDescription = isset($row->UnitOfMeasureDescription)
                     ? trim((string) $row->UnitOfMeasureDescription)
                     : '';
+                $productDescription = isset($row->ProductDescription)
+                    ? trim((string) $row->ProductDescription)
+                    : '';
 
-                $this->moUnitOfMeasureDescription = $description !== '' ? $description : null;
+                if ($uomDescription !== '') {
+                    $this->moUnitOfMeasureDescription = $uomDescription;
+                }
+                if ($productDescription !== '') {
+                    $this->moProductDescription = $productDescription;
+                }
 
                 if ($this->batch->manufacturingOrder !== null) {
                     $this->batch->manufacturingOrder->update([
                         'winman_unit_of_measure' => $uomCode,
                         'winman_unit_of_measure_description' => $this->moUnitOfMeasureDescription,
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    private function loadMoHeaderDates(): void
+    {
+        $this->moReleaseDate = $this->batch->manufacturingOrder?->winman_last_modified_date
+            ? (string) $this->batch->manufacturingOrder->winman_last_modified_date->format('d/m/Y')
+            : null;
+        $this->moWinManStatus = $this->batch->manufacturingOrder?->winman_system_type
+            ? strtoupper(trim((string) $this->batch->manufacturingOrder->winman_system_type))
+            : null;
+        $this->moDueDate = null;
+
+        $winmanMo = (int) ($this->batch->manufacturingOrder?->winman_manufacturing_order ?? 0);
+
+        if ($winmanMo <= 0) {
+            return;
+        }
+
+        try {
+            $row = DB::connection('winman')->selectOne(
+                'SELECT DueDate, LastModifiedDate, SystemType
+                 FROM ManufacturingOrders
+                 WHERE ManufacturingOrder = ?',
+                [$winmanMo],
+            );
+
+            if ($row !== null) {
+                if (isset($row->DueDate) && $row->DueDate !== null) {
+                    $this->moDueDate = Carbon::parse((string) $row->DueDate)->format('d/m/Y');
+                }
+
+                if (isset($row->LastModifiedDate) && $row->LastModifiedDate !== null) {
+                    $this->moReleaseDate = Carbon::parse((string) $row->LastModifiedDate)->format('d/m/Y');
+                }
+
+                if (isset($row->SystemType) && $row->SystemType !== null) {
+                    $this->moWinManStatus = strtoupper(trim((string) $row->SystemType));
+                }
+
+                if ($this->batch->manufacturingOrder !== null && $this->moWinManStatus !== null) {
+                    $this->batch->manufacturingOrder->update([
+                        'winman_system_type' => $this->moWinManStatus,
                     ]);
                 }
             }
@@ -511,56 +799,163 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         @endif
 
         {{-- Header --}}
-        <div class="bg-white shadow-sm rounded-lg p-6">
-            <div class="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                    <div class="text-sm text-gray-500">Batch Number</div>
-                    <div class="text-2xl font-semibold text-gray-800">{{ $batch->batch_number }}</div>
-                    <div class="mt-1 text-sm text-gray-600">
-                        {{ $batch->product?->product_name ?? $batch->manufacturingOrder?->winman_product_id }}
-                        @if ($batch->variant)
-                            <span class="text-gray-400">·</span> {{ $batch->variant->variant_name }}
-                        @endif
+        @php
+            $moStatus = strtoupper(trim((string) ($this->moWinManStatus ?? '')));
+            $statusPill = match ($moStatus) {
+                'C', 'CANCELLED', 'CANCELED' => ['bg' => '#fef2f2', 'border' => '#fca5a5', 'color' => '#dc2626', 'dot' => '#dc2626', 'label' => 'Cancelled'],
+                'F' => ['bg' => '#eff6ff', 'border' => '#bfdbfe', 'color' => '#2563eb', 'dot' => '#2563eb', 'label' => 'Firm'],
+                'R' => ['bg' => '#fffbeb', 'border' => '#fcd34d', 'color' => '#b45309', 'dot' => '#f59e0b', 'label' => 'Released'],
+                'I' => ['bg' => '#ecfdf5', 'border' => '#86efac', 'color' => '#15803d', 'dot' => '#16a34a', 'label' => 'In Progress'],
+                default => ['bg' => '#f3f4f6', 'border' => '#d1d5db', 'color' => '#4b5563', 'dot' => '#6b7280', 'label' => $moStatus !== '' ? $moStatus : 'Unknown'],
+            };
+        @endphp
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <div style="padding:28px 32px 0;">
+
+                <div style="display:flex;align-items:center;gap:18px;padding-bottom:22px;border-bottom:1px solid #e5e7eb;margin-bottom:22px;flex-wrap:wrap;">
+                    <div style="width:64px;height:64px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:2px solid #86efac;overflow:hidden;">
+                        <img src="{{ asset('mustard.png') }}" alt="Mustard" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+                    </div>
+                    <div>
+                        <div style="font-size:1.5rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">MANUFACTURING ORDER</div>
+                        <div style="font-size:0.78rem;font-weight:700;color:#9ca3af;letter-spacing:.15em;margin-top:4px;">DETAILS</div>
+                    </div>
+                    <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:700;background:{{ $statusPill['bg'] }};border:1px solid {{ $statusPill['border'] }};color:{{ $statusPill['color'] }};">
+                        <span style="width:7px;height:7px;border-radius:50%;background:{{ $statusPill['dot'] }};display:inline-block;"></span>
+                        {{ $statusPill['label'] }}
+                    </span>
+                </div>
+
+                <div style="overflow:auto hidden;margin-bottom:26px;">
+                    <div style="display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:0;min-width:760px;">
+                        <div style="padding:0 20px 0 0;border-right:1px solid #e5e7eb;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+                                <div style="width:32px;height:32px;background:#ecfdf5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">&#128230;</div>
+                                <span style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">MO Number</span>
+                            </div>
+                            <div style="font-size:1.05rem;font-weight:800;color:#16a34a;">{{ $batch->manufacturingOrder?->mo_number ?? '—' }}</div>
+                        </div>
+
+                        <div style="padding:0 20px;border-right:1px solid #e5e7eb;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+                                <div style="width:32px;height:32px;background:#ecfdf5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">&#127981;</div>
+                                <span style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Product</span>
+                            </div>
+                            <div style="font-size:1.05rem;font-weight:800;color:#1a1a2e;">{{ $batch->manufacturingOrder?->winman_product_id ?? '—' }}</div>
+                        </div>
+
+                        <div style="padding:0 20px;border-right:1px solid #e5e7eb;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+                                <div style="width:32px;height:32px;background:#eff6ff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">&#128221;</div>
+                                <span style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Product Description</span>
+                            </div>
+                            <div style="font-size:0.95rem;font-weight:700;color:#1a1a2e;line-height:1.35;">{{ $this->moProductDescription ?? '—' }}</div>
+                        </div>
+
+                        <div style="padding:0 0 0 20px;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+                                <div style="width:32px;height:32px;background:#eff6ff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">&#128197;</div>
+                                <span style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Release Date</span>
+                            </div>
+                            <div style="font-size:1.05rem;font-weight:800;color:#1a1a2e;">{{ $this->moReleaseDate ?? ($batch->production_date?->format('d/m/Y') ?? '—') }}</div>
+                        </div>
                     </div>
                 </div>
-                <div class="text-right">
-                    <span @class([
-                        'inline-flex px-3 py-1 rounded-full text-xs font-medium',
-                        'bg-amber-100 text-amber-800' => $batch->status === BatchRecord::STATUS_IN_PROGRESS,
-                        'bg-blue-100 text-blue-800' => $batch->status === BatchRecord::STATUS_COMPLETED,
-                        'bg-purple-100 text-purple-800' => $batch->status === BatchRecord::STATUS_QA_REVIEW,
-                        'bg-gray-200 text-gray-700' => $batch->status === BatchRecord::STATUS_CLOSED,
-                    ])>
-                        {{ \Illuminate\Support\Str::headline($batch->status) }}
-                    </span>
-                    <a href="{{ route('manufacturing-orders.search') }}" wire:navigate
-                        class="block mt-3 text-sm text-indigo-600 hover:underline">← MO Search</a>
+
+                <div style="background:#2d3f8f;border-radius:10px;overflow:hidden;margin-bottom:20px;">
+                    <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.12);">
+                        <span style="font-size:0.75rem;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:.12em;">Quantities</span>
+                    </div>
+                    <div style="overflow:auto hidden;background:#f8fafc;">
+                        <div style="display:grid;grid-template-columns:repeat(6,minmax(150px,1fr));gap:0;min-width:900px;">
+                            <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
+                                <div style="width:44px;height:44px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#128230;</div>
+                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">On Order</div>
+                                <div style="font-size:1.3rem;font-weight:900;color:#f59e0b;">{{ $this->formatQty($this->moPlannedQuantity) }}</div>
+                            </div>
+
+                            <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
+                                <div style="width:44px;height:44px;background:#16a34a;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#9989;</div>
+                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Made</div>
+                                <div style="font-size:1.3rem;font-weight:900;color:#16a34a;">{{ $this->formatQty($this->moQuantityMade) }}</div>
+                            </div>
+
+                            <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
+                                <div style="width:44px;height:44px;background:#2563eb;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#128202;</div>
+                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Outstanding</div>
+                                <div style="font-size:1.3rem;font-weight:900;color:#2563eb;">{{ $this->formatQty($this->moQuantityOutstanding) }}</div>
+                            </div>
+
+                            <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
+                                <div style="width:44px;height:44px;background:#7c3aed;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#128196;</div>
+                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Batches</div>
+                                <div style="font-size:1.3rem;font-weight:900;color:#7c3aed;">{{ $this->moBatchCount }}</div>
+                            </div>
+
+                            <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
+                                <div style="width:44px;height:44px;background:#6b7280;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#128295;</div>
+                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Scrapped</div>
+                                <div style="font-size:1.3rem;font-weight:900;color:#6b7280;">0</div>
+                            </div>
+
+                            <div style="padding:22px 16px;text-align:center;">
+                                <div style="width:44px;height:44px;background:#dc2626;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#10060;</div>
+                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Cancelled</div>
+                                <div style="font-size:1.3rem;font-weight:900;color:#dc2626;">{{ $batch->status === \App\Models\BatchRecord::STATUS_CANCELLED ? '1' : '0' }}</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <dl class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div><dt class="text-gray-500">MO Reference</dt><dd class="font-medium text-gray-800">{{ $batch->manufacturingOrder?->mo_number ?? '—' }}</dd></div>
-                <div><dt class="text-gray-500">Recipe Code</dt><dd class="font-medium text-gray-800">{{ $batch->manufacturingOrder?->recipe_code ?? '—' }}</dd></div>
-                <div><dt class="text-gray-500">Batch Qty</dt><dd class="font-medium text-gray-800">{{ $batch->planned_quantity ? rtrim(rtrim((string) $batch->planned_quantity, '0'), '.') : '—' }}</dd></div>
-                <div><dt class="text-gray-500">Production Date</dt><dd class="font-medium text-gray-800">{{ $batch->production_date?->toFormattedDateString() }}</dd></div>
-            </dl>
-
-            <dl class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div><dt class="text-gray-500">MO Qty</dt><dd class="font-medium text-gray-800">{{ $this->formatQty($this->moPlannedQuantity) }}</dd></div>
-                <div><dt class="text-gray-500">Batches</dt><dd class="font-medium text-gray-800">{{ $this->moBatchCount }}</dd></div>
-                <div><dt class="text-gray-500">Allocated to Batches</dt><dd class="font-medium text-gray-800">{{ $this->formatQty($this->moAllocatedQuantity) }}</dd></div>
-                <div><dt class="text-gray-500">Remaining</dt><dd class="font-medium text-gray-800">{{ $this->formatQty($this->moRemainingQuantity) }}</dd></div>
-            </dl>
-
-            <div class="mt-6 flex flex-wrap gap-3">
-                <a href="{{ route('batches.export', $batch) }}" class="text-sm px-3 py-1.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700">Export</a>
+            <div style="padding:0 32px 18px;">
+                <a href="{{ route('manufacturing-orders.search') }}" wire:navigate style="font-size:0.88rem;color:#4f46e5;text-decoration:none;">&larr; MO Search</a>
             </div>
         </div>
 
         @unless ($this->editable)
-            <div class="bg-blue-50 border border-blue-200 text-blue-800 text-sm rounded-lg px-4 py-3">
-                This batch is <strong>{{ \Illuminate\Support\Str::headline($batch->status) }}</strong> and is read-only.
+            <div @class([
+                'border text-sm rounded-lg px-4 py-3',
+                'bg-blue-50 border-blue-200 text-blue-800' => ! $this->canResetBatch,
+                'bg-emerald-50 border-emerald-200 text-emerald-800' => $this->canResetBatch,
+            ])>
+                @if ($this->canResetBatch)
+                    This batch is <strong>{{ \Illuminate\Support\Str::headline($batch->status) }}</strong>. No ingredients have been issued to WinMan, so you can still amend it or start over.
+                @else
+                    This batch is <strong>{{ \Illuminate\Support\Str::headline($batch->status) }}</strong> and is read-only because ingredients have already been issued to WinMan.
+                @endif
             </div>
+
+            @if ($this->canResetBatch)
+                <div class="flex flex-wrap items-center gap-3">
+                    <button
+                        type="button"
+                        wire:click="openAmendBatch"
+                        class="inline-flex items-center px-3 py-2 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm"
+                    >
+                        Amend Batch
+                    </button>
+
+                    @if ($batch->status === \App\Models\BatchRecord::STATUS_CANCELLED)
+                        <button
+                            type="button"
+                            wire:click="openStartOverBatch"
+                            class="inline-flex items-center px-3 py-2 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm"
+                        >
+                            Start Over
+                        </button>
+                    @endif
+
+                    <button
+                        type="button"
+                        wire:click="deleteBatch"
+                        onclick="return confirm('Delete this batch completely? This cannot be undone.')"
+                        class="inline-flex items-center px-3 py-2 rounded-md bg-red-50 hover:bg-red-100 text-red-700 text-sm"
+                    >
+                        Delete Batch
+                    </button>
+                </div>
+            @endif
         @endunless
 
         {{-- Tabs --}}
@@ -611,12 +1006,87 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                     @endif
 
                     @if ($this->canAddBatch)
-                        <div>
+                        <div class="flex flex-wrap items-center gap-3">
                             <a href="{{ $this->addBatchUrl }}" wire:navigate class="inline-flex items-center px-3 py-2 rounded-md bg-indigo-600 text-white text-sm hover:bg-indigo-500">Add Batch</a>
                         </div>
                     @else
                         <div class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
                             Add Batch is unavailable because this MO is not linked as Intermediate classification 30.
+                        </div>
+                    @endif
+
+                    <div class="flex flex-wrap items-center gap-3">
+                        @if ($this->canResetBatch)
+                            <button
+                                type="button"
+                                wire:click="openAmendBatch"
+                                class="inline-flex items-center px-3 py-2 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm"
+                            >
+                                Amend Batch
+                            </button>
+
+                            @if ($batch->status === \App\Models\BatchRecord::STATUS_CANCELLED)
+                                <button
+                                    type="button"
+                                    wire:click="openStartOverBatch"
+                                    class="inline-flex items-center px-3 py-2 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm"
+                                >
+                                    Start Over
+                                </button>
+                            @endif
+
+                            <button
+                                type="button"
+                                wire:click="deleteBatch"
+                                onclick="return confirm('Delete this batch completely? This cannot be undone.')"
+                                class="inline-flex items-center px-3 py-2 rounded-md bg-red-50 hover:bg-red-100 text-red-700 text-sm"
+                            >
+                                Delete Batch
+                            </button>
+                        @else
+                            <div class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                                Amend/Start Over/Delete is blocked because ingredients have already been issued to WinMan.
+                            </div>
+                        @endif
+                    </div>
+
+                    @if ($showAmendBatchForm && $this->canResetBatch)
+                        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+                            <div class="text-sm font-semibold text-slate-700">Amend Batch Details</div>
+
+                            <form wire:submit.prevent="saveAmendBatch" class="space-y-3">
+                                <div class="max-w-sm">
+                                    <label class="block text-xs text-slate-600 mb-1">Batch Quantity</label>
+                                    <input type="number" step="0.001" min="0.001" wire:model="amendForm.planned_quantity" class="w-full border-slate-300 rounded-md shadow-sm text-sm" />
+                                    @error('amendForm.planned_quantity') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                                    <div class="mt-1 text-xs text-slate-500">Current batch quantity: {{ $this->formatQty((float) ($batch->planned_quantity ?? 0)) }}</div>
+                                </div>
+
+                                <div class="flex flex-wrap gap-2">
+                                    <button type="button" wire:click="saveAmendBatch" class="inline-flex items-center px-3 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Confirm Amendment</button>
+                                    <button type="button" wire:click="closeAmendBatch" class="inline-flex items-center px-3 py-2 rounded-md bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 text-sm">Cancel</button>
+                                </div>
+                            </form>
+                        </div>
+                    @endif
+
+                    @if ($showStartOverConfirm && $this->canResetBatch)
+                        <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+                            <div class="text-sm font-semibold text-amber-800">Start Over Confirmation</div>
+                            <div class="text-sm text-amber-700">To restart this batch, retype the new batch quantity below. Existing allocations, issues, checks, and pallecons for this batch will be cleared.</div>
+
+                            <form wire:submit="confirmStartOverBatch" class="space-y-3">
+                                <div class="max-w-sm">
+                                    <label class="block text-xs text-amber-700 mb-1">Retype Batch Quantity</label>
+                                    <input type="number" step="0.001" min="0.001" wire:model="startOverQuantity" class="w-full border-amber-300 rounded-md shadow-sm text-sm" />
+                                    @error('startOverQuantity') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                                </div>
+
+                                <div class="flex flex-wrap gap-2">
+                                    <button type="submit" class="inline-flex items-center px-3 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm">Confirm Start Over</button>
+                                    <button type="button" wire:click="closeStartOverBatch" class="inline-flex items-center px-3 py-2 rounded-md bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 text-sm">Cancel</button>
+                                </div>
+                            </form>
                         </div>
                     @endif
 
