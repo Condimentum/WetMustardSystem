@@ -64,9 +64,6 @@
                                             </button>
                                         </form>
                                     @else
-                                        <a href="{{ route('login') }}" class="inline-flex items-center rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-400">
-                                            Sign in
-                                        </a>
                                         <a href="{{ route('auth.microsoft.redirect') }}" class="inline-flex items-center rounded-xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10">
                                             Sign in with Microsoft 365
                                         </a>

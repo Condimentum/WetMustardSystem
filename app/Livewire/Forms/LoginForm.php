@@ -30,6 +30,12 @@ class LoginForm extends Form
     {
         $this->ensureIsNotRateLimited();
 
+        if (! $this->isTemporarilyAllowedEmail($this->email)) {
+            throw ValidationException::withMessages([
+                'form.email' => 'This account is temporarily not permitted to sign in.',
+            ]);
+        }
+
         if (! Auth::attempt($this->only(['email', 'password']), $this->remember)) {
             RateLimiter::hit($this->throttleKey());
 
@@ -68,5 +74,19 @@ class LoginForm extends Form
     protected function throttleKey(): string
     {
         return Str::transliterate(Str::lower($this->email).'|'.request()->ip());
+    }
+
+    private function isTemporarilyAllowedEmail(string $email): bool
+    {
+        $allowlist = array_values(array_filter(array_map(
+            static fn (string $value): string => Str::lower(trim($value)),
+            (array) config('dbmts.temporary_login_allow_emails', [])
+        )));
+
+        if ($allowlist === []) {
+            return true;
+        }
+
+        return in_array(Str::lower(trim($email)), $allowlist, true);
     }
 }

@@ -46,6 +46,9 @@ new class extends Component
                         <x-nav-link :href="route('audit.index')" :active="request()->routeIs('audit.*')" wire:navigate>
                             {{ __('Audit') }}
                         </x-nav-link>
+                        <x-nav-link :href="route('settings.admin')" :active="request()->routeIs('settings.*')" wire:navigate>
+                            {{ __('Settings') }}
+                        </x-nav-link>
                     @endcan
                 </div>
             </div>
@@ -110,6 +113,9 @@ new class extends Component
                 </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('audit.index')" :active="request()->routeIs('audit.*')" wire:navigate>
                     {{ __('Audit') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('settings.admin')" :active="request()->routeIs('settings.*')" wire:navigate>
+                    {{ __('Settings') }}
                 </x-responsive-nav-link>
             @endcan
         </div>

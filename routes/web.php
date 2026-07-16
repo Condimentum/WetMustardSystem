@@ -6,6 +6,7 @@ use App\Http\Controllers\AuditTrailExportController;
 use App\Http\Controllers\BatchRecordExportController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
@@ -16,14 +17,20 @@ Route::get('/', HomeController::class)
 // Livewire login form. Remove before any non-local deployment.
 if (app()->environment('local')) {
     Route::get('dev-login', function () {
-        $user = \App\Models\User::where('email', 'test@example.com')->first()
-            ?? \App\Models\User::query()->first();
+        $allowed = collect((array) config('dbmts.temporary_login_allow_emails', []))
+            ->map(fn (string $email): string => \Illuminate\Support\Str::lower(trim($email)))
+            ->filter()
+            ->values();
+
+        $user = $allowed->isNotEmpty()
+            ? \App\Models\User::query()->whereIn('email', $allowed->all())->first()
+            : (\App\Models\User::where('email', 'test@example.com')->first() ?? \App\Models\User::query()->first());
 
         if (! $user) {
-            abort(404, 'No user to log in as.');
+            abort(403, 'Dev login is restricted by temporary allowlist.');
         }
 
-        auth()->login($user);
+        Auth::login($user);
         request()->session()->regenerate();
 
         app(\App\Domains\Auth\Jobs\SyncUserRolesJob::class)($user);
@@ -82,6 +89,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('audit', 'pages.audit.index')
         ->middleware('can:admin')
         ->name('audit.index');
+
+    Volt::route('settings', 'pages.settings.admin')
+        ->middleware('can:admin')
+        ->name('settings.admin');
 
     Route::get('audit/export', AuditTrailExportController::class)
         ->middleware('can:admin')

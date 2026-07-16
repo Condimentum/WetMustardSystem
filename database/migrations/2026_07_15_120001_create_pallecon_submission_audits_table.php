@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('pallecon_submission_audits', function (Blueprint $table) {
             $table->id();
             $table->foreignId('batch_record_id')->constrained('batch_records')->cascadeOnDelete();
-            $table->foreignId('pallecon_record_id')->constrained('pallecon_records')->cascadeOnDelete();
+            $table->foreignId('pallecon_record_id')->constrained('pallecon_records');
             $table->foreignId('submitted_by')->nullable()->constrained('users');
             $table->dateTime('submitted_at');
             $table->string('booking_status')->nullable();

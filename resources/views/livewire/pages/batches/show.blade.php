@@ -13,6 +13,7 @@ use App\Domains\WinMan\Exceptions\WinManException;
 use App\Domains\WinMan\Jobs\FetchManufacturingOrderJob;
 use App\Domains\WinMan\Jobs\ListIssuedLotsForWorkInProgressJob;
 use App\Operations\AllocateBomIngredientOperation;
+use App\Support\FeatureSettings;
 use App\Models\BatchRecord;
 use App\Models\PalleconRecord;
 use App\Models\PalleconSubmissionAudit;
@@ -39,11 +40,27 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
     /** @var array<int, array{lot_number:string,quantity_outstanding:float}> */
     public array $activeBomLotOptions = [];
 
+    public string $activeBomAllocationMode = 'manual';
+
+    public string $activeBomGrScanRaw = '';
+
     public ?string $activeBomLotNumber = null;
 
     public string $activeBomActualQty = '';
 
     public ?string $activeBomMessage = null;
+
+    public ?string $activeBomScanDebug = null;
+
+    public ?string $activeBomWinManLookupMessage = null;
+
+    public bool $featureAllocationScannerEnabled = true;
+
+    public bool $featureAllocationCameraAutostartEnabled = true;
+
+    public bool $featureAllocationScanDebugEnabled = true;
+
+    public bool $featureAllocationWinmanLookupEnabled = true;
 
     /** @var array<int, array{lot_number:string,quantity:float,last_effective_date:?string}> */
     public array $activeBomHistoricalLots = [];
@@ -106,9 +123,29 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
     public function mount(BatchRecord $batch): void
     {
         $this->batch = $batch;
+        $this->featureAllocationScannerEnabled = FeatureSettings::enabled('allocation.scanner', true);
+        $this->featureAllocationCameraAutostartEnabled = FeatureSettings::enabled('allocation.scanner_camera_autostart', true);
+        $this->featureAllocationScanDebugEnabled = FeatureSettings::enabled('allocation.scanner_debug_panel', true);
+        $this->featureAllocationWinmanLookupEnabled = FeatureSettings::enabled('allocation.scanner_winman_lookup', true);
+
+        if (! $this->featureAllocationScannerEnabled && $this->activeBomAllocationMode === 'gr_scan') {
+            $this->activeBomAllocationMode = 'manual';
+        }
+
         $this->bartender_enabled = (bool) config('services.bartender.enabled', false);
         $this->label_production_date = now()->toDateString();
         $this->reload();
+    }
+
+    public function setAllocationMode(string $mode): void
+    {
+        if ($mode === 'gr_scan' && ! $this->featureAllocationScannerEnabled) {
+            $this->activeBomAllocationMode = 'manual';
+
+            return;
+        }
+
+        $this->activeBomAllocationMode = $mode === 'gr_scan' ? 'gr_scan' : 'manual';
     }
 
     public function openBomAllocation(int $componentSnapshotId, string $materialCode, string $materialDescription, ?string $suggestedQty = null): void
@@ -116,9 +153,13 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         $this->activeBomComponentSnapshotId = $componentSnapshotId;
         $this->activeBomMaterialCode = trim($materialCode);
         $this->activeBomMaterialDescription = trim($materialDescription);
+        $this->activeBomAllocationMode = 'manual';
+        $this->activeBomGrScanRaw = '';
         $this->activeBomLotNumber = null;
         $this->activeBomActualQty = $suggestedQty !== null ? trim($suggestedQty) : '';
         $this->activeBomMessage = null;
+        $this->activeBomScanDebug = null;
+        $this->activeBomWinManLookupMessage = null;
 
         $this->loadActiveBomLotOptions();
 
@@ -172,10 +213,102 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         $this->activeBomMaterialCode = null;
         $this->activeBomMaterialDescription = null;
         $this->activeBomLotOptions = [];
+        $this->activeBomAllocationMode = 'manual';
+        $this->activeBomGrScanRaw = '';
         $this->activeBomLotNumber = null;
         $this->activeBomActualQty = '';
         $this->activeBomMessage = null;
+        $this->activeBomScanDebug = null;
+        $this->activeBomWinManLookupMessage = null;
         $this->activeBomHistoricalLots = [];
+    }
+
+    public function applyGrScanPayload(): void
+    {
+        if (! $this->featureAllocationScannerEnabled) {
+            $this->activeBomMessage = 'Scanner view is disabled by project settings.';
+
+            return;
+        }
+
+        $this->activeBomMessage = null;
+        $this->activeBomWinManLookupMessage = null;
+        $this->activeBomScanDebug = null;
+
+        $raw = trim($this->activeBomGrScanRaw);
+        if ($raw === '') {
+            $this->activeBomMessage = 'Scan value is empty. Please scan again.';
+
+            return;
+        }
+
+        $segments = array_map(static fn (string $value): string => trim($value), explode('^', $raw));
+        $productId = $segments[0] ?? '';
+        $productDescription = $segments[1] ?? '';
+        $supplierLotNumber = $segments[2] ?? '';
+
+        $this->activeBomScanDebug = sprintf(
+            'Parsed scan -> ProductID: %s | ProductDescription: %s | SupplierLotNumber: %s',
+            $productId !== '' ? $productId : '(empty)',
+            $productDescription !== '' ? $productDescription : '(empty)',
+            $supplierLotNumber !== '' ? $supplierLotNumber : '(empty)'
+        );
+
+        if ($productId === '' || $productDescription === '' || $supplierLotNumber === '') {
+            $this->activeBomMessage = 'Invalid scan format. Expected ProductID^ProductDescription^SupplierLotNumber^';
+
+            return;
+        }
+
+        $expectedCode = strtoupper(trim((string) $this->activeBomMaterialCode));
+        $scannedCode = strtoupper($productId);
+        if ($expectedCode !== '' && $scannedCode !== $expectedCode) {
+            $this->activeBomMessage = 'Scanned ProductID does not match this BOM line.';
+
+            return;
+        }
+
+        $this->activeBomLotNumber = $supplierLotNumber;
+
+        $matchedWinManLot = null;
+        if ($this->featureAllocationWinmanLookupEnabled) {
+            try {
+                // Explicitly re-check WinMan at scan time so operators can confirm the lot exists live.
+                $winmanLots = app(GetAvailableIngredientLotsFeature::class)((string) $this->activeBomMaterialCode, 500);
+                $matchedWinManLot = collect($winmanLots)
+                    ->first(fn (array $lot): bool => strcasecmp((string) ($lot['lot_number'] ?? ''), $supplierLotNumber) === 0);
+            } catch (\Throwable $e) {
+                report($e);
+                $this->activeBomWinManLookupMessage = 'WinMan lookup failed while validating this scan.';
+                $this->activeBomMessage = 'Could not validate this scanned lot in WinMan right now. Try again.';
+
+                return;
+            }
+
+            if ($matchedWinManLot === null) {
+                $this->activeBomWinManLookupMessage = 'WinMan lookup: scanned supplier lot was not found for this ProductID.';
+                $this->activeBomMessage = 'Scan captured, but this supplier lot is not currently available to issue.';
+
+                return;
+            }
+
+            $this->activeBomWinManLookupMessage = 'WinMan lookup: supplier lot found and ready to issue.';
+            $this->activeBomLotNumber = (string) ($matchedWinManLot['lot_number'] ?? $supplierLotNumber);
+        } else {
+            $this->activeBomWinManLookupMessage = 'WinMan lookup: skipped (disabled in project settings).';
+        }
+
+        $matchedLot = collect($this->activeBomLotOptions)
+            ->contains(fn (array $lot): bool => strcasecmp((string) ($lot['lot_number'] ?? ''), (string) $this->activeBomLotNumber) === 0);
+
+        if (! $matchedLot) {
+            $this->activeBomLotOptions[] = [
+                'lot_number' => (string) $this->activeBomLotNumber,
+                'quantity_outstanding' => (float) ($matchedWinManLot['quantity_outstanding'] ?? 0),
+            ];
+        }
+
+        $this->activeBomMessage = null;
     }
 
     public function allocateBomIngredient(): void
@@ -1881,7 +2014,127 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                 @endif
 
                 @if ($showAllocateModal)
-                    <div class="fixed inset-0 z-50 overflow-y-auto px-4 py-6 sm:px-0">
+                    <div
+                        class="fixed inset-0 z-50 overflow-y-auto px-4 py-6 sm:px-0"
+                        x-data="{
+                            mode: @entangle('activeBomAllocationMode').live,
+                            scannerEnabled: @js($featureAllocationScannerEnabled),
+                            cameraAutostartEnabled: @js($featureAllocationCameraAutostartEnabled),
+                            modalVisible: @entangle('showAllocateModal').live,
+                            scanRaw: @entangle('activeBomGrScanRaw').live,
+                            cameraRunning: false,
+                            scannerError: '',
+                            stream: null,
+                            detector: null,
+                            scanTimer: null,
+                            init() {
+                                this.$watch('mode', async (value) => {
+                                    if (value === 'gr_scan' && this.modalVisible && this.scannerEnabled && this.cameraAutostartEnabled) {
+                                        await this.startCamera();
+                                        return;
+                                    }
+
+                                    this.stopCamera();
+                                });
+
+                                this.$watch('modalVisible', async (value) => {
+                                    if (!value) {
+                                        this.stopCamera();
+                                        return;
+                                    }
+
+                                    if (value && this.mode === 'gr_scan' && this.scannerEnabled && this.cameraAutostartEnabled) {
+                                        await this.startCamera();
+                                    }
+                                });
+
+                                if (this.modalVisible && this.mode === 'gr_scan' && this.scannerEnabled && this.cameraAutostartEnabled) {
+                                    this.startCamera();
+                                }
+                            },
+                            async startCamera() {
+                                if (!this.scannerEnabled) {
+                                    this.scannerError = 'Scanner view is disabled by project settings.';
+                                    return;
+                                }
+
+                                if (this.cameraRunning) {
+                                    return;
+                                }
+
+                                this.scannerError = '';
+
+                                if (!('BarcodeDetector' in window)) {
+                                    this.scannerError = 'Camera scanning is not supported by this browser. Use manual scan entry below.';
+                                    return;
+                                }
+
+                                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                                    this.scannerError = 'Camera is unavailable on this device/browser.';
+                                    return;
+                                }
+
+                                try {
+                                    this.detector = new BarcodeDetector({
+                                        formats: ['qr_code', 'data_matrix', 'code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e'],
+                                    });
+
+                                    this.stream = await navigator.mediaDevices.getUserMedia({
+                                        video: {
+                                            facingMode: { ideal: 'environment' },
+                                        },
+                                        audio: false,
+                                    });
+
+                                    this.$refs.grScanVideo.srcObject = this.stream;
+                                    await this.$refs.grScanVideo.play();
+                                    this.cameraRunning = true;
+                                    this.scanLoop();
+                                } catch (error) {
+                                    this.scannerError = 'Unable to start camera. Check browser camera permissions.';
+                                    this.stopCamera();
+                                }
+                            },
+                            async scanLoop() {
+                                if (!this.cameraRunning || !this.detector || !this.$refs.grScanVideo) {
+                                    return;
+                                }
+
+                                try {
+                                    const results = await this.detector.detect(this.$refs.grScanVideo);
+                                    const value = (results[0]?.rawValue ?? '').trim();
+
+                                    if (value !== '') {
+                                        this.scanRaw = value;
+                                        await this.$wire.applyGrScanPayload();
+                                        this.stopCamera();
+                                        return;
+                                    }
+                                } catch (error) {
+                                    this.scannerError = 'Camera is running, but this scan could not be decoded yet.';
+                                }
+
+                                this.scanTimer = window.setTimeout(() => this.scanLoop(), 350);
+                            },
+                            stopCamera() {
+                                if (this.scanTimer) {
+                                    window.clearTimeout(this.scanTimer);
+                                    this.scanTimer = null;
+                                }
+
+                                if (this.stream) {
+                                    this.stream.getTracks().forEach((track) => track.stop());
+                                    this.stream = null;
+                                }
+
+                                if (this.$refs.grScanVideo) {
+                                    this.$refs.grScanVideo.srcObject = null;
+                                }
+
+                                this.cameraRunning = false;
+                            },
+                        }"
+                    >
                         <div class="fixed inset-0 bg-gray-500/70" wire:click="closeAllocateModal"></div>
                         <div class="relative mb-6 bg-white rounded-lg overflow-hidden shadow-xl transform transition-all sm:w-full sm:max-w-xl sm:mx-auto">
                             <div class="px-6 py-4 border-b border-gray-200">
@@ -1890,24 +2143,98 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                             </div>
 
                             <div class="px-6 py-4 space-y-4">
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label class="block text-xs text-gray-600 mb-1">Lot number</label>
-                                        <select wire:model="activeBomLotNumber" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
-                                            <option value="">- select lot -</option>
-                                            @foreach ($activeBomLotOptions as $lot)
-                                                <option value="{{ $lot['lot_number'] }}">{{ $lot['lot_number'] }} ({{ rtrim(rtrim((string) $lot['quantity_outstanding'], '0'), '.') }} available)</option>
-                                            @endforeach
-                                        </select>
-                                        @error('activeBomLotNumber') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                                <div>
+                                    <label class="block text-xs text-gray-600 mb-1">Allocation view</label>
+                                    <div class="inline-flex rounded-md border border-gray-300 overflow-hidden">
+                                        <button
+                                            type="button"
+                                            wire:click="setAllocationMode('manual')"
+                                            class="px-4 py-2 text-sm font-medium"
+                                            :class="{ 'bg-slate-800 text-white': mode === 'manual', 'bg-white text-slate-700': mode !== 'manual' }"
+                                        >
+                                            Dropdown
+                                        </button>
+                                        @if ($featureAllocationScannerEnabled)
+                                            <button
+                                                type="button"
+                                                wire:click="setAllocationMode('gr_scan')"
+                                                class="px-4 py-2 text-sm font-medium border-l border-gray-300"
+                                                :class="{ 'bg-slate-800 text-white': mode === 'gr_scan', 'bg-white text-slate-700': mode !== 'gr_scan' }"
+                                            >
+                                                Scanner
+                                            </button>
+                                        @endif
                                     </div>
+                                    @if (! $featureAllocationScannerEnabled)
+                                        <p class="mt-1 text-xs text-gray-500">Scanner view is disabled in project settings.</p>
+                                    @endif
+                                </div>
 
+                                @if ($activeBomAllocationMode === 'gr_scan' && $featureAllocationScannerEnabled)
+                                    <div class="rounded-md border border-indigo-200 bg-indigo-50 p-3 space-y-2">
+                                        <div class="rounded-md border border-indigo-300 bg-black/90 overflow-hidden" x-show="cameraRunning" x-transition>
+                                            <video x-ref="grScanVideo" playsinline muted autoplay class="block w-full h-52 object-cover"></video>
+                                        </div>
+
+                                        <div class="flex items-center justify-end gap-2">
+                                            <x-secondary-button type="button" x-show="!cameraRunning" @click="startCamera">Open camera</x-secondary-button>
+                                            <x-secondary-button type="button" x-show="cameraRunning" @click="stopCamera">Stop camera</x-secondary-button>
+                                        </div>
+
+                                        <div x-show="scannerError" class="text-xs text-rose-700" x-text="scannerError"></div>
+
+                                        <label class="block text-xs text-indigo-800 font-medium">GR scan value</label>
+                                        <input wire:model.defer="activeBomGrScanRaw" type="text" class="w-full border-indigo-300 rounded-md shadow-sm text-sm" placeholder="ProductID^ProductDescription^SupplierLotNumber^" />
+                                        <div class="flex items-center justify-between gap-2">
+                                            <p class="text-xs text-indigo-700">Scan format: ProductID^ProductDescription^SupplierLotNumber^</p>
+                                            <x-secondary-button type="button" wire:click="applyGrScanPayload">Apply scan</x-secondary-button>
+                                        </div>
+
+                                        @if ($featureAllocationScanDebugEnabled && $activeBomScanDebug)
+                                            <div class="text-xs text-indigo-900 bg-white/70 border border-indigo-200 rounded px-2 py-1">
+                                                {{ $activeBomScanDebug }}
+                                            </div>
+                                        @endif
+
+                                        @if ($activeBomWinManLookupMessage)
+                                            <div class="text-xs text-slate-800 bg-white/80 border border-slate-200 rounded px-2 py-1">
+                                                {{ $activeBomWinManLookupMessage }}
+                                            </div>
+                                        @endif
+
+                                        <div>
+                                            <label class="block text-xs text-gray-700 mb-1">Scanned lot</label>
+                                            <input type="text" value="{{ (string) ($activeBomLotNumber ?? '') }}" readonly class="w-full border-gray-300 rounded-md shadow-sm text-sm bg-gray-100 text-gray-700" placeholder="No lot scanned yet" />
+                                        </div>
+                                    </div>
+                                @endif
+
+                                @if ($activeBomAllocationMode === 'manual')
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-xs text-gray-600 mb-1">Lot number</label>
+                                            <select wire:model="activeBomLotNumber" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                                                <option value="">- select lot -</option>
+                                                @foreach ($activeBomLotOptions as $lot)
+                                                    <option value="{{ $lot['lot_number'] }}">{{ $lot['lot_number'] }} ({{ rtrim(rtrim((string) $lot['quantity_outstanding'], '0'), '.') }} available)</option>
+                                                @endforeach
+                                            </select>
+                                            @error('activeBomLotNumber') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                                        </div>
+
+                                        <div>
+                                            <label class="block text-xs text-gray-600 mb-1">Actual qty</label>
+                                            <input wire:model="activeBomActualQty" type="number" step="0.001" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+                                            @error('activeBomActualQty') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                                        </div>
+                                    </div>
+                                @else
                                     <div>
                                         <label class="block text-xs text-gray-600 mb-1">Actual qty</label>
                                         <input wire:model="activeBomActualQty" type="number" step="0.001" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
                                         @error('activeBomActualQty') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                                     </div>
-                                </div>
+                                @endif
 
                                 @if ($activeBomMessage)
                                     <div class="text-sm text-red-600">{{ $activeBomMessage }}</div>

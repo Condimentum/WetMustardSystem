@@ -31,6 +31,15 @@ class FetchMicrosoftUserProfileJob
             throw new AuthenticationException('Only @condimentum.co.uk accounts are allowed to sign in.');
         }
 
+        $allowlist = array_values(array_filter(array_map(
+            static fn (string $value): string => Str::lower(trim($value)),
+            (array) config('dbmts.temporary_login_allow_emails', [])
+        )));
+
+        if ($allowlist !== [] && ! in_array($email, $allowlist, true)) {
+            throw new AuthenticationException('This account is temporarily not permitted to sign in.');
+        }
+
         return $profile;
     }
 }
