@@ -58,12 +58,19 @@ class SendReportOperation
                 $log->status = ReportSendLog::STATUS_SKIPPED;
                 $log->error_message = 'No recipients resolved.';
             } else {
+                $attachments = is_array($report['attachments'] ?? null)
+                    ? $report['attachments']
+                    : [];
+
                 ($this->sendMail)(
                     $recipients['to'],
                     $report['subject'],
                     $report['html'],
                     null,
                     $recipients['cc'],
+                    [],
+                    [],
+                    $attachments,
                 );
                 $log->status = ReportSendLog::STATUS_SENT;
             }

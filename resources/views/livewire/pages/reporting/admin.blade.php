@@ -32,6 +32,8 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
 
     public ?string $flash = null;
 
+    public string $flashLevel = 'success';
+
     public function mount(): void
     {
         $this->dateFrom = now()->subDay()->toDateString();
@@ -87,19 +89,39 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
             'updated_by' => auth()->id(),
         ]);
         $this->editingId = null;
+        $this->flashLevel = 'success';
         $this->flash = 'Schedule updated.';
     }
 
     public function sendNow(string $reportKey): void
     {
+        $config = ReportConfig::query()
+            ->where('report_key', $reportKey)
+            ->first(['date_offset_from_days', 'date_offset_to_days']);
+
+        $baseDate = now();
         $log = app(SendReportNowFeature::class)(
             $reportKey,
-            Carbon::parse($this->dateFrom),
-            Carbon::parse($this->dateTo),
+            $config !== null
+                ? $baseDate->copy()->addDays((int) $config->date_offset_from_days)
+                : Carbon::parse($this->dateFrom),
+            $config !== null
+                ? $baseDate->copy()->addDays((int) $config->date_offset_to_days)
+                : Carbon::parse($this->dateTo),
             auth()->user(),
         );
 
-        $this->flash = "Send Now for {$reportKey}: {$log->status} ({$log->row_count} rows).";
+        $status = (string) $log->status;
+        $this->flashLevel = match ($status) {
+            'sent' => 'success',
+            'skipped' => 'warning',
+            default => 'error',
+        };
+
+        $suffix = $log->error_message ? ' '.$log->error_message : '';
+        $fromUsed = $log->date_from?->toDateString() ?? '—';
+        $toUsed = $log->date_to?->toDateString() ?? '—';
+        $this->flash = "Send Now for {$reportKey}: {$status} ({$log->row_count} rows) [{$fromUsed} to {$toUsed}].{$suffix}";
     }
 
     public function addRecipient(): void
@@ -124,6 +146,7 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
         ]);
 
         $this->recipient = ['report_key' => '', 'recipient_type' => 'direct', 'recipient_email' => '', 'recipient_name' => '', 'role_key' => '', 'is_cc' => false];
+        $this->flashLevel = 'success';
         $this->flash = 'Recipient added.';
     }
 
@@ -139,14 +162,19 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
         <h2 class="text-xl font-semibold text-gray-800">Reporting Admin</h2>
 
         @if ($flash)
-            <div class="bg-green-50 border border-green-200 text-green-800 text-sm rounded-lg px-4 py-3">{{ $flash }}</div>
+            <div @class([
+                'text-sm rounded-lg px-4 py-3 border',
+                'bg-green-50 border-green-200 text-green-800' => $flashLevel === 'success',
+                'bg-amber-50 border-amber-200 text-amber-800' => $flashLevel === 'warning',
+                'bg-red-50 border-red-200 text-red-800' => $flashLevel === 'error',
+            ])>{{ $flash }}</div>
         @endif
 
         {{-- Send Now range --}}
         <div class="bg-white shadow-sm rounded-lg p-4 flex flex-wrap items-end gap-3">
             <div><label class="block text-xs text-gray-600 mb-1">Send Now — from</label><input type="date" wire:model="dateFrom" class="border-gray-300 rounded-md shadow-sm text-sm" /></div>
             <div><label class="block text-xs text-gray-600 mb-1">to</label><input type="date" wire:model="dateTo" class="border-gray-300 rounded-md shadow-sm text-sm" /></div>
-            <span class="text-xs text-gray-400">Used by the Send Now buttons below.</span>
+            <span class="text-xs text-gray-400">Preview-only range. Row Send now uses each report's configured offsets.</span>
         </div>
 
         {{-- Reports --}}

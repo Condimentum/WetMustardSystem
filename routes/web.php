@@ -94,6 +94,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('can:admin')
         ->name('settings.admin');
 
+    Volt::route('settings/recipes', 'pages.recipes.index')
+        ->middleware('can:admin')
+        ->name('settings.recipes');
+
+    Volt::route('settings/product-mapping', 'pages.settings.product-mapping')
+        ->middleware('can:admin')
+        ->name('settings.product-mapping');
+
+    Volt::route('settings/operator-sync', 'pages.settings.operator-sync')
+        ->middleware('can:admin')
+        ->name('settings.operator-sync');
+
+    Route::redirect('recipes', 'settings/recipes')
+        ->middleware('can:admin')
+        ->name('recipes.index');
+
     Route::get('audit/export', AuditTrailExportController::class)
         ->middleware('can:admin')
         ->name('audit.export');

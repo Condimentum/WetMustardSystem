@@ -129,4 +129,33 @@ class BatchEntryTest extends TestCase
 
         app(SignIngredientLotFeature::class)($lot, 'weighed', $user);
     }
+
+    public function test_tipped_signoff_requires_prior_weighed_signoff_and_preserves_operator_identity(): void
+    {
+        $weighedBy = User::factory()->create(['name' => 'Weigh Operator']);
+        $tippedBy = User::factory()->create(['name' => 'Tip Operator']);
+        $batch = $this->makeBatch();
+
+        $lot = app(AddIngredientLotFeature::class)($batch, [
+            'material_description' => 'Salt',
+            'lot_number' => 'LOT-SALT',
+            'actual_quantity' => 25,
+            'uom' => 'kg',
+        ], $weighedBy);
+
+        try {
+            app(SignIngredientLotFeature::class)($lot, 'tipped', $tippedBy);
+            $this->fail('Expected tipped sign-off to be blocked before weighed sign-off.');
+        } catch (BatchException $e) {
+            $this->assertSame('Ingredient must be weighed before tipped sign-off.', $e->getMessage());
+        }
+
+        app(SignIngredientLotFeature::class)($lot->fresh(), 'weighed', $weighedBy);
+        $signed = app(SignIngredientLotFeature::class)($lot->fresh(), 'tipped', $tippedBy)->fresh();
+
+        $this->assertSame($weighedBy->id, $signed->weighed_by);
+        $this->assertSame($tippedBy->id, $signed->tipped_by);
+        $this->assertNotNull($signed->weighed_at);
+        $this->assertNotNull($signed->tipped_at);
+    }
 }

@@ -27,6 +27,10 @@ class SignIngredientLotJob
             throw new BatchException('Lot number and actual quantity are required before sign-off.');
         }
 
+        if ($purpose === self::PURPOSE_TIPPED && $lot->weighed_at === null) {
+            throw new BatchException('Ingredient must be weighed before tipped sign-off.');
+        }
+
         if ($purpose === self::PURPOSE_WEIGHED) {
             $lot->forceFill(['weighed_by' => $user->id, 'weighed_at' => now()]);
         } else {

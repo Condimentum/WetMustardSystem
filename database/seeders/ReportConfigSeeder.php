@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Domains\Reporting\Reports\ActiveMasterDataReport;
 use App\Domains\Reporting\Reports\BatchRecordSummaryReport;
+use App\Domains\Reporting\Reports\DailyIntermediateProductionReport;
 use App\Domains\Reporting\Reports\DailyProductionSummaryReport;
 use App\Domains\Reporting\Reports\DrumProcessingSummaryReport;
 use App\Domains\Reporting\Reports\OpenBatchesReport;
@@ -24,6 +25,7 @@ class ReportConfigSeeder extends Seeder
      */
     private const REPORTS = [
         DailyProductionSummaryReport::KEY => 'Daily Production Summary',
+        DailyIntermediateProductionReport::KEY => 'Daily Intermediate Production',
         OpenBatchesReport::KEY => 'Open / Incomplete Batch Records',
         OverdueMetalDetectorReport::KEY => 'Overdue Metal Detector Checks',
         PackingWeightExceptionsReport::KEY => 'Packing Weight Exceptions',

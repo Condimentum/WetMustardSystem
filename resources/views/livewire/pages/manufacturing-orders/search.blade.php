@@ -6,7 +6,9 @@ use App\Features\Batches\StartBatchFromManufacturingOrderFeature;
 use App\Features\ManufacturingOrders\SearchManufacturingOrdersFeature;
 use App\Models\BatchRecord;
 use App\Models\ManufacturingOrder;
+use App\Models\ProductMapping;
 use App\Models\Product;
+use App\Models\RecipeCard;
 use App\Models\RecipeVariant;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -31,6 +33,11 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
     public array $variantOptions = [];
 
     public ?int $variantId = null;
+
+    /** @var array<int, float> */
+    public array $recipeBatchSizeOptions = [];
+
+    public string $selectedRecipeBatchSizeKg = '';
 
     public string $batchPlannedQuantity = '';
 
@@ -84,28 +91,31 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
             ])
             ->all();
 
-        $defaultQty = (float) ($order['quantity_outstanding'] ?? 0);
-        $this->batchPlannedQuantity = $defaultQty > 0 ? $this->formatQuantity($defaultQty) : '';
+        $this->recipeBatchSizeOptions = $this->resolveRecipeBatchSizeOptionsFromOrder($order);
+        if (count($this->recipeBatchSizeOptions) === 1) {
+            $this->selectedRecipeBatchSizeKg = (string) $this->recipeBatchSizeOptions[0];
+        } else {
+            $this->selectedRecipeBatchSizeKg = '';
+        }
+
+        $this->batchPlannedQuantity = $this->selectedRecipeBatchSizeKg !== ''
+            ? $this->formatQuantity((float) $this->selectedRecipeBatchSizeKg)
+            : '';
 
         $this->selectedExistingBatches = $this->loadExistingBatchesForMo($winmanMo);
     }
 
     public function updatedVariantId($value): void
     {
-        $variantId = (int) ($value ?? 0);
-        if ($variantId <= 0) {
-            return;
-        }
+        // Batch quantity is recipe-card driven, so variant selection no longer
+        // overwrites planned quantity in the UI.
+    }
 
-        $selected = collect($this->variantOptions)->firstWhere('id', $variantId);
-        if (! is_array($selected)) {
-            return;
-        }
-
-        $batchSize = (float) ($selected['batch_size'] ?? 0);
-        if ($batchSize > 0) {
-            $this->batchPlannedQuantity = $this->formatQuantity($batchSize);
-        }
+    public function updatedSelectedRecipeBatchSizeKg($value): void
+    {
+        $this->batchPlannedQuantity = trim((string) $value) !== ''
+            ? $this->formatQuantity((float) $value)
+            : '';
     }
 
     private function formatQuantity(float $value): string
@@ -163,6 +173,8 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
         $this->selectedExistingBatches = [];
         $this->variantOptions = [];
         $this->variantId = null;
+        $this->recipeBatchSizeOptions = [];
+        $this->selectedRecipeBatchSizeKg = '';
         $this->batchPlannedQuantity = '';
         $this->error = null;
         $this->workspaceTab = 'start';
@@ -176,31 +188,11 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
             return;
         }
 
-        $validated = $this->validate([
-            'batchPlannedQuantity' => ['required', 'numeric', 'min:0.001'],
-        ]);
-
-        $plannedQuantity = (float) $validated['batchPlannedQuantity'];
-
-        $selectedOrder = collect($this->orders)->firstWhere('winman_manufacturing_order', $this->selectedWinmanMo);
-        $outstanding = is_array($selectedOrder) ? (float) ($selectedOrder['quantity_outstanding'] ?? 0) : 0.0;
-        if ($outstanding > 0 && $plannedQuantity > $outstanding + 0.0001) {
-            $this->error = 'Batch quantity cannot exceed MO outstanding quantity.';
-
-            return;
-        }
-
-        if (count($this->variantOptions) > 0 && $this->variantId === null) {
-            $this->error = 'Please select a batch-size variant before confirming.';
-
-            return;
-        }
-
         try {
             $batch = app(StartBatchFromManufacturingOrderFeature::class)(
                 $this->selectedWinmanMo,
                 $this->variantId,
-                $plannedQuantity,
+                $this->selectedRecipeBatchSizeKg !== '' ? (float) $this->selectedRecipeBatchSizeKg : null,
                 auth()->user(),
             );
         } catch (WinManException|BatchException $e) {
@@ -210,6 +202,107 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
         }
 
         $this->redirectRoute('batches.show', ['batch' => $batch->id, 'tab' => 'allocation'], navigate: true);
+    }
+
+    /** @return array<int, float> */
+    private function resolveRecipeBatchSizeOptionsFromOrder(?array $order): array
+    {
+        if (! is_array($order)) {
+            return [];
+        }
+
+        $recipeCode = $this->resolveRecipeCodeFromOrder($order);
+        if ($recipeCode === null) {
+            return [];
+        }
+
+        return $this->resolveRecipeBatchSizeOptionsByRecipeCode($recipeCode);
+    }
+
+    /** @return array<int, float> */
+    private function resolveRecipeBatchSizeOptionsByRecipeCode(string $recipeCode): array
+    {
+        $card = RecipeCard::query()
+            ->where('recipe_code', $recipeCode)
+            ->first(['batch_size_kg', 'batch_sizes_kg']);
+
+        if ($card === null) {
+            return [];
+        }
+
+        $sizes = [];
+
+        if (is_array($card->batch_sizes_kg)) {
+            foreach ($card->batch_sizes_kg as $size) {
+                if (! is_numeric($size)) {
+                    continue;
+                }
+
+                $numeric = round((float) $size, 3);
+                if ($numeric > 0) {
+                    $sizes[] = $numeric;
+                }
+            }
+        }
+
+        if ($card->batch_size_kg !== null) {
+            $legacy = round((float) $card->batch_size_kg, 3);
+            if ($legacy > 0) {
+                $sizes[] = $legacy;
+            }
+        }
+
+        $sizes = array_values(array_unique($sizes, SORT_NUMERIC));
+        sort($sizes, SORT_NUMERIC);
+
+        return $sizes;
+    }
+
+    private function resolveRecipeCodeFromOrder(array $order): ?string
+    {
+        $recipeCode = trim((string) ($order['recipe_code'] ?? ''));
+        if ($recipeCode !== '') {
+            return $recipeCode;
+        }
+
+        $structureProductId = trim((string) ($order['winman_product_id'] ?? ''));
+        if ($structureProductId === '') {
+            return null;
+        }
+
+        $directRecipe = ProductMapping::query()
+            ->where('structure_product_id', $structureProductId)
+            ->where(function ($query): void {
+                $query->where('component_product_id', 'like', '3001%')
+                    ->orWhere('component_product_id', 'like', '9900%');
+            })
+            ->orderBy('structure_level')
+            ->value('component_product_id');
+        if (is_string($directRecipe) && trim($directRecipe) !== '') {
+            return trim($directRecipe);
+        }
+
+        $intermediate = ProductMapping::query()
+            ->where('structure_product_id', $structureProductId)
+            ->where('component_product_id', 'like', '5001%')
+            ->orderBy('structure_level')
+            ->value('component_product_id');
+        if (! is_string($intermediate) || trim($intermediate) === '') {
+            return null;
+        }
+
+        $nestedRecipe = ProductMapping::query()
+            ->where('structure_product_id', trim($intermediate))
+            ->where(function ($query): void {
+                $query->where('component_product_id', 'like', '3001%')
+                    ->orWhere('component_product_id', 'like', '9900%');
+            })
+            ->orderBy('structure_level')
+            ->value('component_product_id');
+
+        return is_string($nestedRecipe) && trim($nestedRecipe) !== ''
+            ? trim($nestedRecipe)
+            : null;
     }
 
     private function resolveExistingBatchForMo(int $winmanMo): ?int
@@ -437,7 +530,7 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                 <div class="flex flex-wrap items-end gap-3">
                     @if (count($variantOptions) > 0)
                         <div>
-                            <label class="block text-xs text-gray-600 mb-1">Batch-size variant <span class="text-red-500">*</span></label>
+                            <label class="block text-xs text-gray-600 mb-1">Batch-size variant (optional)</label>
                             <select wire:model="variantId" class="border-gray-300 rounded-md shadow-sm text-sm">
                                 <option value="">— select variant —</option>
                                 @foreach ($variantOptions as $option)
@@ -447,11 +540,24 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                         </div>
                     @endif
 
-                    <div>
-                        <label class="block text-xs text-gray-600 mb-1">Batch quantity (kg) <span class="text-red-500">*</span></label>
-                        <input wire:model="batchPlannedQuantity" type="number" step="0.001" min="0.001" class="border-gray-300 rounded-md shadow-sm text-sm w-40" />
-                        @error('batchPlannedQuantity') <span class="block text-xs text-red-600">{{ $message }}</span> @enderror
-                    </div>
+                        @if (count($recipeBatchSizeOptions) > 1)
+                            <div>
+                                <label class="block text-xs text-gray-600 mb-1">Recipe batch size (kg)</label>
+                                <select wire:model="selectedRecipeBatchSizeKg" class="border-gray-300 rounded-md shadow-sm text-sm w-48">
+                                    <option value="">- select batch size -</option>
+                                    @foreach ($recipeBatchSizeOptions as $size)
+                                        <option value="{{ $size }}">{{ $this->formatQuantity((float) $size) }} kg</option>
+                                    @endforeach
+                                </select>
+                                <span class="block text-xs text-gray-500 mt-1">Multiple sizes are configured for this recipe.</span>
+                            </div>
+                        @else
+                            <div>
+                                <label class="block text-xs text-gray-600 mb-1">Batch quantity (kg)</label>
+                                <input wire:model="batchPlannedQuantity" type="text" readonly class="border-gray-300 bg-gray-100 rounded-md shadow-sm text-sm w-40" />
+                                <span class="block text-xs text-gray-500 mt-1">Auto from recipe card batch size.</span>
+                            </div>
+                        @endif
 
                     <x-primary-button wire:click="start" wire:loading.attr="disabled">
                         Add batch

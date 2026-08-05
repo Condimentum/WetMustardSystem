@@ -15,7 +15,7 @@ interface ReportGenerator
     public function name(): string;
 
     /**
-     * @return array{subject: string, html: string, row_count: int}
+     * @return array{subject: string, html: string, row_count: int, attachments?: array<int, string|array<string, string>>}
      */
     public function generate(CarbonInterface $from, CarbonInterface $to): array;
 }

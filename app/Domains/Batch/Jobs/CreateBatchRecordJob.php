@@ -3,6 +3,7 @@
 namespace App\Domains\Batch\Jobs;
 
 use App\Models\BatchRecord;
+use App\Models\BatchCard;
 use App\Models\ManufacturingOrder;
 use App\Models\RecipeVariant;
 use App\Models\User;
@@ -20,6 +21,7 @@ class CreateBatchRecordJob
         ManufacturingOrder $order,
         string $batchNumber,
         ?RecipeVariant $variant = null,
+        ?BatchCard $batchCard = null,
         ?User $user = null,
         ?string $shift = null,
         ?float $plannedQuantityKg = null,
@@ -28,6 +30,7 @@ class CreateBatchRecordJob
             'manufacturing_order_id' => $order->id,
             'product_id' => $order->product_id,
             'variant_id' => $variant?->id,
+            'batch_card_id' => $batchCard?->id,
             'batch_number' => $batchNumber,
             'production_date' => now()->toDateString(),
             'shift' => $shift,

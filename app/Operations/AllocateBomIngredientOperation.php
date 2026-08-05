@@ -75,15 +75,16 @@ class AllocateBomIngredientOperation
             'material_code' => (string) $component->winman_component_product_id,
             'material_description' => (string) $component->component_description,
             'lot_number' => $lotNumber,
-            'actual_quantity' => $quantity,
+            'actual_quantity' => (float) ($issueResult['issued_quantity'] ?? 0),
             'uom' => 'kg',
         ], $user);
 
-        ($this->recordIssueLog)($this->baseLog($batch, $component, $lotNumber, $quantity, $user) + [
+        ($this->recordIssueLog)(array_merge($this->baseLog($batch, $component, $lotNumber, $quantity, $user), [
             'batch_ingredient_lot_id' => $lot->id,
             'winman_inventory_ids' => $issueResult['issued_inventory_ids'],
+            'quantity_issued' => (float) ($issueResult['issued_quantity'] ?? $quantity),
             'issue_status' => WinManIssueLog::STATUS_SUCCESS,
-        ]);
+        ]));
 
         $order = $batch->manufacturingOrder;
         if ($order !== null && ! empty($order->winman_manufacturing_order)) {

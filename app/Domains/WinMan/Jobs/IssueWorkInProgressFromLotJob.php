@@ -21,7 +21,7 @@ class IssueWorkInProgressFromLotJob
 
     /**
      * @param  array{work_in_progress: int, component_product: int, lot_number: string, quantity: float, user_name: string}  $params
-     * @return array{issued_quantity: float, issued_inventory_ids: array<int, int>}
+    * @return array{issued_quantity: float, issued_inventory_ids: array<int, int>}
      */
     public function __invoke(array $params): array
     {
@@ -75,9 +75,13 @@ class IssueWorkInProgressFromLotJob
         }
 
         $quantityOutstanding = (float) ($context->QuantityOutstanding ?? 0);
-        if ($quantity > $quantityOutstanding + 0.0001) {
-            throw new WinManException('Issue quantity exceeds WinMan outstanding quantity for this BOM line.');
+        if ($quantityOutstanding <= 0.0001) {
+            throw new WinManException('No outstanding quantity remains for this BOM line in WinMan.');
         }
+
+        // Cap to the live WinMan outstanding quantity so operators can keep
+        // allocating incrementally without hard failures after partial issues.
+        $quantity = min($quantity, $quantityOutstanding);
 
         $site = (int) ($context->Site ?? 0);
         $manufacturingOrder = (int) ($context->ManufacturingOrder ?? 0);
@@ -98,6 +102,7 @@ class IssueWorkInProgressFromLotJob
         }
 
         $issuedInventoryIds = [];
+        $issuedQuantity = 0.0;
 
         $connection->transaction(function () use (
             $connection,
@@ -114,6 +119,7 @@ class IssueWorkInProgressFromLotJob
             $statusOnlyProcedure,
             $runStatusOnlyAfterIssue,
             &$issuedInventoryIds,
+            &$issuedQuantity,
         ): void {
             $remaining = $quantity;
 
@@ -161,11 +167,8 @@ class IssueWorkInProgressFromLotJob
                 }
 
                 $issuedInventoryIds[] = $inventoryId;
+                $issuedQuantity += $toIssue;
                 $remaining -= $toIssue;
-            }
-
-            if ($remaining > 0.0001) {
-                throw new WinManException('Selected lot does not have enough available quantity to satisfy this issue.');
             }
 
             if ($runNonWmGoAfterIssue) {
@@ -229,8 +232,13 @@ class IssueWorkInProgressFromLotJob
             }
         });
 
+        $issuedQuantity = round($issuedQuantity, 5);
+        if ($issuedQuantity <= 0) {
+            throw new WinManException('No available quantity could be issued from the selected lot.');
+        }
+
         return [
-            'issued_quantity' => $quantity,
+            'issued_quantity' => $issuedQuantity,
             'issued_inventory_ids' => array_values(array_unique($issuedInventoryIds)),
         ];
     }

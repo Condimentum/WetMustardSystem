@@ -11,6 +11,8 @@ new #[Layout('layouts.app')] #[Title('Settings Admin')] class extends Component 
 
     public ?string $flash = null;
 
+    public string $flashLevel = 'success';
+
     /** @var array<int, array{key:string,label:string,description:string,default:bool}> */
     private array $definitions = [
         [
@@ -55,6 +57,7 @@ new #[Layout('layouts.app')] #[Title('Settings Admin')] class extends Component 
             FeatureSettings::set($key, $enabled, auth()->id(), $definition['description']);
         }
 
+        $this->flashLevel = 'success';
         $this->flash = 'Settings saved.';
     }
 
@@ -65,6 +68,7 @@ new #[Layout('layouts.app')] #[Title('Settings Admin')] class extends Component 
             $this->toggles[$definition['key']] = $definition['default'];
         }
 
+        $this->flashLevel = 'success';
         $this->flash = 'Settings reset to config defaults.';
     }
 
@@ -80,8 +84,21 @@ new #[Layout('layouts.app')] #[Title('Settings Admin')] class extends Component 
         <h2 class="text-xl font-semibold text-gray-800">Settings Admin</h2>
         <p class="text-sm text-gray-600">Central project toggles. Use these switches to turn features on or off without code changes.</p>
 
+        <div class="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+            <div class="flex flex-wrap items-center gap-2">
+                <a href="{{ route('settings.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.admin') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">General</a>
+                <a href="{{ route('settings.recipes') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.recipes') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Recipes</a>
+                <a href="{{ route('settings.product-mapping') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.product-mapping') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Product Mapping</a>
+                <a href="{{ route('settings.operator-sync') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.operator-sync') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Operator Sync</a>
+            </div>
+        </div>
+
         @if ($flash)
-            <div class="bg-green-50 border border-green-200 text-green-800 text-sm rounded-lg px-4 py-3">{{ $flash }}</div>
+            <div @class([
+                'text-sm rounded-lg px-4 py-3 border',
+                'bg-green-50 border-green-200 text-green-800' => $flashLevel === 'success',
+                'bg-red-50 border-red-200 text-red-800' => $flashLevel === 'error',
+            ])>{{ $flash }}</div>
         @endif
 
         <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">

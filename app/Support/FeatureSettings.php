@@ -35,7 +35,17 @@ class FeatureSettings
         }
     }
 
+    public static function value(string $key, ?string $default = null): ?string
+    {
+        return static::get($key) ?? $default;
+    }
+
     public static function set(string $key, bool $value, ?int $updatedBy = null, ?string $description = null): void
+    {
+        static::setValue($key, $value ? 'true' : 'false', 'boolean', $updatedBy, $description);
+    }
+
+    public static function setValue(string $key, string $value, string $valueType = 'string', ?int $updatedBy = null, ?string $description = null): void
     {
         if (! static::hasSettingsTable()) {
             return;
@@ -44,8 +54,8 @@ class FeatureSettings
         AppSetting::query()->updateOrCreate(
             ['key' => $key],
             [
-                'value' => $value ? 'true' : 'false',
-                'value_type' => 'boolean',
+                'value' => $value,
+                'value_type' => $valueType,
                 'description' => $description,
                 'updated_by' => $updatedBy,
             ]

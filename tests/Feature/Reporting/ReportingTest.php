@@ -3,10 +3,12 @@
 namespace Tests\Feature\Reporting;
 
 use App\Domains\Reporting\Jobs\ResolveReportRecipientsJob;
+use App\Domains\Reporting\Reports\DailyIntermediateProductionReport;
 use App\Domains\Reporting\Reports\OpenBatchesReport;
 use App\Features\Reporting\SendReportNowFeature;
 use App\Models\BatchRecord;
 use App\Models\ManufacturingOrder;
+use App\Models\PalleconRecord;
 use App\Models\Product;
 use App\Models\ReportRecipient;
 use App\Models\ReportSendLog;
@@ -50,6 +52,96 @@ class ReportingTest extends TestCase
 
         $this->assertSame(1, $report['row_count']);
         $this->assertStringContainsString('WM-1', $report['html']);
+    }
+
+    public function test_daily_intermediate_production_report_lists_pallecon_batches(): void
+    {
+        $product = Product::create([
+            'recipe_code' => 'R-INTERMEDIATE',
+            'product_name' => 'Intermediate Mustard',
+            'active_flag' => true,
+        ]);
+
+        $palleconOrder = ManufacturingOrder::create([
+            'mo_number' => 'MO-PALLECON-1',
+            'winman_manufacturing_order' => 1001,
+            'winman_manufacturing_order_id' => 'MO-PALLECON-1',
+            'winman_product_id' => '50010001',
+            'recipe_code' => 'R-INTERMEDIATE',
+            'product_id' => $product->id,
+            'planned_quantity' => 1200,
+            'quantity_outstanding' => 1200,
+            'winman_classification' => 30,
+            'winman_unit_of_measure' => 2,
+            'winman_unit_of_measure_description' => 'Pallecon',
+            'winman_system_type' => 'F',
+            'status' => 'selected',
+        ]);
+
+        $otherOrder = ManufacturingOrder::create([
+            'mo_number' => 'MO-NON-PALLECON-1',
+            'winman_manufacturing_order' => 1002,
+            'winman_manufacturing_order_id' => 'MO-NON-PALLECON-1',
+            'winman_product_id' => '70010001',
+            'recipe_code' => 'R-INTERMEDIATE',
+            'product_id' => $product->id,
+            'planned_quantity' => 500,
+            'quantity_outstanding' => 500,
+            'winman_classification' => 29,
+            'winman_unit_of_measure' => 1,
+            'winman_unit_of_measure_description' => 'Kilogram',
+            'winman_system_type' => 'F',
+            'status' => 'selected',
+        ]);
+
+        $includedBatch = BatchRecord::create([
+            'manufacturing_order_id' => $palleconOrder->id,
+            'product_id' => $product->id,
+            'batch_number' => 'WM-PAL-001',
+            'production_date' => now()->toDateString(),
+            'planned_quantity' => 1200,
+            'status' => BatchRecord::STATUS_IN_PROGRESS,
+        ]);
+
+        BatchRecord::create([
+            'manufacturing_order_id' => $otherOrder->id,
+            'product_id' => $product->id,
+            'batch_number' => 'WM-OTHER-001',
+            'production_date' => now()->toDateString(),
+            'planned_quantity' => 500,
+            'status' => BatchRecord::STATUS_IN_PROGRESS,
+        ]);
+
+        PalleconRecord::create([
+            'batch_record_id' => $includedBatch->id,
+            'mo_number' => 'MO-PALLECON-1',
+            'ticket_number' => 'T-001',
+            'serial_number' => 'PAL-001',
+            'fill_weight' => 510.25,
+        ]);
+
+        PalleconRecord::create([
+            'batch_record_id' => $includedBatch->id,
+            'mo_number' => 'MO-PALLECON-1',
+            'ticket_number' => 'T-002',
+            'serial_number' => 'PAL-002',
+            'fill_weight' => 489.75,
+        ]);
+
+        $report = app(DailyIntermediateProductionReport::class)->generate(now()->subDay(), now());
+
+        $this->assertSame(1, $report['row_count']);
+        $this->assertStringContainsString('WM-PAL-001', $report['html']);
+        $this->assertStringContainsString('Pallecon', $report['html']);
+        $this->assertStringContainsString('1000.000', $report['html']);
+        $this->assertStringNotContainsString('WM-OTHER-001', $report['html']);
+        $this->assertArrayHasKey('attachments', $report);
+        $this->assertIsArray($report['attachments']);
+        $this->assertNotEmpty($report['attachments']);
+        $this->assertArrayHasKey('path', $report['attachments'][0]);
+        $this->assertFileExists($report['attachments'][0]['path']);
+            $this->assertTrue(str_ends_with(strtolower((string) $report['attachments'][0]['name']), '.pdf'));
+            $this->assertGreaterThan(0, filesize($report['attachments'][0]['path']));
     }
 
     public function test_send_report_now_sends_and_logs_when_recipients_exist(): void

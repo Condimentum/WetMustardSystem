@@ -24,6 +24,7 @@ class BatchRecord extends Model
         'manufacturing_order_id',
         'product_id',
         'variant_id',
+        'batch_card_id',
         'batch_number',
         'production_date',
         'shift',
@@ -56,6 +57,11 @@ class BatchRecord extends Model
     public function variant(): BelongsTo
     {
         return $this->belongsTo(RecipeVariant::class, 'variant_id');
+    }
+
+    public function batchCard(): BelongsTo
+    {
+        return $this->belongsTo(BatchCard::class, 'batch_card_id');
     }
 
     public function ingredientLots(): HasMany
@@ -128,5 +134,10 @@ class BatchRecord extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function paperworkRows(): HasMany
+    {
+        return $this->hasMany(PaperworkRow::class);
     }
 }

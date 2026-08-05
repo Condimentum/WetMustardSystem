@@ -12,13 +12,16 @@ class CreateOrUpdateUserFromMicrosoftProfileJob
         $email = Str::lower((string) ($profile['mail'] ?? $profile['userPrincipalName'] ?? ''));
         $name = (string) ($profile['displayName'] ?? $email);
 
-        return User::query()->updateOrCreate(
-            ['email' => $email],
-            [
-                'name' => $name,
-                'email_verified_at' => now(),
-                'password' => Str::password(32),
-            ]
-        );
+        $user = User::query()->firstOrNew(['email' => $email]);
+        $user->name = $name;
+        $user->email_verified_at = now();
+
+        if (! $user->exists) {
+            $user->password = Str::password(32);
+        }
+
+        $user->save();
+
+        return $user;
     }
 }

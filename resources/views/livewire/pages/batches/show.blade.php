@@ -4,6 +4,7 @@ use App\Domains\Batch\Exceptions\BatchException;
 use App\Domains\Batch\Jobs\ValidateBatchCompletionJob;
 use App\Features\Batches\ApproveBatchQaFeature;
 use App\Features\Batches\CompleteBatchFeature;
+use App\Features\Batches\SignIngredientLotFeature;
 use App\Features\Batches\RejectBatchQaFeature;
 use App\Features\Batches\GetAvailableIngredientLotsFeature;
 use App\Features\Booking\BookFinishedGoodsFeature;
@@ -15,12 +16,15 @@ use App\Domains\WinMan\Jobs\ListIssuedLotsForWorkInProgressJob;
 use App\Operations\AllocateBomIngredientOperation;
 use App\Support\FeatureSettings;
 use App\Models\BatchRecord;
+use App\Models\PaperworkRow;
 use App\Models\PalleconRecord;
 use App\Models\PalleconSubmissionAudit;
+use App\Models\User;
 use App\Models\WinManBookingLog;
 use App\Models\WinManIssueLog;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
@@ -62,6 +66,8 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
     public bool $featureAllocationWinmanLookupEnabled = true;
 
+    public bool $preferScannerOnMobile = false;
+
     /** @var array<int, array{lot_number:string,quantity:float,last_effective_date:?string}> */
     public array $activeBomHistoricalLots = [];
 
@@ -74,6 +80,21 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
     public string $bookLotNumber = '';
 
     public ?string $bookFlash = null;
+
+    /** @var array<int, string> */
+    public array $signoffOperatorByLot = [];
+
+    public string $powdersWeighedOperatorId = '';
+
+    public string $liquidsWeighedOperatorId = '';
+
+    public string $tippingBatchOperatorId = '';
+
+    public string $millGapSizeUsed = '';
+
+    public string $p1SpeedUsed = '';
+
+    public string $p2SpeedUsed = '';
 
     public ?string $moUnitOfMeasureDescription = null;
 
@@ -127,6 +148,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         $this->featureAllocationCameraAutostartEnabled = FeatureSettings::enabled('allocation.scanner_camera_autostart', true);
         $this->featureAllocationScanDebugEnabled = FeatureSettings::enabled('allocation.scanner_debug_panel', true);
         $this->featureAllocationWinmanLookupEnabled = FeatureSettings::enabled('allocation.scanner_winman_lookup', true);
+        $this->preferScannerOnMobile = $this->featureAllocationScannerEnabled && $this->isMobileUserAgent();
 
         if (! $this->featureAllocationScannerEnabled && $this->activeBomAllocationMode === 'gr_scan') {
             $this->activeBomAllocationMode = 'manual';
@@ -153,7 +175,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         $this->activeBomComponentSnapshotId = $componentSnapshotId;
         $this->activeBomMaterialCode = trim($materialCode);
         $this->activeBomMaterialDescription = trim($materialDescription);
-        $this->activeBomAllocationMode = 'manual';
+        $this->activeBomAllocationMode = $this->preferScannerOnMobile ? 'gr_scan' : 'manual';
         $this->activeBomGrScanRaw = '';
         $this->activeBomLotNumber = null;
         $this->activeBomActualQty = $suggestedQty !== null ? trim($suggestedQty) : '';
@@ -182,6 +204,22 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         if ($this->activeBomLotNumber === null && count($this->activeBomLotOptions) > 0) {
             $this->activeBomLotNumber = $this->activeBomLotOptions[0]['lot_number'];
         }
+    }
+
+    protected function isMobileUserAgent(): bool
+    {
+        $agent = strtolower((string) request()->userAgent());
+        if ($agent === '') {
+            return false;
+        }
+
+        foreach (['android', 'iphone', 'ipad', 'ipod', 'mobile', 'windows phone'] as $needle) {
+            if (str_contains($agent, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function toggleBomAllocationRow(int $componentSnapshotId, string $materialCode, string $materialDescription, ?string $suggestedQty = null): void
@@ -387,6 +425,305 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         }
 
         return 'bucket';
+    }
+
+    #[Computed]
+    public function signoffOperators()
+    {
+        return User::query()
+            ->orderBy('name')
+            ->get(['id', 'name']);
+    }
+
+    public function getIngredientSignoffCompleteProperty(): bool
+    {
+        if ($this->packingMode !== 'pallecon') {
+            return true;
+        }
+
+        $lots = $this->batch->ingredientLots
+            ->filter(fn ($lot): bool => ! blank($lot->lot_number) && $lot->actual_quantity !== null)
+            ->values();
+
+        if ($lots->isEmpty()) {
+            return false;
+        }
+
+        return $lots->every(fn ($lot): bool => $lot->weighed_at !== null && $lot->tipped_at !== null);
+    }
+
+    public function getIngredientSignoffReadyLotCountProperty(): int
+    {
+        return $this->batch->ingredientLots
+            ->filter(fn ($lot): bool => ! blank($lot->lot_number) && $lot->actual_quantity !== null)
+            ->count();
+    }
+
+    /** @return array{powders:string,liquids:string,tipping:string} */
+    public function getPaperworkIngredientSignoffProperty(): array
+    {
+        $rows = PaperworkRow::query()
+            ->where('batch_record_id', $this->batch->id)
+            ->whereIn('row_key', [
+                'ingredients_signoff.powders_weighed_by',
+                'ingredients_signoff.liquids_weighed_by',
+                'ingredients_signoff.tipping_batch_by',
+            ])
+            ->get()
+            ->keyBy('row_key');
+
+        return [
+            'powders' => trim((string) ($rows['ingredients_signoff.powders_weighed_by']->value_text ?? '')),
+            'liquids' => trim((string) ($rows['ingredients_signoff.liquids_weighed_by']->value_text ?? '')),
+            'tipping' => trim((string) ($rows['ingredients_signoff.tipping_batch_by']->value_text ?? '')),
+        ];
+    }
+
+    /** @return array{mill_gap:string,p1_speed:string,p2_speed:string} */
+    public function getPaperworkProcessSettingsProperty(): array
+    {
+        $rows = PaperworkRow::query()
+            ->where('batch_record_id', $this->batch->id)
+            ->whereIn('row_key', [
+                'process_settings.mill_gap_size_used',
+                'process_settings.p1_speed_used',
+                'process_settings.p2_speed_used',
+            ])
+            ->get()
+            ->keyBy('row_key');
+
+        return [
+            'mill_gap' => trim((string) ($rows['process_settings.mill_gap_size_used']->value_text ?? '')),
+            'p1_speed' => trim((string) ($rows['process_settings.p1_speed_used']->value_text ?? '')),
+            'p2_speed' => trim((string) ($rows['process_settings.p2_speed_used']->value_text ?? '')),
+        ];
+    }
+
+    public function signIngredientLot(int $lotId, string $purpose): void
+    {
+        $this->authorizeEditable();
+
+        $lot = $this->batch->ingredientLots->firstWhere('id', $lotId);
+        if ($lot === null) {
+            session()->flash('status', 'Ingredient lot was not found. Refresh and try again.');
+
+            return;
+        }
+
+        $operatorId = (int) ($this->signoffOperatorByLot[$lotId] ?? auth()->id());
+        $operator = User::query()->find($operatorId);
+        if ($operator === null) {
+            session()->flash('status', 'Select a valid operator before signing this lot.');
+
+            return;
+        }
+
+        try {
+            app(SignIngredientLotFeature::class)($lot, $purpose, $operator);
+        } catch (BatchException $e) {
+            session()->flash('status', $e->getMessage());
+
+            return;
+        }
+
+        $this->reload();
+        session()->flash('status', $purpose === 'weighed'
+            ? 'Ingredient lot marked as weighed.'
+            : 'Ingredient lot marked as tipped.');
+    }
+
+    public function applyBulkIngredientSignoff(): void
+    {
+        $this->authorizeEditable();
+
+        $validated = $this->validate([
+            'millGapSizeUsed' => ['nullable', 'string', 'max:120'],
+            'p1SpeedUsed' => ['nullable', 'string', 'max:120'],
+            'p2SpeedUsed' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $millGap = trim((string) ($validated['millGapSizeUsed'] ?? ''));
+        $p1Speed = trim((string) ($validated['p1SpeedUsed'] ?? ''));
+        $p2Speed = trim((string) ($validated['p2SpeedUsed'] ?? ''));
+
+        $this->upsertTextPaperworkRow('process_settings.mill_gap_size_used', 'Mill Gap Size Used', 880, $millGap);
+        $this->upsertTextPaperworkRow('process_settings.p1_speed_used', 'P1 Speed Used', 881, $p1Speed);
+        $this->upsertTextPaperworkRow('process_settings.p2_speed_used', 'P2 Speed Used', 882, $p2Speed);
+
+        $powdersOperatorId = (int) trim($this->powdersWeighedOperatorId);
+        $liquidsOperatorId = (int) trim($this->liquidsWeighedOperatorId);
+        $tippedOperatorId = (int) trim($this->tippingBatchOperatorId);
+
+        if ($powdersOperatorId <= 0 || $liquidsOperatorId <= 0 || $tippedOperatorId <= 0) {
+            session()->flash('status', 'Select Powders Weighed, Liquids Weighed, and Tipping Batch before applying Ingredients Sign Off.');
+
+            return;
+        }
+
+        $powdersOperator = User::query()->find($powdersOperatorId);
+        if ($powdersOperator === null) {
+            session()->flash('status', 'Selected Powders Weighed operator is invalid.');
+
+            return;
+        }
+
+        $liquidsOperator = User::query()->find($liquidsOperatorId);
+        if ($liquidsOperator === null) {
+            session()->flash('status', 'Selected Liquids Weighed operator is invalid.');
+
+            return;
+        }
+
+        $tippedOperator = User::query()->find($tippedOperatorId);
+        if ($tippedOperator === null) {
+            session()->flash('status', 'Selected Tipped By operator is invalid.');
+
+            return;
+        }
+
+        $lots = $this->batch->ingredientLots
+            ->filter(fn ($lot): bool => ! blank($lot->lot_number) && $lot->actual_quantity !== null)
+            ->values();
+
+        if ($lots->isEmpty()) {
+            session()->flash('status', 'No allocated ingredient lots are ready for sign-off yet.');
+
+            return;
+        }
+
+        $weighedCount = 0;
+        $tippedCount = 0;
+        $skippedTippedNotWeighed = 0;
+
+        foreach ($lots as $lot) {
+            if ($lot->weighed_at === null) {
+                app(SignIngredientLotFeature::class)($lot, 'weighed', $powdersOperator);
+                $weighedCount++;
+            }
+        }
+
+        foreach ($lots as $lot) {
+            if ($lot->tipped_at !== null) {
+                continue;
+            }
+
+            if ($lot->weighed_at === null) {
+                $skippedTippedNotWeighed++;
+                continue;
+            }
+
+            app(SignIngredientLotFeature::class)($lot, 'tipped', $tippedOperator);
+            $tippedCount++;
+        }
+
+        $this->upsertIngredientSignoffPaperworkRow(
+            'ingredients_signoff.powders_weighed_by',
+            'Powders Weighed By',
+            900,
+            $powdersOperator,
+        );
+        $this->upsertIngredientSignoffPaperworkRow(
+            'ingredients_signoff.liquids_weighed_by',
+            'Liquids Weighed By',
+            901,
+            $liquidsOperator,
+        );
+        $this->upsertIngredientSignoffPaperworkRow(
+            'ingredients_signoff.tipping_batch_by',
+            'Tipping Batch By',
+            902,
+            $tippedOperator,
+        );
+
+        $this->reload();
+
+        $parts = [];
+        $parts[] = "weighed {$weighedCount} lot(s)";
+        $parts[] = "tipped {$tippedCount} lot(s)";
+        if ($skippedTippedNotWeighed > 0) {
+            $parts[] = "skipped {$skippedTippedNotWeighed} tipped lot(s) not yet weighed";
+        }
+
+        $message = 'Ingredients Sign Off applied: '.implode(', ', $parts).'.';
+
+        if ($this->ingredientSignoffComplete) {
+            $message .= ' All ingredient lots are now fully signed off. Continue to Pallecon Packing.';
+            $this->dispatch('switch-batch-tab', tab: 'packing');
+        }
+
+        session()->flash('status', $message);
+    }
+
+    private function upsertIngredientSignoffPaperworkRow(string $rowKey, string $rowLabel, int $rowOrder, User $operator): void
+    {
+        $batchColumnIndex = (int) (PaperworkRow::query()
+            ->where('batch_record_id', $this->batch->id)
+            ->value('batch_column_index') ?? 1);
+
+        PaperworkRow::query()->updateOrCreate(
+            [
+                'batch_record_id' => $this->batch->id,
+                'row_key' => $rowKey,
+            ],
+            [
+                'manufacturing_order_id' => $this->batch->manufacturing_order_id,
+                'manufacturing_order_ref' => (string) ($this->batch->manufacturingOrder?->winman_manufacturing_order_id ?? $this->batch->manufacturingOrder?->mo_number ?? ''),
+                'batch_number' => (string) ($this->batch->batch_number ?? ''),
+                'batch_column_index' => $batchColumnIndex,
+                'product_id' => $this->batch->product_id,
+                'recipe_code' => $this->batch->manufacturingOrder?->recipe_code,
+                'recipe_revision' => null,
+                'row_label' => $rowLabel,
+                'row_order' => $rowOrder,
+                'value_text' => (string) $operator->name,
+                'value_number' => null,
+                'value_bool' => null,
+                'value_datetime' => null,
+                'unit' => null,
+                'status' => 'completed',
+                'completed_at' => now(),
+                'completed_by' => $operator->id,
+                'entered_by' => auth()->id(),
+                'entered_at' => now(),
+                'updated_by' => auth()->id(),
+            ],
+        );
+    }
+
+    private function upsertTextPaperworkRow(string $rowKey, string $rowLabel, int $rowOrder, string $valueText): void
+    {
+        $batchColumnIndex = (int) (PaperworkRow::query()
+            ->where('batch_record_id', $this->batch->id)
+            ->value('batch_column_index') ?? 1);
+
+        PaperworkRow::query()->updateOrCreate(
+            [
+                'batch_record_id' => $this->batch->id,
+                'row_key' => $rowKey,
+            ],
+            [
+                'manufacturing_order_id' => $this->batch->manufacturing_order_id,
+                'manufacturing_order_ref' => (string) ($this->batch->manufacturingOrder?->winman_manufacturing_order_id ?? $this->batch->manufacturingOrder?->mo_number ?? ''),
+                'batch_number' => (string) ($this->batch->batch_number ?? ''),
+                'batch_column_index' => $batchColumnIndex,
+                'product_id' => $this->batch->product_id,
+                'recipe_code' => $this->batch->manufacturingOrder?->recipe_code,
+                'recipe_revision' => null,
+                'row_label' => $rowLabel,
+                'row_order' => $rowOrder,
+                'value_text' => $valueText,
+                'value_number' => null,
+                'value_bool' => null,
+                'value_datetime' => null,
+                'unit' => null,
+                'status' => 'completed',
+                'completed_at' => now(),
+                'completed_by' => auth()->id(),
+                'entered_by' => auth()->id(),
+                'entered_at' => now(),
+                'updated_by' => auth()->id(),
+            ],
+        );
     }
 
     public function getPackingLabelProperty(): string
@@ -1150,6 +1487,44 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
             'issueLogs',
         ]);
 
+        $defaultOperatorId = auth()->id();
+        $signoffOperatorByLot = [];
+        foreach ($this->batch->ingredientLots as $lot) {
+            $selected = $this->signoffOperatorByLot[$lot->id] ?? null;
+            $signoffOperatorByLot[$lot->id] = (string) ($selected ?: $lot->tipped_by ?: $lot->weighed_by ?: $defaultOperatorId ?: '');
+        }
+        $this->signoffOperatorByLot = $signoffOperatorByLot;
+
+        $paperworkSignoff = $this->paperworkIngredientSignoff;
+        $existingWeighedBy = (int) ($this->batch->ingredientLots->first(fn ($lot) => $lot->weighed_by !== null)?->weighed_by ?? 0);
+        $existingTippedBy = (int) ($this->batch->ingredientLots->first(fn ($lot) => $lot->tipped_by !== null)?->tipped_by ?? 0);
+        $savedPowders = User::query()->where('name', $paperworkSignoff['powders'])->value('id');
+        $savedLiquids = User::query()->where('name', $paperworkSignoff['liquids'])->value('id');
+        $savedTipping = User::query()->where('name', $paperworkSignoff['tipping'])->value('id');
+
+        if (trim($this->powdersWeighedOperatorId) === '') {
+            $this->powdersWeighedOperatorId = (string) ($savedPowders ?: ($existingWeighedBy > 0 ? $existingWeighedBy : ($defaultOperatorId ?: '')));
+        }
+
+        if (trim($this->liquidsWeighedOperatorId) === '') {
+            $this->liquidsWeighedOperatorId = (string) ($savedLiquids ?: ($existingWeighedBy > 0 ? $existingWeighedBy : ($defaultOperatorId ?: '')));
+        }
+
+        if (trim($this->tippingBatchOperatorId) === '') {
+            $this->tippingBatchOperatorId = (string) ($savedTipping ?: ($existingTippedBy > 0 ? $existingTippedBy : ($defaultOperatorId ?: '')));
+        }
+
+        $paperworkProcessSettings = $this->paperworkProcessSettings;
+        if (trim($this->millGapSizeUsed) === '') {
+            $this->millGapSizeUsed = (string) ($paperworkProcessSettings['mill_gap'] ?? '');
+        }
+        if (trim($this->p1SpeedUsed) === '') {
+            $this->p1SpeedUsed = (string) ($paperworkProcessSettings['p1_speed'] ?? '');
+        }
+        if (trim($this->p2SpeedUsed) === '') {
+            $this->p2SpeedUsed = (string) ($paperworkProcessSettings['p2_speed'] ?? '');
+        }
+
         $this->loadMoUnitOfMeasureDescription();
         $this->loadMoHeaderDates();
 
@@ -1350,7 +1725,20 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 }; ?>
 
 <div class="py-8">
-    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6" x-data="{ tab: @js(in_array((string) request()->query('tab', 'allocation'), ['batch', 'allocation', 'packing'], true) ? (string) request()->query('tab', 'allocation') : 'allocation') }" x-on:switch-batch-tab.window="tab = $event.detail.tab">
+    @php
+        $requestedTab = (string) request()->query('tab', 'allocation');
+        $allowedTabs = ['batch', 'allocation', 'packing'];
+        if ($this->packingMode === 'pallecon') {
+            $allowedTabs[] = 'signoff';
+        }
+
+        $initialTab = in_array($requestedTab, $allowedTabs, true) ? $requestedTab : 'allocation';
+        if ($this->packingMode === 'pallecon' && $initialTab === 'packing' && ! $this->ingredientSignoffComplete) {
+            $initialTab = 'signoff';
+        }
+    @endphp
+
+    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6" x-data="{ tab: @js($initialTab) }" x-on:switch-batch-tab.window="tab = $event.detail.tab">
 
         @if (session('status'))
             <div class="bg-green-50 border border-green-200 text-green-800 text-sm rounded-lg px-4 py-3">
@@ -1518,7 +1906,15 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                             <span>Back to Workspace</span>
                         </a>
                     @endif
-                    @foreach (['allocation' => 'Ingredient Allocation', 'packing' => $this->packingLabel] as $key => $label)
+                    @php
+                        $batchTabs = ['allocation' => 'Ingredient Allocation'];
+                        if ($this->packingMode === 'pallecon') {
+                            $batchTabs['signoff'] = 'Ingredients Sign Off';
+                        }
+                        $batchTabs['packing'] = $this->packingLabel;
+                    @endphp
+
+                    @foreach ($batchTabs as $key => $label)
                         @if ($key === 'packing' && $this->packingMode !== 'pallecon')
                             <a href="{{ route($this->packingRoute, $batch) }}" wire:navigate
                                 :style="tab === '{{ $key }}'
@@ -1529,11 +1925,20 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                 <span>{{ $label }}</span>
                             </a>
                         @else
-                            <button @click="tab = '{{ $key }}'"
+                            @php
+                                $packingLocked = $key === 'packing' && $this->packingMode === 'pallecon' && ! $this->ingredientSignoffComplete;
+                            @endphp
+                            <button
+                                @if (! $packingLocked)
+                                    @click="tab = '{{ $key }}'"
+                                @endif
                                 :style="tab === '{{ $key }}'
                                     ? 'display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #4f46e5;background:#4f46e5;color:#fff;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;box-shadow:0 4px 12px rgba(79,70,229,.24);white-space:nowrap;'
                                     : 'display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #cbd5e1;background:#fff;color:#334155;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;white-space:nowrap;'"
                                 type="button"
+                                @disabled($packingLocked)
+                                title="{{ $packingLocked ? 'Complete Ingredients Sign Off first.' : '' }}"
+                                class="{{ $packingLocked ? 'opacity-50 cursor-not-allowed' : '' }}"
                             >
                                 <span>{{ $label }}</span>
                             </button>
@@ -1646,7 +2051,6 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                     : 'Amend/Start Over/Delete is blocked because ingredients have already been issued to WinMan.' }}
                             </div>
                         @endif
-                    </div>
 
                     @if ($showAmendBatchForm && $this->canResetBatch)
                         <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
@@ -1754,13 +2158,16 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                 $lot = $ingredientLotsById->get((int) ($log->batch_ingredient_lot_id ?? 0));
 
                                                 return [
+                                                    'lot_id' => $lot?->id,
                                                     'lot_number' => (string) ($log->lot_number ?? ($lot?->lot_number ?? '—')),
                                                     'quantity' => (float) ($log->quantity_issued ?? ($lot?->actual_quantity ?? 0)),
                                                     'uom' => (string) ($lot?->uom ?? 'kg'),
                                                     'issue_status' => (string) ($log->issue_status ?? ''),
                                                     'error_message' => (string) ($log->error_message ?? ''),
                                                     'weighed_by' => $lot?->weighedBy?->name,
+                                                    'weighed_at' => $lot?->weighed_at?->format('d/m H:i'),
                                                     'tipped_by' => $lot?->tippedBy?->name,
+                                                    'tipped_at' => $lot?->tipped_at?->format('d/m H:i'),
                                                 ];
                                             })->values();
 
@@ -1772,13 +2179,16 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                         ->first();
 
                                                     return [
+                                                        'lot_id' => $lot->id,
                                                         'lot_number' => (string) ($lot->lot_number ?? '—'),
                                                         'quantity' => (float) ($lot->actual_quantity ?? 0),
                                                         'uom' => (string) ($lot->uom ?? 'kg'),
                                                         'issue_status' => (string) ($issueLog?->issue_status ?? ''),
                                                         'error_message' => (string) ($issueLog?->error_message ?? ''),
                                                         'weighed_by' => $lot->weighedBy?->name,
+                                                        'weighed_at' => $lot->weighed_at?->format('d/m H:i'),
                                                         'tipped_by' => $lot->tippedBy?->name,
+                                                        'tipped_at' => $lot->tipped_at?->format('d/m H:i'),
                                                     ];
                                                 })->values();
                                             }
@@ -1840,13 +2250,16 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
                                                         if ($expandedRows->isEmpty() && count($activeBomHistoricalLots) > 0) {
                                                             $expandedRows = collect($activeBomHistoricalLots)->map(static fn (array $history): array => [
+                                                                'lot_id' => null,
                                                                 'lot_number' => (string) $history['lot_number'],
                                                                 'quantity' => abs((float) $history['quantity']),
                                                                 'uom' => 'kg',
                                                                 'issue_status' => 'success',
                                                                 'error_message' => '',
                                                                 'weighed_by' => null,
+                                                                'weighed_at' => null,
                                                                 'tipped_by' => null,
+                                                                'tipped_at' => null,
                                                             ]);
                                                         }
                                                     @endphp
@@ -1859,6 +2272,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                                     <th class="px-3 py-2 text-right">Qty</th>
                                                                     <th class="px-3 py-2">UOM</th>
                                                                     <th class="px-3 py-2">WinMan</th>
+                                                                    <th class="px-3 py-2">Operator</th>
                                                                     <th class="px-3 py-2">Weighed</th>
                                                                     <th class="px-3 py-2">Tipped</th>
                                                                 </tr>
@@ -1880,12 +2294,44 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                                                 <span class="text-gray-500">-</span>
                                                                             @endif
                                                                         </td>
-                                                                        <td class="px-3 py-2">{{ $row['weighed_by'] ?: '—' }}</td>
-                                                                        <td class="px-3 py-2">{{ $row['tipped_by'] ?: '—' }}</td>
+                                                                        <td class="px-3 py-2">
+                                                                            @if ($row['lot_id'] && $this->editable)
+                                                                                <select wire:model="signoffOperatorByLot.{{ $row['lot_id'] }}" class="w-full rounded-md border-gray-300 text-xs shadow-sm">
+                                                                                    <option value="">Select</option>
+                                                                                    @foreach ($this->signoffOperators as $operator)
+                                                                                        <option value="{{ $operator->id }}">{{ $operator->name }}</option>
+                                                                                    @endforeach
+                                                                                </select>
+                                                                            @elseif ($row['weighed_by'] || $row['tipped_by'])
+                                                                                <span class="text-xs text-slate-600">{{ $row['tipped_by'] ?: $row['weighed_by'] }}</span>
+                                                                            @else
+                                                                                <span class="text-gray-400">—</span>
+                                                                            @endif
+                                                                        </td>
+                                                                        <td class="px-3 py-2 align-top">
+                                                                            @if ($row['weighed_by'])
+                                                                                <div class="text-sm font-medium text-slate-800">{{ $row['weighed_by'] }}</div>
+                                                                                <div class="text-xs text-slate-500">{{ $row['weighed_at'] ?: 'Signed' }}</div>
+                                                                            @elseif ($row['lot_id'] && $this->editable)
+                                                                                <button type="button" wire:click="signIngredientLot({{ $row['lot_id'] }}, 'weighed')" class="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100">Confirm weighed</button>
+                                                                            @else
+                                                                                <span class="text-gray-400">—</span>
+                                                                            @endif
+                                                                        </td>
+                                                                        <td class="px-3 py-2 align-top">
+                                                                            @if ($row['tipped_by'])
+                                                                                <div class="text-sm font-medium text-slate-800">{{ $row['tipped_by'] }}</div>
+                                                                                <div class="text-xs text-slate-500">{{ $row['tipped_at'] ?: 'Signed' }}</div>
+                                                                            @elseif ($row['lot_id'] && $this->editable)
+                                                                                <button type="button" wire:click="signIngredientLot({{ $row['lot_id'] }}, 'tipped')" class="inline-flex items-center rounded-md border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100">Confirm tipped</button>
+                                                                            @else
+                                                                                <span class="text-gray-400">—</span>
+                                                                            @endif
+                                                                        </td>
                                                                     </tr>
                                                                 @empty
                                                                     <tr>
-                                                                        <td colspan="6" class="px-3 py-4 text-center text-gray-500">No allocations recorded yet for this BOM line.</td>
+                                                                        <td colspan="7" class="px-3 py-4 text-center text-gray-500">No allocations recorded yet for this BOM line.</td>
                                                                     </tr>
                                                                 @endforelse
                                                             </tbody>
@@ -1899,10 +2345,122 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                             </table>
                         </div>
                     @endif
+
+                    @if ($this->packingMode === 'pallecon')
+                        <div class="px-6 pb-6">
+                            <button @click="tab = 'signoff'" type="button" class="inline-flex items-center rounded-full bg-indigo-600 text-white text-sm font-semibold px-4 py-2 hover:bg-indigo-500">Continue to Ingredients Sign Off →</button>
+                        </div>
+                    @endif
                 </div>
 
                 @if ($this->packingMode === 'pallecon')
+                    <div x-show="tab === 'signoff'" class="space-y-6 p-6">
+                        @php
+                            $packingSignoffRows = $batch->ingredientLots
+                                ->sortBy([
+                                    ['material_code', 'asc'],
+                                    ['material_description', 'asc'],
+                                    ['lot_number', 'asc'],
+                                    ['id', 'asc'],
+                                ])
+                                ->values();
+                        @endphp
+
+                        <div class="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden">
+                            <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);">
+                                <h3 class="text-sm font-semibold text-slate-700">Ingredients Sign Off</h3>
+                                <p class="text-xs text-slate-500 mt-1">Complete this tab before moving to Pallecon Packing.</p>
+                            </div>
+
+                            <div class="p-4">
+                                @if ($packingSignoffRows->isEmpty())
+                                    <p class="text-sm text-slate-500">No ingredient lots allocated yet. Complete Ingredient Allocation first.</p>
+                                @else
+                                    @if ($this->editable)
+                                        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 mb-4">
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label class="block text-xs text-slate-600 mb-1">Mill Gap Size Used</label>
+                                                    <input type="text" wire:model="millGapSizeUsed" class="w-full rounded-md border-gray-300 text-sm shadow-sm" placeholder="Enter mill gap size" />
+                                                </div>
+
+                                                <div>
+                                                    <label class="block text-xs text-slate-600 mb-1">P1 Speed Used</label>
+                                                    <input type="text" wire:model="p1SpeedUsed" class="w-full rounded-md border-gray-300 text-sm shadow-sm" placeholder="Enter P1 speed" />
+                                                </div>
+
+                                                <div class="md:col-span-2">
+                                                    <label class="block text-xs text-slate-600 mb-1">P2 Speed Used</label>
+                                                    <input type="text" wire:model="p2SpeedUsed" class="w-full rounded-md border-gray-300 text-sm shadow-sm" placeholder="Enter P2 speed" />
+                                                </div>
+
+                                                <div>
+                                                    <label class="block text-xs text-slate-600 mb-1">Powders Weighed</label>
+                                                    <select wire:model="powdersWeighedOperatorId" class="w-full rounded-md border-gray-300 text-sm shadow-sm">
+                                                        <option value="">Select operator</option>
+                                                        @foreach ($this->signoffOperators as $operator)
+                                                            <option value="{{ $operator->id }}">{{ $operator->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label class="block text-xs text-slate-600 mb-1">Liquids Weighed</label>
+                                                    <select wire:model="liquidsWeighedOperatorId" class="w-full rounded-md border-gray-300 text-sm shadow-sm">
+                                                        <option value="">Select operator</option>
+                                                        @foreach ($this->signoffOperators as $operator)
+                                                            <option value="{{ $operator->id }}">{{ $operator->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+
+                                                <div class="md:col-span-2">
+                                                    <label class="block text-xs text-slate-600 mb-1">Tipping Batch</label>
+                                                    <select wire:model="tippingBatchOperatorId" class="w-full rounded-md border-gray-300 text-sm shadow-sm">
+                                                        <option value="">Select operator</option>
+                                                        @foreach ($this->signoffOperators as $operator)
+                                                            <option value="{{ $operator->id }}">{{ $operator->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div class="mt-4 flex justify-end">
+                                                <x-primary-button type="button" wire:click="applyBulkIngredientSignoff">Apply Ingredients Sign Off</x-primary-button>
+                                            </div>
+                                        </div>
+                                    @endif
+
+                                    <div class="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">
+                                        @if ($this->ingredientSignoffComplete)
+                                            All {{ $this->ingredientSignoffReadyLotCount }} allocated ingredient lot(s) are weighed and tipped.
+                                        @else
+                                            Sign-off pending. Complete weighed and tipped for all {{ $this->ingredientSignoffReadyLotCount }} allocated ingredient lot(s).
+                                        @endif
+                                    </div>
+
+                                    <div class="mt-4 flex justify-end">
+                                        <button
+                                            @click="tab = 'packing'"
+                                            type="button"
+                                            @disabled(! $this->ingredientSignoffComplete)
+                                            class="inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold {{ $this->ingredientSignoffComplete ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-200 text-slate-500 cursor-not-allowed' }}"
+                                        >
+                                            Continue to Pallecon Packing →
+                                        </button>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+
                     <div x-show="tab === 'packing'" class="space-y-6 p-6">
+                        @if (! $this->ingredientSignoffComplete)
+                            <div class="rounded-md p-3 text-sm bg-amber-50 text-amber-800 border border-amber-200">
+                                Complete <strong>Ingredients Sign Off</strong> (both weighed and tipped for all allocated lots) before Pallecon completion.
+                            </div>
+                        @endif
+
                         @if ($print_message)
                             <div class="rounded-md p-3 text-sm {{ $print_failed ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200' }}">
                                 {{ $print_message }}
@@ -1939,7 +2497,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                             </div>
                         @endif
 
-                        @if ($batch->status === \App\Models\BatchRecord::STATUS_IN_PROGRESS)
+                        @if ($batch->status === \App\Models\BatchRecord::STATUS_IN_PROGRESS && $this->ingredientSignoffComplete)
                             <form wire:submit="addPallecon" class="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden">
                                 <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#eef2ff 0%,#f8fafc 100%);">
                                     <div class="text-xs font-semibold uppercase tracking-wide text-indigo-700">Pallecon Entry</div>
@@ -1980,6 +2538,10 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                     </div>
                                 </div>
                             </form>
+                        @elseif ($batch->status === \App\Models\BatchRecord::STATUS_IN_PROGRESS)
+                            <div class="rounded-md p-3 text-sm bg-slate-50 text-slate-700 border border-slate-200">
+                                Pallecon entry is locked until Ingredients Sign Off is complete.
+                            </div>
                         @endif
 
                         <div class="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 shadow-sm">
@@ -2021,13 +2583,48 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                             scannerEnabled: @js($featureAllocationScannerEnabled),
                             cameraAutostartEnabled: @js($featureAllocationCameraAutostartEnabled),
                             modalVisible: @entangle('showAllocateModal').live,
+                            isMobileViewport: false,
                             scanRaw: @entangle('activeBomGrScanRaw').live,
+                            scanReviewOpen: false,
+                            scanPreview: {
+                                productId: '',
+                                productDescription: '',
+                                supplierLotNumber: '',
+                                quantity: '',
+                                location: '',
+                                line: '',
+                                productionDate: '',
+                                expiryDate: '',
+                                notes: '',
+                                valid: false,
+                            },
                             cameraRunning: false,
                             scannerError: '',
                             stream: null,
                             detector: null,
                             scanTimer: null,
+                            applyMobileDefaultMode() {
+                                if (this.isMobileViewport && this.scannerEnabled) {
+                                    this.mode = 'gr_scan';
+                                }
+                            },
                             init() {
+                                this.isMobileViewport = window.matchMedia('(max-width: 767px)').matches;
+
+                                const viewportListener = (event) => {
+                                    this.isMobileViewport = event.matches;
+                                    if (event.matches && this.modalVisible) {
+                                        this.applyMobileDefaultMode();
+                                    }
+                                };
+
+                                const mediaQuery = window.matchMedia('(max-width: 767px)');
+                                if (typeof mediaQuery.addEventListener === 'function') {
+                                    mediaQuery.addEventListener('change', viewportListener);
+                                } else if (typeof mediaQuery.addListener === 'function') {
+                                    mediaQuery.addListener(viewportListener);
+                                }
+
                                 this.$watch('mode', async (value) => {
                                     if (value === 'gr_scan' && this.modalVisible && this.scannerEnabled && this.cameraAutostartEnabled) {
                                         await this.startCamera();
@@ -2043,10 +2640,14 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                         return;
                                     }
 
+                                    this.applyMobileDefaultMode();
+
                                     if (value && this.mode === 'gr_scan' && this.scannerEnabled && this.cameraAutostartEnabled) {
                                         await this.startCamera();
                                     }
                                 });
+
+                                this.applyMobileDefaultMode();
 
                                 if (this.modalVisible && this.mode === 'gr_scan' && this.scannerEnabled && this.cameraAutostartEnabled) {
                                     this.startCamera();
@@ -2106,8 +2707,8 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
                                     if (value !== '') {
                                         this.scanRaw = value;
-                                        await this.$wire.applyGrScanPayload();
                                         this.stopCamera();
+                                        this.reviewCurrentScan();
                                         return;
                                     }
                                 } catch (error) {
@@ -2133,6 +2734,65 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
                                 this.cameraRunning = false;
                             },
+                            parsePreview(raw) {
+                                const value = (raw ?? '').trim();
+                                const segments = value.split('^').map((entry) => entry.trim());
+                                const productId = segments[0] ?? '';
+                                const productDescription = segments[1] ?? '';
+                                const supplierLotNumber = segments[2] ?? '';
+                                const metadata = segments.slice(3).join(' ').trim();
+                                const fullText = [supplierLotNumber, metadata].filter(Boolean).join(' ');
+
+                                const read = (pattern) => {
+                                    const match = fullText.match(pattern);
+                                    return (match?.[1] ?? '').trim();
+                                };
+
+                                return {
+                                    productId,
+                                    productDescription,
+                                    supplierLotNumber,
+                                    quantity: read(/(?:^|\b)(?:qty|quantity)\s*[:=]\s*([^\s^,;]+)/i),
+                                    location: read(/(?:^|\b)(?:loc|location|bin|warehouse|wh)\s*[:=]\s*([^\^,;]+)/i),
+                                    line: read(/(?:^|\b)line\s*[:=]\s*([^\s^,;]+)/i),
+                                    productionDate: read(/(?:^|\b)(?:pd|prod(?:uction)?\s*date)\s*[:=]\s*([^\s^,;]+)/i),
+                                    expiryDate: read(/(?:^|\b)(?:ed|exp(?:iry)?\s*date|bb(?:e)?)\s*[:=]\s*([^\s^,;]+)/i),
+                                    notes: metadata,
+                                    valid: productId !== '' && productDescription !== '' && supplierLotNumber !== '',
+                                };
+                            },
+                            reviewCurrentScan() {
+                                this.scannerError = '';
+                                this.scanPreview = this.parsePreview(this.scanRaw);
+
+                                if (!this.scanPreview.valid) {
+                                    this.scannerError = 'Invalid scan format. Expected ProductID^ProductDescription^SupplierLotNumber^';
+                                    this.scanReviewOpen = false;
+                                    return;
+                                }
+
+                                this.scanReviewOpen = true;
+                            },
+                            async confirmScanReview() {
+                                if (!this.scanPreview.valid) {
+                                    return;
+                                }
+
+                                this.scanReviewOpen = false;
+                                await this.$wire.applyGrScanPayload();
+                            },
+                            retryScanReview() {
+                                this.scanReviewOpen = false;
+                                this.scanRaw = '';
+                                this.scannerError = '';
+
+                                if (this.scannerEnabled && this.cameraAutostartEnabled) {
+                                    this.startCamera();
+                                }
+                            },
+                            cancelScanReview() {
+                                this.scanReviewOpen = false;
+                            },
                         }"
                     >
                         <div class="fixed inset-0 bg-gray-500/70" wire:click="closeAllocateModal"></div>
@@ -2142,10 +2802,10 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                 <p class="mt-1 text-sm text-gray-600">{{ $activeBomMaterialCode }} - {{ $activeBomMaterialDescription }}</p>
                             </div>
 
-                            <div class="px-6 py-4 space-y-4">
+                            <div class="px-6 py-4 space-y-4" :class="{ 'pointer-events-none opacity-50': scanReviewOpen }">
                                 <div>
                                     <label class="block text-xs text-gray-600 mb-1">Allocation view</label>
-                                    <div class="inline-flex rounded-md border border-gray-300 overflow-hidden">
+                                    <div class="inline-flex rounded-md border border-gray-300 overflow-hidden" x-show="!isMobileViewport">
                                         <button
                                             type="button"
                                             wire:click="setAllocationMode('manual')"
@@ -2171,29 +2831,30 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                 </div>
 
                                 @if ($activeBomAllocationMode === 'gr_scan' && $featureAllocationScannerEnabled)
-                                    <div class="rounded-md border border-indigo-200 bg-indigo-50 p-3 space-y-2">
-                                        <div class="rounded-md border border-indigo-300 bg-black/90 overflow-hidden" x-show="cameraRunning" x-transition>
-                                            <video x-ref="grScanVideo" playsinline muted autoplay class="block w-full h-52 object-cover"></video>
+                                    <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-4 shadow-sm">
+                                        <div class="flex items-center justify-between gap-2">
+                                            <p class="text-xs font-semibold tracking-wide uppercase text-slate-700">QR Scanner</p>
+                                            <div class="flex items-center gap-2">
+                                                <x-secondary-button type="button" x-show="!cameraRunning" @click="startCamera">Open camera</x-secondary-button>
+                                                <x-secondary-button type="button" x-show="cameraRunning" @click="stopCamera">Stop camera</x-secondary-button>
+                                            </div>
                                         </div>
 
-                                        <div class="flex items-center justify-end gap-2">
-                                            <x-secondary-button type="button" x-show="!cameraRunning" @click="startCamera">Open camera</x-secondary-button>
-                                            <x-secondary-button type="button" x-show="cameraRunning" @click="stopCamera">Stop camera</x-secondary-button>
+                                        <div class="rounded-md border border-slate-300 bg-black/90 overflow-hidden" x-show="cameraRunning" x-transition>
+                                            <video x-ref="grScanVideo" playsinline muted autoplay class="block w-full h-52 object-cover"></video>
                                         </div>
 
                                         <div x-show="scannerError" class="text-xs text-rose-700" x-text="scannerError"></div>
 
-                                        <label class="block text-xs text-indigo-800 font-medium">GR scan value</label>
-                                        <input wire:model.defer="activeBomGrScanRaw" type="text" class="w-full border-indigo-300 rounded-md shadow-sm text-sm" placeholder="ProductID^ProductDescription^SupplierLotNumber^" />
-                                        <div class="flex items-center justify-between gap-2">
-                                            <p class="text-xs text-indigo-700">Scan format: ProductID^ProductDescription^SupplierLotNumber^</p>
-                                            <x-secondary-button type="button" wire:click="applyGrScanPayload">Apply scan</x-secondary-button>
-                                        </div>
+                                        <p class="text-xs text-slate-500">Point camera to the QR code. A confirmation popup will appear after a successful read.</p>
 
                                         @if ($featureAllocationScanDebugEnabled && $activeBomScanDebug)
-                                            <div class="text-xs text-indigo-900 bg-white/70 border border-indigo-200 rounded px-2 py-1">
-                                                {{ $activeBomScanDebug }}
-                                            </div>
+                                            <details class="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
+                                                <summary class="cursor-pointer text-xs text-slate-600">Technical scan details</summary>
+                                                <div class="mt-2 text-xs text-slate-700">
+                                                    {{ $activeBomScanDebug }}
+                                                </div>
+                                            </details>
                                         @endif
 
                                         @if ($activeBomWinManLookupMessage)
@@ -2202,12 +2863,81 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                             </div>
                                         @endif
 
-                                        <div>
-                                            <label class="block text-xs text-gray-700 mb-1">Scanned lot</label>
-                                            <input type="text" value="{{ (string) ($activeBomLotNumber ?? '') }}" readonly class="w-full border-gray-300 rounded-md shadow-sm text-sm bg-gray-100 text-gray-700" placeholder="No lot scanned yet" />
+                                        <div class="pt-1" x-show="isMobileViewport">
+                                            <button
+                                                type="button"
+                                                wire:click="setAllocationMode('manual')"
+                                                class="text-xs text-slate-600 underline decoration-slate-400 underline-offset-2"
+                                            >
+                                                Switch to Manual Lot Allocation
+                                            </button>
                                         </div>
                                     </div>
                                 @endif
+
+                                <div
+                                    x-show="scanReviewOpen"
+                                    x-cloak
+                                    class="fixed inset-0 z-[100] flex items-center justify-center px-4"
+                                >
+                                    <div class="absolute inset-0 bg-slate-900/45" @click="cancelScanReview"></div>
+                                    <div class="relative w-full max-w-lg rounded-xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+                                        <div class="px-5 py-4 border-b border-slate-200 bg-slate-50">
+                                            <h4 class="text-sm font-semibold text-slate-900">Confirm scanned QR</h4>
+                                            <p class="mt-1 text-xs text-slate-600">Please check the extracted details before confirming.</p>
+                                        </div>
+
+                                        <div class="px-5 py-4 space-y-3 text-sm">
+                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                <div>
+                                                    <p class="text-xs text-slate-500">Product ID</p>
+                                                    <p class="font-medium text-slate-900" x-text="scanPreview.productId || '—'"></p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-xs text-slate-500">Supplier Lot</p>
+                                                    <p class="font-medium text-slate-900" x-text="scanPreview.supplierLotNumber || '—'"></p>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <p class="text-xs text-slate-500">Description</p>
+                                                <p class="font-medium text-slate-900" x-text="scanPreview.productDescription || '—'"></p>
+                                            </div>
+
+                                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                                <div>
+                                                    <p class="text-xs text-slate-500">Qty</p>
+                                                    <p class="font-medium text-slate-900" x-text="scanPreview.quantity || '—'"></p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-xs text-slate-500">Location</p>
+                                                    <p class="font-medium text-slate-900" x-text="scanPreview.location || '—'"></p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-xs text-slate-500">Line</p>
+                                                    <p class="font-medium text-slate-900" x-text="scanPreview.line || '—'"></p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-xs text-slate-500">Expiry</p>
+                                                    <p class="font-medium text-slate-900" x-text="scanPreview.expiryDate || '—'"></p>
+                                                </div>
+                                            </div>
+
+                                            <template x-if="scanPreview.notes">
+                                                <div class="rounded-md bg-slate-50 border border-slate-200 px-3 py-2">
+                                                    <p class="text-[11px] text-slate-500 mb-1">Additional payload</p>
+                                                    <p class="text-xs text-slate-700 break-words" x-text="scanPreview.notes"></p>
+                                                </div>
+                                            </template>
+                                        </div>
+
+                                        <div class="px-5 py-4 border-t border-slate-200 flex items-center justify-end gap-2">
+                                            <x-secondary-button type="button" @click="cancelScanReview">Cancel</x-secondary-button>
+                                            <x-secondary-button type="button" @click="retryScanReview">Retry</x-secondary-button>
+                                            <x-primary-button type="button" @click="confirmScanReview">Confirm</x-primary-button>
+                                        </div>
+                                    </div>
+                                </div>
 
                                 @if ($activeBomAllocationMode === 'manual')
                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2228,6 +2958,16 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                             @error('activeBomActualQty') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                                         </div>
                                     </div>
+
+                                    <div x-show="isMobileViewport && scannerEnabled">
+                                        <button
+                                            type="button"
+                                            wire:click="setAllocationMode('gr_scan')"
+                                            class="text-xs text-slate-600 underline decoration-slate-400 underline-offset-2"
+                                        >
+                                            Back to Scanner
+                                        </button>
+                                    </div>
                                 @else
                                     <div>
                                         <label class="block text-xs text-gray-600 mb-1">Actual qty</label>
@@ -2241,7 +2981,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                 @endif
                             </div>
 
-                            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+                            <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2" :class="{ 'hidden': scanReviewOpen }">
                                 <x-secondary-button type="button" wire:click="closeAllocateModal">Cancel</x-secondary-button>
                                 <x-primary-button type="button" wire:click="allocateBomIngredient" :disabled="count($activeBomLotOptions) === 0">Allocate</x-primary-button>
                             </div>

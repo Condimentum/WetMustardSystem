@@ -7,12 +7,14 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "dompdf/dompdf": "2.0",
         "greew/oauth2-azure-provider": "^2.0",
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1",
         "livewire/livewire": "^3.6.4",
         "livewire/volt": "^1.7.0",
         "phpmailer/phpmailer": "^7.1",
+        "smalot/pdfparser": "^2.12",
         "spatie/laravel-permission": "^6.25"
     },
     "require-dev": {

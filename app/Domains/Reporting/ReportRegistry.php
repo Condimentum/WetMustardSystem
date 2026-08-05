@@ -5,6 +5,7 @@ namespace App\Domains\Reporting;
 use App\Domains\Reporting\Contracts\ReportGenerator;
 use App\Domains\Reporting\Reports\ActiveMasterDataReport;
 use App\Domains\Reporting\Reports\BatchRecordSummaryReport;
+use App\Domains\Reporting\Reports\DailyIntermediateProductionReport;
 use App\Domains\Reporting\Reports\DailyProductionSummaryReport;
 use App\Domains\Reporting\Reports\DrumProcessingSummaryReport;
 use App\Domains\Reporting\Reports\OpenBatchesReport;
@@ -24,6 +25,7 @@ class ReportRegistry
      */
     private array $map = [
         DailyProductionSummaryReport::KEY => DailyProductionSummaryReport::class,
+        DailyIntermediateProductionReport::KEY => DailyIntermediateProductionReport::class,
         OpenBatchesReport::KEY => OpenBatchesReport::class,
         OverdueMetalDetectorReport::KEY => OverdueMetalDetectorReport::class,
         PackingWeightExceptionsReport::KEY => PackingWeightExceptionsReport::class,
