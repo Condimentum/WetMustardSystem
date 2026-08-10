@@ -33,11 +33,9 @@ new class extends Component
             <div class="hidden items-center gap-2 lg:flex">
                 <a href="{{ route('dashboard') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('dashboard') ? $linkActive : $linkIdle }}">Dashboard</a>
                 <a href="{{ route('manufacturing-orders.search') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('manufacturing-orders.*') ? $linkActive : $linkIdle }}">Manufacturing Orders</a>
+                <a href="{{ route('metal-detector.daily') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('metal-detector.*') ? $linkActive : $linkIdle }}">Daily Metal Detection</a>
                 @can('admin')
-                    <a href="{{ route('reporting.admin') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('reporting.*') ? $linkActive : $linkIdle }}">Reporting</a>
-                    <a href="{{ route('notifications.admin') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('notifications.*') ? $linkActive : $linkIdle }}">Notifications</a>
-                    <a href="{{ route('audit.index') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('audit.*') ? $linkActive : $linkIdle }}">Audit</a>
-                    <a href="{{ route('settings.admin') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('settings.*') ? $linkActive : $linkIdle }}">Settings</a>
+                    <a href="{{ route('settings.admin') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('settings.*') || request()->routeIs('reporting.*') || request()->routeIs('notifications.*') || request()->routeIs('audit.*') ? $linkActive : $linkIdle }}">Settings</a>
                 @endcan
             </div>
         </div>
@@ -65,11 +63,9 @@ new class extends Component
         <div class="space-y-1 px-4 py-3">
             <a href="{{ route('dashboard') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('dashboard') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Dashboard</a>
             <a href="{{ route('manufacturing-orders.search') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('manufacturing-orders.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Manufacturing Orders</a>
+            <a href="{{ route('metal-detector.daily') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('metal-detector.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Daily Metal Detection</a>
             @can('admin')
-                <a href="{{ route('reporting.admin') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('reporting.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Reporting</a>
-                <a href="{{ route('notifications.admin') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Notifications</a>
-                <a href="{{ route('audit.index') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Audit</a>
-                <a href="{{ route('settings.admin') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Settings</a>
+                <a href="{{ route('settings.admin') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.*') || request()->routeIs('reporting.*') || request()->routeIs('notifications.*') || request()->routeIs('audit.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Settings</a>
             @endcan
         </div>
 

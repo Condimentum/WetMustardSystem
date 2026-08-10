@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\MicrosoftAuthCallbackController;
 use App\Http\Controllers\Auth\MicrosoftAuthRedirectController;
 use App\Http\Controllers\AuditTrailExportController;
 use App\Http\Controllers\BatchRecordExportController;
+use App\Http\Controllers\DailyMetalDetectorPaperworkController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
 use Illuminate\Support\Facades\Auth;
@@ -59,6 +60,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('metal-detector/daily', 'pages.metal-detector.daily')
         ->name('metal-detector.daily');
 
+    Route::get('metal-detector/daily/paperwork', DailyMetalDetectorPaperworkController::class)
+        ->name('metal-detector.daily.paperwork');
+
     Volt::route('manufacturing-orders', 'pages.manufacturing-orders.search')
         ->name('manufacturing-orders.search');
 
@@ -105,6 +109,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('settings/operator-sync', 'pages.settings.operator-sync')
         ->middleware('can:admin')
         ->name('settings.operator-sync');
+
+    Volt::route('settings/documents', 'pages.settings.documents')
+        ->middleware('can:admin')
+        ->name('settings.documents');
 
     Route::redirect('recipes', 'settings/recipes')
         ->middleware('can:admin')

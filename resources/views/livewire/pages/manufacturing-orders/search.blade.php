@@ -424,45 +424,6 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
 <div class="py-8">
     <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        <div class="flex items-center justify-between">
-            <h2 class="text-xl font-semibold text-gray-800">Manufacturing Orders</h2>
-            <div class="w-72">
-                <x-text-input
-                    wire:model.live.debounce.400ms="search"
-                    type="text"
-                    class="block w-full"
-                    placeholder="Search MO ref, product…" />
-            </div>
-        </div>
-
-        <div class="bg-white border border-gray-200 rounded-xl p-1 inline-flex items-center gap-1 shadow-sm">
-            <button
-                type="button"
-                wire:click="openStartWorkspace"
-                class="px-4 py-2 text-sm font-semibold rounded-lg transition"
-                @class([
-                    'bg-gray-800 text-white' => $workspaceTab === 'start',
-                    'text-gray-700 hover:bg-gray-100' => $workspaceTab !== 'start',
-                ])>
-                Start
-            </button>
-            <button
-                type="button"
-                @if ($selectedWinmanMo)
-                    wire:click="openSelectedBatchWorkspace"
-                @else
-                    disabled
-                @endif
-                @class([
-                    'px-4 py-2 text-sm font-semibold rounded-lg transition',
-                    'bg-indigo-600 text-white' => $selectedWinmanMo && $workspaceTab === 'batch',
-                    'text-gray-700 hover:bg-gray-100' => $selectedWinmanMo && $workspaceTab !== 'batch',
-                    'text-gray-400 bg-gray-50 cursor-not-allowed' => ! $selectedWinmanMo,
-                ])>
-                Batch
-            </button>
-        </div>
-
         @if ($workspaceTab === 'batch' && $selectedWinmanMo)
             @php
                 $selectedOrder = collect($orders)->firstWhere('winman_manufacturing_order', $selectedWinmanMo);
@@ -595,10 +556,86 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                 </div>
             </div>
         @endif
-        <div class="bg-white shadow-sm rounded-lg overflow-hidden">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr class="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+        <div style="background:#fff;border:1px solid #dbe1ea;border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(15,23,42,0.08);">
+            @php
+                $preferredClassifications = [
+                    30 => 'Intermediate',
+                    29 => 'Wet Packed',
+                ];
+                $uomLabels = [
+                    2 => 'Pallecon',
+                    44 => 'Buckets',
+                ];
+
+                $allOrders = collect($orders);
+                $hasAnyOrder = $allOrders->isNotEmpty();
+                $intermediateCount = $allOrders->where('classification', 30)->count();
+                $wetPackedCount = $allOrders->where('classification', 29)->count();
+                $otherCount = max($allOrders->count() - $intermediateCount - $wetPackedCount, 0);
+
+                $renderOrderRow = function (array $order): string {
+                    $winmanMo = (int) $order['winman_manufacturing_order'];
+                    $systemTypeRaw = strtoupper(trim((string) ($order['system_type'] ?? '')));
+                    $systemTypeStyles = match ($systemTypeRaw) {
+                        'F' => ['bg' => '#eff6ff', 'border' => '#bfdbfe', 'color' => '#1d4ed8', 'label' => 'Firm'],
+                        'R' => ['bg' => '#fffbeb', 'border' => '#fcd34d', 'color' => '#b45309', 'label' => 'Released'],
+                        'I' => ['bg' => '#ecfdf5', 'border' => '#86efac', 'color' => '#15803d', 'label' => 'Issued'],
+                        default => ['bg' => '#f1f5f9', 'border' => '#cbd5e1', 'color' => '#334155', 'label' => $systemTypeRaw !== '' ? $systemTypeRaw : 'Unknown'],
+                    };
+
+                    $actionButton = '<a href="'.e(route('manufacturing-orders.workspace', ['winmanMo' => $winmanMo])).'" wire:navigate style="display:inline-flex;align-items:center;padding:9px 14px;border-radius:10px;background:linear-gradient(180deg,#4f46e5 0%,#4338ca 100%);border:1px solid #4338ca;color:#fff;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;box-shadow:0 3px 10px rgba(67,56,202,.22);">Start</a>';
+
+                    $productDescription = e(\Illuminate\Support\Str::limit((string) $order['product_description'], 52));
+                    $dbmtsName = e($order['dbmts_product_name'] ?? '—');
+                    $moRef = e((string) $order['winman_manufacturing_order_id']);
+                    $productId = e((string) $order['winman_product_id']);
+                    $formattedOutstanding = number_format((float) $order['quantity_outstanding'], 3, '.', '');
+                    $outstanding = e(rtrim(rtrim($formattedOutstanding, '0'), '.'));
+                    $due = e($order['due_date'] ? (string) \Illuminate\Support\Str::of($order['due_date'])->before(' ') : '—');
+
+                    return '<tr style="color:#334155;background:#fff;">'
+                        .'<td class="px-4 py-4 font-semibold" style="color:#1e293b;">'.$moRef.'</td>'
+                        .'<td class="px-4 py-4">'
+                            .'<span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid '.$systemTypeStyles['border'].';background:'.$systemTypeStyles['bg'].';color:'.$systemTypeStyles['color'].';font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">'.$systemTypeStyles['label'].'</span>'
+                        .'</td>'
+                        .'<td class="px-4 py-4" style="line-height:1.35;">'
+                            .'<div style="color:#1e293b;font-weight:700;">'.$productDescription.'</div>'
+                            .'<div style="color:#64748b;font-size:12px;margin-top:2px;">'.$productId.'</div>'
+                        .'</td>'
+                        .'<td class="px-4 py-4" style="color:#334155;">'.$dbmtsName.'</td>'
+                        .'<td class="px-4 py-4 text-right" style="color:#0f766e;font-weight:800;">'.$outstanding.'</td>'
+                        .'<td class="px-4 py-4" style="font-weight:700;color:#1e293b;">'.$due.'</td>'
+                        .'<td class="px-4 py-4 text-right">'.$actionButton.'</td>'
+                        .'</tr>';
+                };
+            @endphp
+
+            <div style="padding:24px 26px;background:linear-gradient(135deg,#f8fafc 0%,#e0ecff 100%);border-bottom:1px solid #dbe1ea;">
+                <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+                    <div style="width:56px;height:56px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #86efac;overflow:hidden;flex-shrink:0;">
+                        <img src="{{ asset('mustard.png') }}" alt="Mustard" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+                    </div>
+
+                    <div>
+                        <div style="font-size:1.3rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">MANUFACTURING ORDER LIST</div>
+                        <div style="font-size:0.75rem;font-weight:700;color:#64748b;letter-spacing:.14em;margin-top:4px;">GROUPED OUTSTANDING ORDERS</div>
+                    </div>
+
+                    <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:12px;font-weight:800;">
+                        {{ count($orders) }} shown
+                    </span>
+                </div>
+
+                <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+                    <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">Intermediate: {{ $intermediateCount }}</span>
+                    <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#ecfeff;border:1px solid #a5f3fc;color:#0e7490;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">Wet Packed: {{ $wetPackedCount }}</span>
+                    <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">Other: {{ $otherCount }}</span>
+                </div>
+            </div>
+
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead>
+                    <tr style="background:#2d3f8f;color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
                         <th class="px-4 py-3">MO Ref</th>
                         <th class="px-4 py-3">Type</th>
                         <th class="px-4 py-3">Product</th>
@@ -608,45 +645,7 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                         <th class="px-4 py-3"></th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100">
-                    @php
-                        $preferredClassifications = [
-                            30 => 'Intermediate',
-                            29 => 'Wet Packed',
-                        ];
-                        $uomLabels = [
-                            2 => 'Pallecon',
-                            44 => 'Buckets',
-                        ];
-
-                        $renderOrderRow = function (array $order): string {
-                            $winmanMo = (int) $order['winman_manufacturing_order'];
-                            $actionButton = '<a href="'.e(route('manufacturing-orders.workspace', ['winmanMo' => $winmanMo])).'" wire:navigate class="inline-flex items-center px-4 py-2 bg-gray-800 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">Start</a>';
-
-                            $productDescription = e(\Illuminate\Support\Str::limit((string) $order['product_description'], 40));
-                            $dbmtsName = e($order['dbmts_product_name'] ?? '—');
-                            $moRef = e((string) $order['winman_manufacturing_order_id']);
-                            $systemType = e((string) $order['system_type']);
-                            $productId = e((string) $order['winman_product_id']);
-                            $formattedOutstanding = number_format((float) $order['quantity_outstanding'], 3, '.', '');
-                            $outstanding = e(rtrim(rtrim($formattedOutstanding, '0'), '.'));
-                            $due = e($order['due_date'] ? (string) \Illuminate\Support\Str::of($order['due_date'])->before(' ') : '—');
-
-                            return '<tr class="text-sm text-gray-700 hover:bg-gray-50">'
-                                .'<td class="px-4 py-3 font-medium">'.$moRef.'</td>'
-                                .'<td class="px-4 py-3">'.$systemType.'</td>'
-                                .'<td class="px-4 py-3"><span class="text-gray-500">'.$productId.'</span> '.$productDescription.'</td>'
-                                .'<td class="px-4 py-3">'.$dbmtsName.'</td>'
-                                .'<td class="px-4 py-3 text-right">'.$outstanding.'</td>'
-                                .'<td class="px-4 py-3">'.$due.'</td>'
-                                .'<td class="px-4 py-3 text-right">'.$actionButton.'</td>'
-                                .'</tr>';
-                        };
-
-                        $allOrders = collect($orders);
-                        $hasAnyOrder = $allOrders->isNotEmpty();
-                    @endphp
-
+                <tbody class="divide-y divide-slate-100">
                     @if (! $hasAnyOrder)
                         <tr>
                             <td colspan="7" class="px-4 py-10 text-center text-sm text-gray-500">
@@ -665,8 +664,8 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                             @endphp
 
                             @if ($classificationOrders->isNotEmpty())
-                                <tr class="bg-indigo-50/60">
-                                    <td colspan="7" class="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-indigo-800">
+                                <tr>
+                                    <td colspan="7" style="padding:9px 16px;background:linear-gradient(90deg,#eef2ff 0%,#e0e7ff 100%);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#3730a3;">
                                         Classification {{ $classification }} - {{ $classificationLabel }}
                                     </td>
                                 </tr>
@@ -680,8 +679,8 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                                                 ? ($uomLabels[$uomInt] ?? ('Other ('.number_format($uomInt).')'))
                                                 : ($uomLabels[$uomInt] ?? number_format($uomInt)));
                                     @endphp
-                                    <tr class="bg-gray-50">
-                                        <td colspan="7" class="px-4 py-2 text-xs font-medium uppercase tracking-wide text-gray-600">
+                                    <tr>
+                                        <td colspan="7" style="padding:8px 16px;background:#f8fafc;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#475569;">
                                             UnitOfMeasure: {{ $uomLabel }}
                                         </td>
                                     </tr>
@@ -700,8 +699,8 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                         @endphp
 
                         @if ($otherOrders->isNotEmpty())
-                            <tr class="bg-amber-50/60">
-                                <td colspan="7" class="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-amber-800">
+                            <tr>
+                                <td colspan="7" style="padding:9px 16px;background:linear-gradient(90deg,#fffbeb 0%,#fef3c7 100%);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#92400e;">
                                     Other classifications
                                 </td>
                             </tr>

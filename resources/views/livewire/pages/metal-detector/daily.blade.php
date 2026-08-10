@@ -2,12 +2,16 @@
 
 use App\Features\MetalDetector\RecordMetalDetectorCheckFeature;
 use App\Models\MetalDetectorCheck;
+use App\Models\User;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Component {
+    public ?int $operator_id = null;
+    public string $check_time_hm = '';
+
     public string $check_type = MetalDetectorCheck::TYPE_HOURLY;
     public bool $fe10_pass = true;
     public bool $non_fe15_pass = true;
@@ -17,6 +21,35 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
     public bool $is_recheck = false;
     public string $failure_action = '';
     public string $comments = '';
+
+    public ?string $flash = null;
+
+    public function mount(): void
+    {
+        $this->operator_id = auth()->id();
+        $this->check_time_hm = now()->format('H:i');
+    }
+
+    #[Computed]
+    public function operators()
+    {
+        return User::query()
+            ->orderBy('name')
+            ->get(['id', 'name']);
+    }
+
+    #[Computed]
+    public function checkTimeOptions(): array
+    {
+        $options = [];
+        for ($hour = 0; $hour < 24; $hour++) {
+            for ($minute = 0; $minute < 60; $minute++) {
+                $options[] = sprintf('%02d:%02d', $hour, $minute);
+            }
+        }
+
+        return $options;
+    }
 
     #[Computed]
     public function todayChecks()
@@ -28,9 +61,23 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
             ->get();
     }
 
+    #[Computed]
+    public function rejectConfirmationLocked(): bool
+    {
+        return MetalDetectorCheck::query()
+            ->whereNull('batch_record_id')
+            ->whereDate('check_time', today())
+            ->where('overall_result', MetalDetectorCheck::RESULT_PASS)
+            ->exists();
+    }
+
     public function record(): void
     {
+        $this->flash = null;
+
         $validated = $this->validate([
+            'operator_id' => ['required', 'integer', 'exists:users,id'],
+            'check_time_hm' => ['required', 'date_format:H:i'],
             'check_type' => ['required', 'in:start_of_shift,hourly,end_of_shift'],
             'fe10_pass' => ['boolean'],
             'non_fe15_pass' => ['boolean'],
@@ -49,11 +96,43 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
             return;
         }
 
-        app(RecordMetalDetectorCheckFeature::class)(null, $validated, auth()->user());
+        if ($this->rejectConfirmationLocked) {
+            // Freeze reject confirmation once a successful daily check exists.
+            $validated['bin_locked'] = true;
+            $validated['bin_empty'] = true;
+            $this->bin_locked = true;
+            $this->bin_empty = true;
+        }
+
+        $validated['check_time'] = now()->format('Y-m-d').' '.$validated['check_time_hm'].':00';
+
+        if ($this->check_type === MetalDetectorCheck::TYPE_START) {
+            $alreadyRecorded = MetalDetectorCheck::query()
+                ->whereNull('batch_record_id')
+                ->where('check_type', MetalDetectorCheck::TYPE_START)
+                ->whereDate('check_time', today())
+                ->exists();
+
+            if ($alreadyRecorded) {
+                $this->addError('check_type', 'Start-of-shift check has already been recorded for today.');
+
+                return;
+            }
+        }
+
+        $operator = User::query()->find((int) $validated['operator_id']);
+        if (! $operator) {
+            $this->addError('operator_id', 'Selected operator is no longer available.');
+
+            return;
+        }
+
+        app(RecordMetalDetectorCheckFeature::class)(null, $validated, $operator);
 
         $this->reset(['failure_action', 'comments', 'is_recheck']);
         $this->fe10_pass = $this->non_fe15_pass = $this->ss20_pass = true;
-        unset($this->todayChecks);
+        $this->flash = 'Check recorded.';
+        unset($this->todayChecks, $this->rejectConfirmationLocked);
     }
 }; ?>
 
@@ -65,11 +144,28 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
                 <h2 class="text-xl font-semibold text-gray-800">Daily Metal Detector Verification</h2>
                 <p class="text-sm text-gray-500">Standalone daily CCP register for start-of-shift, hourly, and end-of-shift checks.</p>
             </div>
-            <a href="{{ route('dashboard') }}" wire:navigate class="text-sm text-indigo-600 hover:underline">← Dashboard</a>
+            <div class="flex items-center gap-4">
+                <a href="{{ route('metal-detector.daily.paperwork', ['date' => today()->toDateString()]) }}" class="text-sm text-indigo-600 hover:underline">Generate daily paperwork</a>
+                <a href="{{ route('dashboard') }}" wire:navigate class="text-sm text-indigo-600 hover:underline">← Dashboard</a>
+            </div>
         </div>
 
+        @if ($flash)
+            <div class="bg-green-50 border border-green-200 text-green-800 text-sm rounded-lg px-4 py-3">{{ $flash }}</div>
+        @endif
+
         <form wire:submit="record" class="bg-white shadow-sm rounded-lg p-6 space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div>
+                    <label class="block text-xs text-gray-600 mb-1">Operator</label>
+                    <select wire:model="operator_id" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                        <option value="">- select operator -</option>
+                        @foreach ($this->operators as $operator)
+                            <option value="{{ $operator->id }}">{{ $operator->name }}</option>
+                        @endforeach
+                    </select>
+                    @error('operator_id') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                </div>
                 <div>
                     <label class="block text-xs text-gray-600 mb-1">Check type</label>
                     <select wire:model="check_type" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
@@ -77,6 +173,16 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
                         <option value="hourly">Hourly</option>
                         <option value="end_of_shift">End of shift</option>
                     </select>
+                    @error('check_type') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-600 mb-1">Time checked</label>
+                    <select wire:model="check_time_hm" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                        @foreach ($this->checkTimeOptions as $timeOption)
+                            <option value="{{ $timeOption }}">{{ $timeOption }}</option>
+                        @endforeach
+                    </select>
+                    @error('check_time_hm') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </div>
                 @foreach ([['fe10_pass', 'Fe 1.0mm'], ['non_fe15_pass', 'Non-Fe 1.5mm'], ['ss20_pass', 'SS 2.0mm']] as [$field, $label])
                     <div>
@@ -89,10 +195,46 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
                 @endforeach
             </div>
 
-            <div class="flex flex-wrap gap-6 text-sm text-gray-700">
-                <label class="inline-flex items-center gap-2"><input type="checkbox" wire:model="bin_locked" class="rounded border-gray-300"> Reject bin locked</label>
-                <label class="inline-flex items-center gap-2"><input type="checkbox" wire:model="bin_empty" class="rounded border-gray-300"> Reject bin empty</label>
-                <label class="inline-flex items-center gap-2"><input type="checkbox" wire:model="is_recheck" class="rounded border-gray-300"> This is a recheck</label>
+            <div class="space-y-3">
+                <div class="text-xs font-semibold uppercase tracking-wide text-gray-600">Reject Confirmation Working</div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Reject bin locked</label>
+                        <select
+                            wire:model="bin_locked"
+                            @disabled($this->rejectConfirmationLocked)
+                            @class([
+                                'w-full border-gray-300 rounded-md shadow-sm text-sm',
+                                'bg-gray-100 text-gray-500 cursor-not-allowed' => $this->rejectConfirmationLocked,
+                            ])>
+                            <option value="1">Pass</option>
+                            <option value="0">Fail</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs text-gray-600 mb-1">Reject bin empty</label>
+                        <select
+                            wire:model="bin_empty"
+                            @disabled($this->rejectConfirmationLocked)
+                            @class([
+                                'w-full border-gray-300 rounded-md shadow-sm text-sm',
+                                'bg-gray-100 text-gray-500 cursor-not-allowed' => $this->rejectConfirmationLocked,
+                            ])>
+                            <option value="1">Pass</option>
+                            <option value="0">Fail</option>
+                        </select>
+                    </div>
+
+                    <div class="flex items-end pb-2">
+                        <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model="is_recheck" class="rounded border-gray-300"> This is a recheck</label>
+                    </div>
+                </div>
+
+                @if ($this->rejectConfirmationLocked)
+                    <div class="text-xs text-gray-500">Reject confirmation controls are locked after the first successful daily check.</div>
+                @endif
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

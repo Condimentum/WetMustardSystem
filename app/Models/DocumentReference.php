@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * DBMTS Document Reference Master (scope entity: DocumentReference).
@@ -25,5 +26,10 @@ class DocumentReference extends Model
         return [
             'issue_date' => 'date',
         ];
+    }
+
+    public function changes(): HasMany
+    {
+        return $this->hasMany(DocumentReferenceChange::class);
     }
 }

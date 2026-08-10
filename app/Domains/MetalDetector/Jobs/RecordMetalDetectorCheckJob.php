@@ -5,6 +5,7 @@ namespace App\Domains\MetalDetector\Jobs;
 use App\Models\BatchRecord;
 use App\Models\MetalDetectorCheck;
 use App\Models\User;
+use Carbon\Carbon;
 
 /**
  * Records a metal detector verification check. Batch context is optional; the
@@ -30,7 +31,9 @@ class RecordMetalDetectorCheckJob
             'manufacturing_order_id' => $batch?->manufacturing_order_id,
             'product_id' => $batch?->product_id,
             'check_type' => $attributes['check_type'],
-            'check_time' => now(),
+            'check_time' => isset($attributes['check_time'])
+                ? Carbon::parse((string) $attributes['check_time'])
+                : now(),
             'fe10_pass' => $fe,
             'non_fe15_pass' => $nonFe,
             'ss20_pass' => $ss,
