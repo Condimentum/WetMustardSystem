@@ -2,17 +2,17 @@
 
 namespace Database\Seeders;
 
-use App\Domains\Reporting\Reports\ActiveMasterDataReport;
-use App\Domains\Reporting\Reports\BatchRecordSummaryReport;
 use App\Domains\Reporting\Reports\DailyIntermediateProductionReport;
-use App\Domains\Reporting\Reports\DailyProductionSummaryReport;
-use App\Domains\Reporting\Reports\DrumProcessingSummaryReport;
-use App\Domains\Reporting\Reports\OpenBatchesReport;
-use App\Domains\Reporting\Reports\OverdueMetalDetectorReport;
-use App\Domains\Reporting\Reports\PackingWeightExceptionsReport;
-use App\Domains\Reporting\Reports\QaApprovalQueueReport;
-use App\Domains\Reporting\Reports\TraceabilityExceptionsReport;
+use App\Domains\Reporting\Reports\MetalDetectorVerificationSheetReport;
+use App\Domains\Reporting\Reports\Wm003IbcTraceabilityReport;
+use App\Domains\Reporting\Reports\Wm005WetMustardLabTestingReport;
+use App\Domains\Reporting\Reports\Wm010RinseWaterTestReport;
+use App\Domains\Reporting\Reports\Wm001LabScalesCalibrationReport;
+use App\Domains\Reporting\Reports\Wm002SaltMeterCalibrationReport;
+use App\Domains\Reporting\Reports\Wm006ViscosityAutozeroReport;
+use App\Domains\Reporting\Reports\Wm013ProductionScalesCalibrationReport;
 use App\Models\ReportConfig;
+use App\Models\ReportRecipient;
 use Illuminate\Database\Seeder;
 
 /**
@@ -21,31 +21,51 @@ use Illuminate\Database\Seeder;
 class ReportConfigSeeder extends Seeder
 {
     /**
-     * [report_key => report_name].
+     * Legacy generic reports to remove from Reporting Admin list.
+     *
+     * @var array<int, string>
      */
-    private const REPORTS = [
-        DailyProductionSummaryReport::KEY => 'Daily Production Summary',
-        DailyIntermediateProductionReport::KEY => 'Daily Intermediate Production',
-        OpenBatchesReport::KEY => 'Open / Incomplete Batch Records',
-        OverdueMetalDetectorReport::KEY => 'Overdue Metal Detector Checks',
-        PackingWeightExceptionsReport::KEY => 'Packing Weight Exceptions',
-        DrumProcessingSummaryReport::KEY => 'Drum Processing Daily Summary',
-        QaApprovalQueueReport::KEY => 'Records Awaiting QA Approval',
-        TraceabilityExceptionsReport::KEY => 'Traceability Exceptions',
+    private const REMOVE_KEYS = [
+        'dbmts_daily_production_summary',
+        'dbmts_open_batches',
+        'dbmts_overdue_metal_detect',
+        'dbmts_weight_exceptions',
+        'dbmts_drum_summary',
+        'dbmts_qa_approval_queue',
+        'dbmts_traceability_exceptions',
+        'dbmts_active_master_data',
+        'dbmts_batch_summary',
     ];
 
     /**
-     * On-demand reports (scope §14.2) - registered but not auto-scheduled.
+     * WM calibration paperwork reports only.
      * [report_key => report_name].
      */
-    private const ON_DEMAND = [
-        ActiveMasterDataReport::KEY => 'Active Products, Recipes and Variants',
-        BatchRecordSummaryReport::KEY => 'Batch Record Summary by Date Range',
+    private const REPORTS = [
+        MetalDetectorVerificationSheetReport::KEY => 'Metal Detector Verification Sheet (PDF)',
+        Wm003IbcTraceabilityReport::KEY => 'WM003 Vinegar IBC Traceability (PDF)',
+        Wm005WetMustardLabTestingReport::KEY => 'WM005 Wet Mustard Lab Testing (PDF)',
+        Wm010RinseWaterTestReport::KEY => 'WM010 Rinse Water Test Sheet (PDF)',
+        Wm001LabScalesCalibrationReport::KEY => 'WM001 Lab Scales Daily Calibration (PDF)',
+        Wm002SaltMeterCalibrationReport::KEY => 'WM002 Daily Salt Meter Calibration (PDF)',
+        Wm006ViscosityAutozeroReport::KEY => 'WM006 Viscosity Meter Autozero Check (PDF)',
+        Wm013ProductionScalesCalibrationReport::KEY => 'WM013 Production Scales Daily Calibration (PDF)',
+    ];
+
+    /**
+     * Scheduled reports the user still wants visible.
+     * [report_key => report_name].
+     */
+    private const SCHEDULED_REPORTS = [
+        DailyIntermediateProductionReport::KEY => 'Daily Intermediate Production',
     ];
 
     public function run(): void
     {
-        foreach (self::REPORTS as $key => $name) {
+        ReportRecipient::query()->whereIn('report_key', self::REMOVE_KEYS)->delete();
+        ReportConfig::query()->whereIn('report_key', self::REMOVE_KEYS)->delete();
+
+        foreach (self::SCHEDULED_REPORTS as $key => $name) {
             ReportConfig::updateOrCreate(
                 ['report_key' => $key],
                 [
@@ -59,7 +79,7 @@ class ReportConfigSeeder extends Seeder
             );
         }
 
-        foreach (self::ON_DEMAND as $key => $name) {
+        foreach (self::REPORTS as $key => $name) {
             ReportConfig::updateOrCreate(
                 ['report_key' => $key],
                 [
@@ -67,7 +87,7 @@ class ReportConfigSeeder extends Seeder
                     'report_type' => 'on_demand',
                     'date_offset_from_days' => -30,
                     'date_offset_to_days' => 0,
-                    'enabled' => false,
+                    'enabled' => true,
                 ],
             );
         }

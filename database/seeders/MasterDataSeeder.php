@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\DocumentReference;
+use App\Models\DocumentReferenceChange;
 use App\Models\Product;
 use App\Models\Recipe;
 use App\Models\RecipeVariant;
@@ -21,6 +22,14 @@ class MasterDataSeeder extends Seeder
      * Controlled source documents (scope §3). [code => [title, module]].
      */
     private const DOCUMENTS = [
+        'WM001' => ['Lab Scales Daily Calibration', 'Calibration'],
+        'WM002' => ['Daily Salt Meter Calibration', 'Calibration'],
+        'WM003' => ['Vinegar IBC Traceability', 'Traceability'],
+        'WM005' => ['Wet Mustard Lab Testing', 'Lab Testing'],
+        'WM006' => ['Viscosity Meter Autozero Check Complete', 'Calibration'],
+        'WM010' => ['Rinse Water Test Sheet - Chemical & Sulphite', 'Cleaning Verification'],
+        'WM012' => ['Wet Mustard Bucket Processing - 5kg', 'Bucket Packing'],
+        'WM013' => ['Production Scales Daily Calibration', 'Calibration'],
         'WM004' => ['Wet Mustard Pallecon Filling / Processing', 'Pallecon Filling'],
         'WM011' => ['Metal Detector Verification Sheet', 'Metal Detector'],
         'WM014' => ['Primary Packaging Records - Drums', 'Packaging Traceability'],
@@ -44,6 +53,21 @@ class MasterDataSeeder extends Seeder
         'WM047' => ['Primary Packaging Records - Buckets & Lids (NVE)', 'Packaging Traceability'],
         'WM048' => ['30010026 Table Mustard CPM001M Batchcard 800kg', 'Batchcard'],
         'WM049' => ['30010026 Table Mustard CPM001M Batchcard 400kg', 'Batchcard'],
+    ];
+
+    /**
+     * Real revision metadata transcribed from the physical WM document masters.
+     * [code => [version, issue_date Y-m-d, reason_for_issue, issued_by]].
+     */
+    private const DOCUMENT_REVISIONS = [
+        'WM001' => ['1', '2023-01-31', '1st Issue', 'T Boyce'],
+        'WM002' => ['2', '2024-01-31', 'Amended Title', 'T Boyce'],
+        'WM003' => ['1', '2023-01-31', '1st Issue', 'T Boyce'],
+        'WM005' => ['4', '2026-07-13', 'Added acidity as citric column', 'T Boyce'],
+        'WM006' => ['1', '2023-03-21', '1st Issue', 'T Boyce'],
+        'WM010' => ['3', '2025-07-11', 'Added mg/ltr for sulphite testing and chemical titration check box', 'T Boyce'],
+        'WM012' => ['1', '2023-12-19', 'First issue', 'T Boyce'],
+        'WM013' => ['2', '2024-03-27', 'Updated the tolerance for the Pallecon scale', 'T Boyce'],
     ];
 
     /**
@@ -77,9 +101,23 @@ class MasterDataSeeder extends Seeder
     public function run(): void
     {
         foreach (self::DOCUMENTS as $code => [$title, $module]) {
-            DocumentReference::updateOrCreate(
-                ['code' => $code],
-                ['title' => $title, 'module' => $module, 'status' => 'Active'],
+            $attributes = ['title' => $title, 'module' => $module, 'status' => 'Active'];
+
+            [$version, $issueDate, $reason, $issuedBy] = self::DOCUMENT_REVISIONS[$code] ?? [null, null, null, null];
+            if ($version !== null) {
+                $attributes['version'] = $version;
+                $attributes['issue_date'] = $issueDate;
+            }
+
+            $document = DocumentReference::updateOrCreate(['code' => $code], $attributes);
+
+            if ($version === null) {
+                continue;
+            }
+
+            DocumentReferenceChange::updateOrCreate(
+                ['document_reference_id' => $document->id, 'issue_version' => $version],
+                ['date_issued' => $issueDate, 'issued_by' => $issuedBy, 'reason_for_change' => $reason],
             );
         }
 

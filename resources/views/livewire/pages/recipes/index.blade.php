@@ -11,10 +11,6 @@ use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
 
 new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
-    public string $searchProductId = '3001%';
-
-    public int $limit = 500;
-
     /** @var array<int, array<string, mixed>> */
     public array $rows = [];
 
@@ -68,17 +64,7 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
 
     public function refreshRecipes(): void
     {
-        $this->validateInput();
         $this->loadRecipes();
-    }
-
-    private function validateInput(): void
-    {
-        if ($this->limit < 1 || $this->limit > 5000) {
-            throw ValidationException::withMessages([
-                'limit' => 'Limit must be between 1 and 5000.',
-            ]);
-        }
     }
 
     private function loadRecipes(): void
@@ -86,7 +72,8 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
         $this->error = null;
         $this->info = null;
 
-        $pattern = trim($this->searchProductId) !== '' ? trim($this->searchProductId) : '3001%';
+        $pattern = '3001%';
+        $limit = 500;
 
         if (! str_contains($pattern, '%') && ! str_contains($pattern, '_')) {
             $pattern .= '%';
@@ -115,7 +102,7 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
 
             $rows = app(WinManConnection::class)
                 ->connection()
-                ->select($sql, [$this->limit, 30, 'C', $pattern]);
+                ->select($sql, [$limit, 30, 'C', $pattern]);
 
             $this->rows = array_map(static function (object $row): array {
                 return [
@@ -517,74 +504,67 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
             <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{{ $info }}</div>
         @endif
 
-        <div class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div class="grid gap-3 md:grid-cols-4">
-                <div class="md:col-span-2">
-                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Structure ProductId Filter</label>
-                    <input type="text" wire:model.defer="searchProductId" class="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500" placeholder="3001%" />
-                </div>
-                <div>
-                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Max Rows</label>
-                    <input type="number" min="1" max="5000" wire:model.defer="limit" class="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500" />
-                    @error('limit')
-                        <div class="mt-1 text-xs text-red-600">{{ $message }}</div>
-                    @enderror
-                </div>
-                <div class="flex items-end justify-end">
-                    <x-primary-button type="button" wire:click="refreshRecipes">Refresh</x-primary-button>
-                </div>
+        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div class="flex items-center justify-between bg-slate-900 px-6 py-4">
+                <h3 class="text-lg font-semibold text-white">Recipe Structure Search</h3>
+                <svg class="h-6 w-6 text-white/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.3-4.3" />
+                    <circle cx="11" cy="11" r="6.5" />
+                </svg>
+            </div>
+
+            <div class="flex items-center justify-end p-5">
+                <x-primary-button type="button" wire:click="refreshRecipes" class="!rounded-lg !px-5 !py-2.5">Refresh WinMan Data</x-primary-button>
             </div>
         </div>
 
-        <div class="grid gap-4 md:grid-cols-2">
-            <div class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3">
-                <div class="text-xs font-semibold uppercase tracking-wide text-sky-700">Structure Products</div>
-                <div class="mt-1 text-2xl font-semibold text-sky-900">{{ $summary['structure_products'] }}</div>
+        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div class="flex items-center justify-between bg-slate-900 px-6 py-4">
+                <h3 class="text-lg font-semibold text-white">Recipe List</h3>
+                <svg class="h-6 w-6 text-white/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <rect x="3.5" y="5" width="17" height="15" rx="2" />
+                    <path stroke-linecap="round" d="M3.5 9.5h17" />
+                </svg>
             </div>
-            <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                <div class="text-xs font-semibold uppercase tracking-wide text-amber-700">Component Rows</div>
-                <div class="mt-1 text-2xl font-semibold text-amber-900">{{ $summary['components'] }}</div>
-            </div>
-        </div>
-
-        <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
                     <tr>
                         <th class="px-3 py-3">Structure ID</th>
                         <th class="px-3 py-3">Recipe ID</th>
                         <th class="px-3 py-3">Recipe Description</th>
                     </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 bg-white text-slate-700">
-                    @forelse ($recipeRows as $row)
-                        <tr>
-                            <td class="px-3 py-2">{{ $row['structure_product'] }}</td>
-                            <td class="px-3 py-2 font-medium text-slate-900">
-                                <button type="button" wire:click="openRecipeModal('{{ $row['structure_product_id'] }}')" class="text-sky-700 hover:text-sky-900 hover:underline">
-                                    {{ $row['structure_product_id'] }}
-                                </button>
-                            </td>
-                            <td class="px-3 py-2">{{ $row['structure_product_description'] }}</td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="3" class="px-4 py-6 text-center text-slate-500">No structures found for the current filter.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 bg-white text-slate-700">
+                        @forelse ($recipeRows as $row)
+                            <tr>
+                                <td class="px-3 py-2">{{ $row['structure_product'] }}</td>
+                                <td class="px-3 py-2 font-medium text-slate-900">
+                                    <button type="button" wire:click="openRecipeModal('{{ $row['structure_product_id'] }}')" class="text-sky-700 hover:text-sky-900 hover:underline">
+                                        {{ $row['structure_product_id'] }}
+                                    </button>
+                                </td>
+                                <td class="px-3 py-2">{{ $row['structure_product_description'] }}</td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="3" class="px-4 py-6 text-center text-slate-500">No structures found for the current filter.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         @if ($showRecipeModal)
             <div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-2 sm:p-4">
                 <div class="my-2 flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl lg:max-w-4xl">
-                    <div class="flex items-start justify-between border-b border-slate-200 px-4 py-3 sm:px-5 sm:py-4">
+                    <div class="flex items-start justify-between bg-slate-900 px-4 py-3 sm:px-5 sm:py-4">
                         <div>
-                            <h3 class="text-lg font-semibold text-slate-900">Recipe Card - {{ $selectedRecipeCode }}</h3>
-                            <p class="mt-1 text-sm text-slate-600">{{ $selectedRecipeDescription !== '' ? $selectedRecipeDescription : 'Store additional recipe document details.' }}</p>
+                            <h3 class="text-lg font-semibold text-white">Recipe Card - {{ $selectedRecipeCode }}</h3>
+                            <p class="mt-1 text-sm text-white/80">{{ $selectedRecipeDescription !== '' ? $selectedRecipeDescription : 'Store additional recipe document details.' }}</p>
                         </div>
-                        <button type="button" wire:click="closeRecipeModal" class="rounded-md px-2 py-1 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700">Close</button>
+                        <button type="button" wire:click="closeRecipeModal" class="rounded-md px-2 py-1 text-sm text-white/80 hover:bg-white/10 hover:text-white">Close</button>
                     </div>
 
                     <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">

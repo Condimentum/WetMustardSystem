@@ -201,21 +201,24 @@
                 </tr>
             </thead>
             <tbody>
-                @forelse ($documentChanges as $change)
+                @php
+                    $latestChange = $documentChanges->first();
+                @endphp
+                @if ($latestChange)
                     <tr>
-                        <td>{{ $change->issue_version ?: '—' }}</td>
-                        <td>{{ $change->date_issued?->format('d-m-Y') ?: '—' }}</td>
-                        <td>{{ $change->issued_by ?: '—' }}</td>
-                        <td>{{ $change->reason_for_change ?: '—' }}</td>
+                        <td>{{ $latestChange->issue_version ?: '—' }}</td>
+                        <td>{{ $latestChange->date_issued?->format('d-m-Y') ?: '—' }}</td>
+                        <td>{{ $latestChange->issued_by ?: '—' }}</td>
+                        <td>{{ $latestChange->reason_for_change ?: '—' }}</td>
                     </tr>
-                @empty
+                @else
                     <tr>
                         <td>{{ $document?->version ?: '—' }}</td>
                         <td>{{ $document?->issue_date?->format('d-m-Y') ?: '—' }}</td>
                         <td>—</td>
                         <td>No document issue history configured in Settings.</td>
                     </tr>
-                @endforelse
+                @endif
             </tbody>
         </table>
     </div>

@@ -4,7 +4,6 @@ use App\Http\Controllers\Auth\MicrosoftAuthCallbackController;
 use App\Http\Controllers\Auth\MicrosoftAuthRedirectController;
 use App\Http\Controllers\AuditTrailExportController;
 use App\Http\Controllers\BatchRecordExportController;
-use App\Http\Controllers\DailyMetalDetectorPaperworkController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
 use Illuminate\Support\Facades\Auth;
@@ -60,14 +59,32 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('metal-detector/daily', 'pages.metal-detector.daily')
         ->name('metal-detector.daily');
 
-    Route::get('metal-detector/daily/paperwork', DailyMetalDetectorPaperworkController::class)
-        ->name('metal-detector.daily.paperwork');
-
     Volt::route('manufacturing-orders', 'pages.manufacturing-orders.search')
         ->name('manufacturing-orders.search');
 
     Volt::route('manufacturing-orders/{winmanMo}/workspace', 'pages.manufacturing-orders.workspace')
         ->name('manufacturing-orders.workspace');
+
+    Route::get('production/ibc', \App\Http\Controllers\IbcProductionController::class)
+        ->name('production.ibc');
+
+    Route::get('production/bucketing', \App\Http\Controllers\BucketingController::class)
+        ->name('production.bucketing');
+
+    Volt::route('calibrations', 'pages.calibrations.daily')
+        ->name('calibrations.daily');
+
+    Volt::route('quality/lab-testing', 'pages.quality-lab-testing.index')
+        ->name('quality.lab-testing');
+
+    Volt::route('quality/lab-testing/ibc-traceability', 'pages.quality-lab-testing.ibc-traceability')
+        ->name('quality.lab-testing.ibc-traceability');
+
+    Volt::route('quality/lab-testing/wet-mustard-lab', 'pages.quality-lab-testing.wet-mustard-lab')
+        ->name('quality.lab-testing.wet-mustard-lab');
+
+    Volt::route('quality/lab-testing/rinse-water-test', 'pages.quality-lab-testing.rinse-water-test')
+        ->name('quality.lab-testing.rinse-water-test');
 
     Volt::route('batches/{batch}', 'pages.batches.show')
         ->name('batches.show');

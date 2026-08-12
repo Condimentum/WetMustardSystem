@@ -53,11 +53,9 @@ class DailyIntermediateProductionReport extends AbstractReport
             'row_count' => count($rows),
         ];
 
-        if ($rows !== []) {
-            $attachment = $this->buildProductionDocumentAttachment($batches, $from, $to);
-            if ($attachment !== null) {
-                $payload['attachments'] = [$attachment];
-            }
+        $attachment = $this->buildProductionDocumentAttachment($batches, $from, $to);
+        if ($attachment !== null) {
+            $payload['attachments'] = [$attachment];
         }
 
         return $payload;

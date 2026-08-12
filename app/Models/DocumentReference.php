@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * DBMTS Document Reference Master (scope entity: DocumentReference).
@@ -31,5 +32,10 @@ class DocumentReference extends Model
     public function changes(): HasMany
     {
         return $this->hasMany(DocumentReferenceChange::class);
+    }
+
+    public function layoutSetting(): HasOne
+    {
+        return $this->hasOne(DocumentLayoutSetting::class);
     }
 }

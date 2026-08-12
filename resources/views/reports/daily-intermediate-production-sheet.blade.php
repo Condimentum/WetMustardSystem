@@ -188,6 +188,18 @@
     </style>
 </head>
 <body>
+    @if(empty($sections))
+        <div class="sheet">
+            <div class="top-rule"></div>
+            <div class="header-line">WET MUSTARD BATCHCARD</div>
+            <div class="orange-ref-line">DAILY INTERMEDIATE PRODUCTION</div>
+            <div class="sheet-subtitle">BATCH CARD &amp; PROCESS SHEET</div>
+            <div style="border:1px solid #222; padding:12px; font-size:10px; text-align:center; margin-top:4px;">
+                No intermediate production batches found for the selected period.
+            </div>
+        </div>
+    @endif
+
     @foreach($sections as $index => $section)
         <div class="sheet">
             <div class="top-rule"></div>

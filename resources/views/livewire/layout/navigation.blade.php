@@ -30,14 +30,14 @@ new class extends Component
                 <img src="{{ asset('assets/condimentum-logo.png') }}" alt="{{ config('app.name', 'Wet Mustard System') }}" class="h-12 w-auto" />
             </a>
 
-            <div class="hidden items-center gap-2 lg:flex">
-                <a href="{{ route('dashboard') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('dashboard') ? $linkActive : $linkIdle }}">Dashboard</a>
-                <a href="{{ route('manufacturing-orders.search') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('manufacturing-orders.*') ? $linkActive : $linkIdle }}">Manufacturing Orders</a>
-                <a href="{{ route('metal-detector.daily') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('metal-detector.*') ? $linkActive : $linkIdle }}">Daily Metal Detection</a>
-                @can('admin')
-                    <a href="{{ route('settings.admin') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('settings.*') || request()->routeIs('reporting.*') || request()->routeIs('notifications.*') || request()->routeIs('audit.*') ? $linkActive : $linkIdle }}">Settings</a>
-                @endcan
-            </div>
+            @unless (request()->routeIs('dashboard'))
+                <a href="{{ route('dashboard') }}" wire:navigate class="hidden sm:inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-sky-50 hover:text-sky-700">
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Main Menu
+                </a>
+            @endunless
         </div>
 
         <div class="hidden items-center gap-2 sm:flex">
@@ -47,6 +47,9 @@ new class extends Component
             <span class="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                 {{ auth()->user()->email }}
             </span>
+            @can('admin')
+                <a href="{{ route('settings.admin') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('settings.*') || request()->routeIs('reporting.*') || request()->routeIs('notifications.*') || request()->routeIs('audit.*') ? $linkActive : $linkIdle }}">Settings</a>
+            @endcan
             <a href="{{ route('profile') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('profile') ? $linkActive : $linkIdle }}">Profile</a>
             <button wire:click="logout" type="button" class="inline-flex items-center rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100">Sign out</button>
         </div>
@@ -61,9 +64,9 @@ new class extends Component
 
     <div :class="{ 'block': open, 'hidden': !open }" class="hidden border-t border-slate-200 bg-white sm:hidden">
         <div class="space-y-1 px-4 py-3">
-            <a href="{{ route('dashboard') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('dashboard') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Dashboard</a>
-            <a href="{{ route('manufacturing-orders.search') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('manufacturing-orders.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Manufacturing Orders</a>
-            <a href="{{ route('metal-detector.daily') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('metal-detector.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Daily Metal Detection</a>
+            @unless (request()->routeIs('dashboard'))
+                <a href="{{ route('dashboard') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-sky-50 hover:text-sky-700">&larr; Main Menu</a>
+            @endunless
             @can('admin')
                 <a href="{{ route('settings.admin') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.*') || request()->routeIs('reporting.*') || request()->routeIs('notifications.*') || request()->routeIs('audit.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Settings</a>
             @endcan

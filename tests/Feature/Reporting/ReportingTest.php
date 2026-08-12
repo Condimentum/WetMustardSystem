@@ -4,15 +4,33 @@ namespace Tests\Feature\Reporting;
 
 use App\Domains\Reporting\Jobs\ResolveReportRecipientsJob;
 use App\Domains\Reporting\Reports\DailyIntermediateProductionReport;
+use App\Domains\Reporting\Reports\MetalDetectorVerificationSheetReport;
 use App\Domains\Reporting\Reports\OpenBatchesReport;
+use App\Domains\Reporting\Reports\Wm003IbcTraceabilityReport;
+use App\Domains\Reporting\Reports\Wm005WetMustardLabTestingReport;
+use App\Domains\Reporting\Reports\Wm010RinseWaterTestReport;
+use App\Domains\Reporting\Reports\Wm001LabScalesCalibrationReport;
+use App\Domains\Reporting\Reports\Wm002SaltMeterCalibrationReport;
+use App\Domains\Reporting\Reports\Wm006ViscosityAutozeroReport;
+use App\Domains\Reporting\Reports\Wm013ProductionScalesCalibrationReport;
 use App\Features\Reporting\SendReportNowFeature;
 use App\Models\BatchRecord;
+use App\Models\DocumentReference;
+use App\Models\DocumentReferenceChange;
+use App\Models\LabScaleCalibration;
 use App\Models\ManufacturingOrder;
+use App\Models\MetalDetectorCheck;
 use App\Models\PalleconRecord;
+use App\Models\ProductionScaleCalibration;
 use App\Models\Product;
 use App\Models\ReportRecipient;
 use App\Models\ReportSendLog;
+use App\Models\SaltMeterCalibration;
 use App\Models\User;
+use App\Models\ViscosityMeterAutozeroCheck;
+use App\Models\Wm003IbcTraceabilityEntry;
+use App\Models\Wm005LabTestingEntry;
+use App\Models\Wm010RinseWaterTestEntry;
 use App\Operations\SendOffice365MailOperation;
 use App\Operations\SendReportOperation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -185,6 +203,223 @@ class ReportingTest extends TestCase
         $resolved = app(ResolveReportRecipientsJob::class)(OpenBatchesReport::KEY);
 
         $this->assertContains('tech@example.com', $resolved['to']);
+    }
+
+    public function test_wm001_report_generates_pdf_attachment(): void
+    {
+        $this->seedCalibrationDocument('WM001', 'WM001 Lab Scales Daily Calibration');
+
+        LabScaleCalibration::create([
+            'checked_date' => now()->toDateString(),
+            'reading' => 100.001,
+            'passed' => true,
+            'operator_name' => 'QA User',
+        ]);
+
+        $report = app(Wm001LabScalesCalibrationReport::class)->generate(now()->startOfDay(), now()->endOfDay());
+
+        $this->assertSame(1, $report['row_count']);
+        $this->assertArrayHasKey('attachments', $report);
+        $this->assertFileExists($report['attachments'][0]['path']);
+        $this->assertGreaterThan(0, filesize($report['attachments'][0]['path']));
+        $this->assertStringContainsString('WM001 Lab Scales Daily Calibration', $report['html']);
+    }
+
+    public function test_wm002_report_generates_pdf_attachment(): void
+    {
+        $this->seedCalibrationDocument('WM002', 'WM002 Daily Salt Meter Calibration');
+
+        SaltMeterCalibration::create([
+            'checked_date' => now()->toDateString(),
+            'reading' => 99.900,
+            'passed' => true,
+            'operator_name' => 'QA User',
+        ]);
+
+        $report = app(Wm002SaltMeterCalibrationReport::class)->generate(now()->startOfDay(), now()->endOfDay());
+
+        $this->assertSame(1, $report['row_count']);
+        $this->assertArrayHasKey('attachments', $report);
+        $this->assertFileExists($report['attachments'][0]['path']);
+        $this->assertGreaterThan(0, filesize($report['attachments'][0]['path']));
+        $this->assertStringContainsString('WM002 Daily Salt Meter Calibration', $report['html']);
+    }
+
+    public function test_wm006_report_generates_pdf_attachment(): void
+    {
+        $this->seedCalibrationDocument('WM006', 'WM006 Viscosity Meter Autozero Check Complete');
+
+        ViscosityMeterAutozeroCheck::create([
+            'checked_date' => now()->toDateString(),
+            'complete' => true,
+            'operator_name' => 'QA User',
+        ]);
+
+        $report = app(Wm006ViscosityAutozeroReport::class)->generate(now()->startOfDay(), now()->endOfDay());
+
+        $this->assertSame(1, $report['row_count']);
+        $this->assertArrayHasKey('attachments', $report);
+        $this->assertFileExists($report['attachments'][0]['path']);
+        $this->assertGreaterThan(0, filesize($report['attachments'][0]['path']));
+        $this->assertStringContainsString('WM006 Viscosity Meter Autozero Check', $report['html']);
+    }
+
+    public function test_wm013_report_generates_pdf_attachment(): void
+    {
+        $this->seedCalibrationDocument('WM013', 'WM013 Production Scales Daily Calibration');
+
+        ProductionScaleCalibration::create([
+            'checked_date' => now()->toDateString(),
+            'powder_3kg_reading' => 100.000,
+            'powder_30kg_reading' => 10.000,
+            'pallecon_scale_reading' => 10.000,
+            'bucket_filler_scale_reading' => 10.000,
+            'passed' => true,
+            'operator_name' => 'QA User',
+        ]);
+
+        $report = app(Wm013ProductionScalesCalibrationReport::class)->generate(now()->startOfDay(), now()->endOfDay());
+
+        $this->assertSame(1, $report['row_count']);
+        $this->assertArrayHasKey('attachments', $report);
+        $this->assertFileExists($report['attachments'][0]['path']);
+        $this->assertGreaterThan(0, filesize($report['attachments'][0]['path']));
+        $this->assertStringContainsString('WM013 Production Scales Daily Calibration', $report['html']);
+    }
+
+    public function test_metal_detector_verification_report_generates_pdf_attachment(): void
+    {
+        $this->seedMetalDetectorDocument();
+
+        $operator = User::factory()->create(['name' => 'QA User']);
+
+        MetalDetectorCheck::create([
+            'batch_record_id' => null,
+            'manufacturing_order_id' => null,
+            'product_id' => null,
+            'check_time' => now(),
+            'check_type' => MetalDetectorCheck::TYPE_HOURLY,
+            'fe10_pass' => true,
+            'non_fe15_pass' => true,
+            'ss20_pass' => true,
+            'bin_locked' => true,
+            'bin_empty' => true,
+            'overall_result' => MetalDetectorCheck::RESULT_PASS,
+            'is_recheck' => false,
+            'signed_by' => $operator->id,
+            'signed_at' => now(),
+        ]);
+
+        $report = app(MetalDetectorVerificationSheetReport::class)->generate(now()->startOfDay(), now()->endOfDay());
+
+        $this->assertSame(1, $report['row_count']);
+        $this->assertArrayHasKey('attachments', $report);
+        $this->assertFileExists($report['attachments'][0]['path']);
+        $this->assertGreaterThan(0, filesize($report['attachments'][0]['path']));
+        $this->assertStringContainsString('Metal Detector Verification Sheet', $report['subject']);
+    }
+
+    public function test_wm003_report_generates_pdf_attachment(): void
+    {
+        $this->seedCalibrationDocument('WM003', 'WM003 Vinegar IBC Traceability');
+
+        Wm003IbcTraceabilityEntry::create([
+            'date_used' => now()->toDateString(),
+            'supplier_production_date' => now()->toDateString(),
+            'best_before_date' => now()->addYear()->toDateString(),
+            'batch_no' => 'BATCH-001',
+            'time_on' => '08:00:00',
+            'operator_name' => 'Operator A',
+        ]);
+
+        $report = app(Wm003IbcTraceabilityReport::class)->generate(now()->startOfDay(), now()->endOfDay());
+
+        $this->assertSame(1, $report['row_count']);
+        $this->assertArrayHasKey('attachments', $report);
+        $this->assertFileExists($report['attachments'][0]['path']);
+        $this->assertGreaterThan(0, filesize($report['attachments'][0]['path']));
+    }
+
+    public function test_wm005_report_generates_pdf_attachment(): void
+    {
+        $this->seedCalibrationDocument('WM005', 'WM005 Wet mustard lab testing');
+
+        Wm005LabTestingEntry::create([
+            'tested_date' => now()->toDateString(),
+            'batch_number' => 'WM-BATCH-01',
+            'ph' => 3.500,
+            'salt' => 1.200,
+            'tested_by' => 'QA Tester',
+        ]);
+
+        $report = app(Wm005WetMustardLabTestingReport::class)->generate(now()->startOfDay(), now()->endOfDay());
+
+        $this->assertSame(1, $report['row_count']);
+        $this->assertArrayHasKey('attachments', $report);
+        $this->assertFileExists($report['attachments'][0]['path']);
+        $this->assertGreaterThan(0, filesize($report['attachments'][0]['path']));
+    }
+
+    public function test_wm010_report_generates_pdf_attachment(): void
+    {
+        $this->seedCalibrationDocument('WM010', 'WM010 Rinse water test sheet - chemical & sulphite');
+
+        Wm010RinseWaterTestEntry::create([
+            'tested_date' => now()->toDateString(),
+            'section' => Wm010RinseWaterTestEntry::SECTION_CLEANING_CHEMICALS,
+            'equipment' => 'Tank 1',
+            'reading' => 7.000,
+            'reading_unit' => 'pH',
+            'pass_or_fail' => 'Pass',
+            'operator_name' => 'Operator B',
+        ]);
+
+        $report = app(Wm010RinseWaterTestReport::class)->generate(now()->startOfDay(), now()->endOfDay());
+
+        $this->assertSame(1, $report['row_count']);
+        $this->assertArrayHasKey('attachments', $report);
+        $this->assertFileExists($report['attachments'][0]['path']);
+        $this->assertGreaterThan(0, filesize($report['attachments'][0]['path']));
+    }
+
+    private function seedCalibrationDocument(string $code, string $title): void
+    {
+        $document = DocumentReference::create([
+            'code' => $code,
+            'title' => $title,
+            'version' => 'V1',
+            'issue_date' => now()->toDateString(),
+            'module' => 'Calibration',
+            'status' => 'active',
+        ]);
+
+        DocumentReferenceChange::create([
+            'document_reference_id' => $document->id,
+            'issue_version' => 'V1',
+            'date_issued' => now()->toDateString(),
+            'issued_by' => 'QA',
+            'reason_for_change' => 'Initial issue',
+        ]);
+    }
+
+    private function seedMetalDetectorDocument(): void
+    {
+        $document = DocumentReference::create([
+            'code' => 'WM017',
+            'title' => 'Metal detector verification sheet',
+            'version' => 'V1',
+            'issue_date' => now()->toDateString(),
+            'module' => 'Metal Detector',
+            'status' => 'active',
+        ]);
+
+        DocumentReferenceChange::create([
+            'document_reference_id' => $document->id,
+            'issue_version' => 'V1',
+            'date_issued' => now()->toDateString(),
+            'issued_by' => 'QA',
+            'reason_for_change' => 'Initial issue',
+        ]);
     }
 
     protected function tearDown(): void
