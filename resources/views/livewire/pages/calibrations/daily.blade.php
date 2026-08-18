@@ -55,27 +55,16 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
     }
 
     #[Computed]
-    public function wm001Recent()
+    public function todayStatus(): array
     {
-        return LabScaleCalibration::query()->latest('checked_date')->latest('id')->limit(12)->get();
-    }
+        $today = now()->toDateString();
 
-    #[Computed]
-    public function wm002Recent()
-    {
-        return SaltMeterCalibration::query()->latest('checked_date')->latest('id')->limit(12)->get();
-    }
-
-    #[Computed]
-    public function wm006Recent()
-    {
-        return ViscosityMeterAutozeroCheck::query()->latest('checked_date')->latest('id')->limit(12)->get();
-    }
-
-    #[Computed]
-    public function wm013Recent()
-    {
-        return ProductionScaleCalibration::query()->latest('checked_date')->latest('id')->limit(12)->get();
+        return [
+            'wm001' => LabScaleCalibration::query()->whereDate('checked_date', $today)->exists(),
+            'wm002' => SaltMeterCalibration::query()->whereDate('checked_date', $today)->exists(),
+            'wm006' => ViscosityMeterAutozeroCheck::query()->whereDate('checked_date', $today)->exists(),
+            'wm013' => ProductionScaleCalibration::query()->whereDate('checked_date', $today)->exists(),
+        ];
     }
 
     public function saveWm001(): void
@@ -109,7 +98,7 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
         $this->wm001_deviation_reason = '';
         $this->flashLevel = 'success';
         $this->flash = 'WM001 entry saved.';
-        unset($this->wm001Recent);
+        unset($this->todayStatus);
     }
 
     public function saveWm002(): void
@@ -143,7 +132,7 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
         $this->wm002_deviation_reason = '';
         $this->flashLevel = 'success';
         $this->flash = 'WM002 entry saved.';
-        unset($this->wm002Recent);
+        unset($this->todayStatus);
     }
 
     public function saveWm006(): void
@@ -175,7 +164,7 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
         $this->wm006_deviation_reason = '';
         $this->flashLevel = 'success';
         $this->flash = 'WM006 entry saved.';
-        unset($this->wm006Recent);
+        unset($this->todayStatus);
     }
 
     public function saveWm013(): void
@@ -225,28 +214,55 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
         $this->wm013_deviation_reason = '';
         $this->flashLevel = 'success';
         $this->flash = 'WM013 entry saved.';
-        unset($this->wm013Recent);
+        unset($this->todayStatus);
     }
 }; ?>
 
 <div class="py-8">
     <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-        <div>
-            <h2 class="text-xl font-semibold text-gray-800">Daily Calibrations</h2>
-            <p class="text-sm text-gray-500">WM001, WM002, WM006, WM013 with tolerance checks and reporting-ready records.</p>
-        </div>
+        @php
+            $checkCount = collect($this->todayStatus)->count();
+            $completedTodayCount = collect($this->todayStatus)->filter()->count();
+            $statusBadge = fn (string $label, bool $done) => '<span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid '.($done ? '#86efac' : '#cbd5e1').';background:'.($done ? '#ecfdf5' : '#f1f5f9').';color:'.($done ? '#15803d' : '#475569').';font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">'.$label.': '.($done ? 'Done' : 'Pending').'</span>';
+        @endphp
 
-        @if ($flash)
-            <div @class([
-                'rounded-lg border px-4 py-3 text-sm',
-                'border-green-200 bg-green-50 text-green-800' => $flashLevel === 'success',
-                'border-red-200 bg-red-50 text-red-800' => $flashLevel === 'error',
-            ])>{{ $flash }}</div>
-        @endif
+        <div style="background:#fff;border:1px solid #dbe1ea;border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(15,23,42,0.08);">
+            <div style="padding:24px 26px;background:linear-gradient(135deg,#f8fafc 0%,#e0ecff 100%);border-bottom:1px solid #dbe1ea;">
+                <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+                    <div style="width:56px;height:56px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #86efac;overflow:hidden;flex-shrink:0;">
+                        <img src="{{ asset('calibration-icon.png') }}" alt="Daily Calibrations" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+                    </div>
+
+                    <div>
+                        <div style="font-size:1.3rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">DAILY CALIBRATIONS</div>
+                        <div style="font-size:0.75rem;font-weight:700;color:#64748b;letter-spacing:.14em;margin-top:4px;">WM001 &middot; WM002 &middot; WM006 &middot; WM013 TOLERANCE CHECKS</div>
+                    </div>
+
+                    <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:12px;font-weight:800;">
+                        {{ $completedTodayCount }} of {{ $checkCount }} completed today
+                    </span>
+                </div>
+
+                <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+                    {!! $statusBadge('WM001', $this->todayStatus['wm001']) !!}
+                    {!! $statusBadge('WM002', $this->todayStatus['wm002']) !!}
+                    {!! $statusBadge('WM006', $this->todayStatus['wm006']) !!}
+                    {!! $statusBadge('WM013', $this->todayStatus['wm013']) !!}
+                </div>
+            </div>
+
+            <div style="padding:24px 26px;">
+                @if ($flash)
+                    <div @class([
+                        'rounded-lg border px-4 py-3 text-sm mb-6',
+                        'border-green-200 bg-green-50 text-green-800' => $flashLevel === 'success',
+                        'border-red-200 bg-red-50 text-red-800' => $flashLevel === 'error',
+                    ])>{{ $flash }}</div>
+                @endif
 
         <div class="grid gap-6 lg:grid-cols-2">
             <form wire:submit="saveWm001" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div class="bg-slate-900 px-5 py-3 text-white font-semibold">WM001 Lab Scales Daily Calibration</div>
+                <div style="background:#2d3f8f;" class="px-5 py-3 text-white font-semibold">WM001 Lab Scales Daily Calibration</div>
                 <div class="p-5 space-y-3">
                     <div class="grid gap-3 md:grid-cols-2">
                         <div><label class="block text-xs text-gray-600 mb-1">Date</label><input type="date" wire:model.defer="wm001_date" class="w-full rounded-md border-gray-300 text-sm" /></div>
@@ -266,7 +282,7 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
             </form>
 
             <form wire:submit="saveWm002" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div class="bg-slate-900 px-5 py-3 text-white font-semibold">WM002 Daily Salt Meter Calibration</div>
+                <div style="background:#2d3f8f;" class="px-5 py-3 text-white font-semibold">WM002 Daily Salt Meter Calibration</div>
                 <div class="p-5 space-y-3">
                     <div class="grid gap-3 md:grid-cols-2">
                         <div><label class="block text-xs text-gray-600 mb-1">Date</label><input type="date" wire:model.defer="wm002_date" class="w-full rounded-md border-gray-300 text-sm" /></div>
@@ -286,7 +302,7 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
             </form>
 
             <form wire:submit="saveWm006" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div class="bg-slate-900 px-5 py-3 text-white font-semibold">WM006 Viscosity Meter Autozero Check Complete</div>
+                <div style="background:#2d3f8f;" class="px-5 py-3 text-white font-semibold">WM006 Viscosity Meter Autozero Check Complete</div>
                 <div class="p-5 space-y-3">
                     <div class="grid gap-3 md:grid-cols-2">
                         <div><label class="block text-xs text-gray-600 mb-1">Date</label><input type="date" wire:model.defer="wm006_date" class="w-full rounded-md border-gray-300 text-sm" /></div>
@@ -309,7 +325,7 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
             </form>
 
             <form wire:submit="saveWm013" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div class="bg-slate-900 px-5 py-3 text-white font-semibold">WM013 Production Scales Daily Calibration</div>
+                <div style="background:#2d3f8f;" class="px-5 py-3 text-white font-semibold">WM013 Production Scales Daily Calibration</div>
                 <div class="p-5 space-y-3">
                     <div class="grid gap-3 md:grid-cols-2">
                         <div><label class="block text-xs text-gray-600 mb-1">Date</label><input type="date" wire:model.defer="wm013_date" class="w-full rounded-md border-gray-300 text-sm" /></div>
@@ -330,23 +346,6 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
                 </div>
             </form>
         </div>
-
-        <div class="grid gap-6 lg:grid-cols-2">
-            <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div class="bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Recent WM001</div>
-                <table class="min-w-full text-sm"><thead class="text-left text-xs text-slate-500 uppercase bg-white"><tr><th class="px-3 py-2">Date</th><th class="px-3 py-2">Reading</th><th class="px-3 py-2">Pass</th></tr></thead><tbody class="divide-y divide-slate-100">@forelse($this->wm001Recent as $row)<tr><td class="px-3 py-2">{{ $row->checked_date?->toDateString() }}</td><td class="px-3 py-2">{{ $row->reading }}</td><td class="px-3 py-2">{{ $row->passed ? 'Yes' : 'No' }}</td></tr>@empty<tr><td colspan="3" class="px-3 py-3 text-slate-500">No entries.</td></tr>@endforelse</tbody></table>
-            </div>
-            <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div class="bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Recent WM002</div>
-                <table class="min-w-full text-sm"><thead class="text-left text-xs text-slate-500 uppercase bg-white"><tr><th class="px-3 py-2">Date</th><th class="px-3 py-2">Reading</th><th class="px-3 py-2">Pass</th></tr></thead><tbody class="divide-y divide-slate-100">@forelse($this->wm002Recent as $row)<tr><td class="px-3 py-2">{{ $row->checked_date?->toDateString() }}</td><td class="px-3 py-2">{{ $row->reading }}</td><td class="px-3 py-2">{{ $row->passed ? 'Yes' : 'No' }}</td></tr>@empty<tr><td colspan="3" class="px-3 py-3 text-slate-500">No entries.</td></tr>@endforelse</tbody></table>
-            </div>
-            <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div class="bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Recent WM006</div>
-                <table class="min-w-full text-sm"><thead class="text-left text-xs text-slate-500 uppercase bg-white"><tr><th class="px-3 py-2">Date</th><th class="px-3 py-2">Complete</th><th class="px-3 py-2">Operator</th></tr></thead><tbody class="divide-y divide-slate-100">@forelse($this->wm006Recent as $row)<tr><td class="px-3 py-2">{{ $row->checked_date?->toDateString() }}</td><td class="px-3 py-2">{{ $row->complete ? 'Yes' : 'No' }}</td><td class="px-3 py-2">{{ $row->operator_name }}</td></tr>@empty<tr><td colspan="3" class="px-3 py-3 text-slate-500">No entries.</td></tr>@endforelse</tbody></table>
-            </div>
-            <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                <div class="bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Recent WM013</div>
-                <table class="min-w-full text-sm"><thead class="text-left text-xs text-slate-500 uppercase bg-white"><tr><th class="px-3 py-2">Date</th><th class="px-3 py-2">3kg</th><th class="px-3 py-2">30kg</th><th class="px-3 py-2">Pass</th></tr></thead><tbody class="divide-y divide-slate-100">@forelse($this->wm013Recent as $row)<tr><td class="px-3 py-2">{{ $row->checked_date?->toDateString() }}</td><td class="px-3 py-2">{{ $row->powder_3kg_reading }}</td><td class="px-3 py-2">{{ $row->powder_30kg_reading }}</td><td class="px-3 py-2">{{ $row->passed ? 'Yes' : 'No' }}</td></tr>@empty<tr><td colspan="4" class="px-3 py-3 text-slate-500">No entries.</td></tr>@endforelse</tbody></table>
             </div>
         </div>
     </div>

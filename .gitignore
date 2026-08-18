@@ -3,6 +3,7 @@
 .env
 .env.backup
 .env.production
+.nano-banana-config.json
 .phpactor.json
 .phpunit.result.cache
 /.fleet

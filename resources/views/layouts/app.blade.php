@@ -34,6 +34,8 @@
             </main>
         </div>
 
+        <x-loading-indicator />
+
         @livewireScripts
     </body>
 </html>

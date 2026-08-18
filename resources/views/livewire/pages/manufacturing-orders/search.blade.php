@@ -613,11 +613,11 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
             <div style="padding:24px 26px;background:linear-gradient(135deg,#f8fafc 0%,#e0ecff 100%);border-bottom:1px solid #dbe1ea;">
                 <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
                     <div style="width:56px;height:56px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #86efac;overflow:hidden;flex-shrink:0;">
-                        <img src="{{ asset('mustard.png') }}" alt="Mustard" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+                        <img src="{{ asset('mo-list-icon.png') }}" alt="Manufacturing Order List" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
                     </div>
 
                     <div>
-                        <div style="font-size:1.3rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">MANUFACTURING ORDER LIST</div>
+                        <div style="font-size:1.3rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">INTERMEDIATE PRODUCTION</div>
                         <div style="font-size:0.75rem;font-weight:700;color:#64748b;letter-spacing:.14em;margin-top:4px;">GROUPED OUTSTANDING ORDERS</div>
                     </div>
 

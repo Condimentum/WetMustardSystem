@@ -28,6 +28,8 @@
             </div>
         </div>
 
+        <x-loading-indicator />
+
         @livewireScripts
     </body>
 </html>

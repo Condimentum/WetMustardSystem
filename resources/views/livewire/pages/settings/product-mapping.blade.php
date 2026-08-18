@@ -23,14 +23,6 @@ new #[Layout('layouts.app')] #[Title('Product Mapping')] class extends Component
     /** @var array<int, array<string, mixed>> */
     public array $resolvedRows = [];
 
-    /** @var array<string, int> */
-    public array $summary = [
-        'mapped_products' => 0,
-        'stored_rows' => 0,
-        'resolved_recipes' => 0,
-        'mapping_issues' => 0,
-    ];
-
     public ?string $flash = null;
 
     public ?string $error = null;
@@ -151,12 +143,6 @@ new #[Layout('layouts.app')] #[Title('Product Mapping')] class extends Component
         if (! $this->productMappingsTableExists()) {
             $this->rows = [];
             $this->resolvedRows = [];
-            $this->summary = [
-                'mapped_products' => 0,
-                'stored_rows' => 0,
-                'resolved_recipes' => 0,
-                'mapping_issues' => 0,
-            ];
             $this->lastSyncedAt = null;
             $this->info = 'Product mapping table is not created yet. Run: php artisan migrate';
 
@@ -243,19 +229,6 @@ new #[Layout('layouts.app')] #[Title('Product Mapping')] class extends Component
             ];
         })->sortBy('structure_product_id')->values()->all();
 
-        $this->summary = [
-            'mapped_products' => count($this->resolvedRows),
-            'stored_rows' => count($this->rows),
-            'resolved_recipes' => count(array_filter(
-                $this->resolvedRows,
-                static fn (array $row): bool => isset($row['recipe_product_id']) && $row['recipe_product_id'] !== null && $row['recipe_product_id'] !== '',
-            )),
-            'mapping_issues' => count(array_filter(
-                $this->resolvedRows,
-                static fn (array $row): bool => (bool) ($row['has_mapping_issue'] ?? false),
-            )),
-        ];
-
         $this->info = $this->rows === []
             ? 'No product mapping snapshot is stored yet. Use Sync from WinMan to capture the current structure-to-recipe mapping.'
             : 'Stored snapshots are for later reference only. Manufacturing-order creation continues to use the live WinMan BOM.';
@@ -321,25 +294,6 @@ new #[Layout('layouts.app')] #[Title('Product Mapping')] class extends Component
         @if ($info)
             <div class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">{{ $info }}</div>
         @endif
-
-        <div class="grid gap-4 md:grid-cols-4">
-            <div class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3">
-                <div class="text-xs font-semibold uppercase tracking-wide text-sky-700">Mapped Products</div>
-                <div class="mt-1 text-2xl font-semibold text-sky-900">{{ $summary['mapped_products'] }}</div>
-            </div>
-            <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                <div class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Resolved Recipes</div>
-                <div class="mt-1 text-2xl font-semibold text-emerald-900">{{ $summary['resolved_recipes'] }}</div>
-            </div>
-            <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                <div class="text-xs font-semibold uppercase tracking-wide text-amber-700">Stored Structure Rows</div>
-                <div class="mt-1 text-2xl font-semibold text-amber-900">{{ $summary['stored_rows'] }}</div>
-            </div>
-            <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                <div class="text-xs font-semibold uppercase tracking-wide text-red-700">Mapping Issues</div>
-                <div class="mt-1 text-2xl font-semibold text-red-900">{{ $summary['mapping_issues'] }}</div>
-            </div>
-        </div>
 
         <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
             <div class="border-b border-slate-200 px-4 py-3">

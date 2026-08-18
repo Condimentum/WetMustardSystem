@@ -94,7 +94,6 @@ class ProductMappingPageTest extends TestCase
         Volt::test('pages.settings.product-mapping')
             ->call('syncMappings')
             ->assertSet('flash', 'Product mappings synced: 2 rows stored.')
-            ->assertSet('summary', fn (array $summary): bool => $summary['mapped_products'] === 2 && $summary['stored_rows'] === 2 && $summary['resolved_recipes'] === 2 && $summary['mapping_issues'] === 0)
             ->assertSet('resolvedRows', fn (array $rows): bool => collect($rows)->contains(
                 fn (array $row): bool => $row['structure_product_id'] === '70010026'
                     && $row['structure_unit_of_measure_description'] === '10 Kg'
