@@ -4,15 +4,17 @@ namespace App\Operations;
 
 use App\Domains\Notification\Jobs\RaiseNotificationEventJob;
 use App\Domains\Notification\Jobs\ResolveNotificationRecipientsJob;
+use App\Jobs\SendReportEmailJob;
 use App\Models\NotificationEvent;
 use App\Models\ReportSendLog;
 use Illuminate\Database\Eloquent\Model;
-use Throwable;
 
 /**
  * Raises a notification event (honouring rule enablement + cooldown) and, when
- * recipients exist, sends an alert email and writes an alert send-log row
- * (scope §11 - every alert-driven send must create a send-log entry).
+ * recipients exist, queues an alert email and writes an alert send-log row
+ * (scope §11 - every alert-driven send must create a send-log entry). The
+ * email itself is sent in the background (SendReportEmailJob) so recording a
+ * CCP failure/weight breach never blocks the operator's request on SMTP.
  *
  * Reused by immediate event triggers (CCP failure, weight breach) and by the
  * scheduled detector command.
@@ -22,7 +24,6 @@ class RaiseNotificationOperation
     public function __construct(
         private readonly RaiseNotificationEventJob $raiseEvent,
         private readonly ResolveNotificationRecipientsJob $resolveRecipients,
-        private readonly SendOffice365MailOperation $sendMail,
     ) {
     }
 
@@ -51,20 +52,12 @@ class RaiseNotificationOperation
             'started_at' => now(),
         ]);
 
-        try {
-            ($this->sendMail)(
-                $recipients,
-                "[DBMTS {$event->severity}] {$event->rule_key}",
-                $this->html($event),
-            );
-            $log->status = ReportSendLog::STATUS_SENT;
-        } catch (Throwable $e) {
-            $log->status = ReportSendLog::STATUS_FAILED;
-            $log->error_message = $e->getMessage();
-        } finally {
-            $log->completed_at = now();
-            $log->save();
-        }
+        SendReportEmailJob::dispatch(
+            $log->id,
+            $recipients,
+            "[DBMTS {$event->severity}] {$event->rule_key}",
+            $this->html($event),
+        );
 
         return $event;
     }

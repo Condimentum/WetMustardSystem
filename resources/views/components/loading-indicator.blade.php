@@ -1,6 +1,9 @@
 <style>
-    /* Replaced by the circular indicator below. */
-    #nprogress { display: none !important; }
+    /* Livewire's built-in top progress bar (#nprogress) fires for EVERY ajax
+       request (wire:click/wire:submit/etc), not just full-page wire:navigate
+       transitions covered by the circular indicator below - keep both visible
+       so ordinary component actions still show a loading cue. */
+    #nprogress .bar { background: #4f46e5 !important; height: 3px !important; }
 </style>
 
 <div
