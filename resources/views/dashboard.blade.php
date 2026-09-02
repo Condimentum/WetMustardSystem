@@ -1,9 +1,17 @@
 <x-app-layout>
     <div class="py-8">
         <div class="max-w-2xl mx-auto sm:px-6 lg:px-8">
-            <div class="mb-6 text-center">
-                <h1 class="text-2xl font-bold tracking-tight text-slate-900">Manufacturing Dashboard</h1>
-                <p class="mt-1 text-sm font-medium uppercase tracking-wide text-slate-400">QC &amp; Production</p>
+            <div
+                class="relative mb-8 flex items-center justify-center gap-4 overflow-hidden rounded-3xl px-6 py-8 shadow-lg"
+                style="background-image: url('{{ asset('dashboard-header-bg.png') }}'); background-size: 100% 100%; background-repeat: no-repeat;"
+            >
+                <div class="absolute inset-0 bg-white/55"></div>
+                <span class="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
+                    <img src="{{ asset('wet-mustard-booking-icon.png') }}" alt="Wet Mustard Booking System" class="h-full w-full object-cover" />
+                </span>
+                <div class="relative text-left">
+                    <h1 class="text-3xl font-extrabold tracking-tight text-slate-900">Wet Mustard Booking System</h1>
+                </div>
             </div>
 
             <div class="space-y-3">

@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\NotificationEvent;
 use App\Models\NotificationRecipient;
 use App\Models\NotificationRule;
 use Livewire\Attributes\Computed;
@@ -9,7 +8,7 @@ use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
 use Spatie\Permission\Models\Role;
 
-new #[Layout('layouts.app')] #[Title('Notification Admin')] class extends Component {
+new #[Layout('layouts.app')] #[Title('Notifications Setup')] class extends Component {
     public ?int $editingId = null;
     public string $editSeverity = 'warning';
     public int $editCooldown = 60;
@@ -32,12 +31,6 @@ new #[Layout('layouts.app')] #[Title('Notification Admin')] class extends Compon
     public function recipients()
     {
         return NotificationRecipient::query()->orderBy('rule_key')->get();
-    }
-
-    #[Computed]
-    public function events()
-    {
-        return NotificationEvent::query()->latest('triggered_at')->limit(25)->get();
     }
 
     #[Computed]
@@ -100,29 +93,15 @@ new #[Layout('layouts.app')] #[Title('Notification Admin')] class extends Compon
     {
         NotificationRecipient::whereKey($id)->delete();
     }
-
-    public function acknowledge(int $id): void
-    {
-        NotificationEvent::whereKey($id)->update([
-            'status' => NotificationEvent::STATUS_ACKNOWLEDGED,
-            'acknowledged_by' => auth()->id(),
-            'acknowledged_at' => now(),
-        ]);
-    }
-
-    public function resolve(int $id): void
-    {
-        NotificationEvent::whereKey($id)->update([
-            'status' => NotificationEvent::STATUS_RESOLVED,
-            'resolved_at' => now(),
-        ]);
-    }
 }; ?>
 
 <div class="py-8">
     <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        <h2 class="text-xl font-semibold text-gray-800">Notification Admin</h2>
+        <div>
+            <h2 class="text-xl font-semibold text-gray-800">Notifications Setup</h2>
+            <p class="text-sm text-gray-500">Configure alert rules and email recipients. Operators see the raised alerts on the <a href="{{ route('notifications.index') }}" wire:navigate class="text-indigo-600 hover:underline">Notifications</a> page.</p>
+        </div>
 
         <div class="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
             <div class="flex flex-wrap items-center gap-2">
@@ -132,8 +111,9 @@ new #[Layout('layouts.app')] #[Title('Notification Admin')] class extends Compon
                 <a href="{{ route('settings.operator-sync') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.operator-sync') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Operator Sync</a>
                 <a href="{{ route('settings.documents') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.documents') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Documents</a>
                 <a href="{{ route('reporting.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('reporting.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Reporting</a>
-                <a href="{{ route('notifications.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Notifications</a>
-                <a href="{{ route('audit.index') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Audit</a>
+                <a href="{{ route('notifications.setup') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.setup') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Notifications Setup</a>
+                <a href="{{ route('audit.index') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.index') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Audit</a>
+                <a href="{{ route('audit.errors') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.errors') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Error Log</a>
             </div>
         </div>
 
@@ -143,6 +123,7 @@ new #[Layout('layouts.app')] #[Title('Notification Admin')] class extends Compon
 
         {{-- Rules --}}
         <div class="bg-white shadow-sm rounded-lg overflow-hidden">
+            <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50 text-left text-xs text-gray-500 uppercase">
                     <tr><th class="px-4 py-3">Rule</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">Severity</th><th class="px-4 py-3">Threshold</th><th class="px-4 py-3">Cooldown</th><th class="px-4 py-3">Enabled</th><th class="px-4 py-3"></th></tr>
@@ -175,6 +156,7 @@ new #[Layout('layouts.app')] #[Title('Notification Admin')] class extends Compon
                     @endforeach
                 </tbody>
             </table>
+            </div>
         </div>
 
         {{-- Recipients --}}
@@ -214,6 +196,7 @@ new #[Layout('layouts.app')] #[Title('Notification Admin')] class extends Compon
                 <x-primary-button wire:click="addRecipient">Add</x-primary-button>
             </div>
 
+            <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="text-left text-xs text-gray-500 uppercase"><tr><th class="py-2">Rule</th><th class="py-2">Recipient</th><th class="py-2"></th></tr></thead>
                 <tbody class="divide-y divide-gray-100">
@@ -228,35 +211,7 @@ new #[Layout('layouts.app')] #[Title('Notification Admin')] class extends Compon
                     @endforelse
                 </tbody>
             </table>
-        </div>
-
-        {{-- Events --}}
-        <div class="bg-white shadow-sm rounded-lg overflow-hidden">
-            <div class="px-4 py-3 border-b border-gray-100 font-medium text-gray-800">Recent alerts</div>
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50 text-left text-xs text-gray-500 uppercase"><tr><th class="px-4 py-3">Rule</th><th class="px-4 py-3">Severity</th><th class="px-4 py-3">Message</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">When</th><th class="px-4 py-3"></th></tr></thead>
-                <tbody class="divide-y divide-gray-100">
-                    @forelse ($this->events as $event)
-                        <tr>
-                            <td class="px-4 py-2 font-mono text-xs">{{ $event->rule_key }}</td>
-                            <td class="px-4 py-2"><span @class(['px-2 py-0.5 rounded-full text-xs', 'bg-red-100 text-red-800' => $event->severity === 'critical', 'bg-amber-100 text-amber-800' => $event->severity === 'warning', 'bg-gray-100 text-gray-700' => $event->severity === 'info'])>{{ $event->severity }}</span></td>
-                            <td class="px-4 py-2">{{ $event->message }}</td>
-                            <td class="px-4 py-2">{{ $event->status }}</td>
-                            <td class="px-4 py-2 text-gray-500">{{ $event->triggered_at?->diffForHumans() }}</td>
-                            <td class="px-4 py-2 text-right whitespace-nowrap">
-                                @if ($event->status === 'open')
-                                    <button wire:click="acknowledge({{ $event->id }})" class="text-indigo-600 hover:underline mr-2">Ack</button>
-                                @endif
-                                @if ($event->status !== 'resolved')
-                                    <button wire:click="resolve({{ $event->id }})" class="text-green-600 hover:underline">Resolve</button>
-                                @endif
-                            </td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="6" class="px-4 py-6 text-center text-gray-500">No alerts raised yet.</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
+            </div>
         </div>
     </div>
 </div>

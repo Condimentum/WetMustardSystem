@@ -33,7 +33,7 @@ class DailyIntermediateProductionReport extends AbstractReport
 
     public function name(): string
     {
-        return 'Daily Intermediate Production';
+        return 'Daily Wet Mustard - Manufacturing';
     }
 
     public function generate(CarbonInterface $from, CarbonInterface $to): array

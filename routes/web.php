@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\MicrosoftAuthCallbackController;
 use App\Http\Controllers\Auth\MicrosoftAuthRedirectController;
 use App\Http\Controllers\AuditTrailExportController;
+use App\Http\Controllers\ErrorLogExportController;
 use App\Http\Controllers\BatchRecordExportController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
@@ -65,20 +66,26 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('manufacturing-orders/{winmanMo}/workspace', 'pages.manufacturing-orders.workspace')
         ->name('manufacturing-orders.workspace');
 
-    Route::get('production/ibc', \App\Http\Controllers\IbcProductionController::class)
-        ->name('production.ibc');
-
-    Route::get('production/bucketing', \App\Http\Controllers\BucketingController::class)
-        ->name('production.bucketing');
+    Route::get('production/packed', \App\Http\Controllers\PackedProductionController::class)
+        ->name('production.packed');
 
     Volt::route('calibrations', 'pages.calibrations.daily')
         ->name('calibrations.daily');
 
+    Volt::route('calibrations/wm001', 'pages.calibrations.wm001')
+        ->name('calibrations.wm001');
+
+    Volt::route('calibrations/wm002', 'pages.calibrations.wm002')
+        ->name('calibrations.wm002');
+
+    Volt::route('calibrations/wm006', 'pages.calibrations.wm006')
+        ->name('calibrations.wm006');
+
+    Volt::route('calibrations/wm013', 'pages.calibrations.wm013')
+        ->name('calibrations.wm013');
+
     Volt::route('quality/lab-testing', 'pages.quality-lab-testing.index')
         ->name('quality.lab-testing');
-
-    Volt::route('quality/lab-testing/ibc-traceability', 'pages.quality-lab-testing.ibc-traceability')
-        ->name('quality.lab-testing.ibc-traceability');
 
     Volt::route('quality/lab-testing/wet-mustard-lab', 'pages.quality-lab-testing.wet-mustard-lab')
         ->name('quality.lab-testing.wet-mustard-lab');
@@ -103,13 +110,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('can:admin')
         ->name('reporting.admin');
 
-    Volt::route('notifications', 'pages.notifications.admin')
+    Volt::route('notifications', 'pages.notifications.index')
+        ->name('notifications.index');
+
+    Volt::route('settings/notifications', 'pages.notifications.setup')
         ->middleware('can:admin')
-        ->name('notifications.admin');
+        ->name('notifications.setup');
 
     Volt::route('audit', 'pages.audit.index')
         ->middleware('can:admin')
         ->name('audit.index');
+
+    Volt::route('audit/errors', 'pages.audit.errors')
+        ->middleware('can:admin')
+        ->name('audit.errors');
 
     Volt::route('settings', 'pages.settings.admin')
         ->middleware('can:admin')
@@ -138,6 +152,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('audit/export', AuditTrailExportController::class)
         ->middleware('can:admin')
         ->name('audit.export');
+
+    Route::get('audit/errors/export', ErrorLogExportController::class)
+        ->middleware('can:admin')
+        ->name('audit.errors.export');
 
     Route::get('batches/{batch}/export', BatchRecordExportController::class)
         ->name('batches.export');

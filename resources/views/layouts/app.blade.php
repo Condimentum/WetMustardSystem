@@ -19,6 +19,19 @@
         <div class="min-h-screen bg-gray-100">
             <livewire:layout.navigation />
 
+            @unless (request()->routeIs('dashboard'))
+                <div style="background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 100%);border-bottom:1px solid #e2e8f0;">
+                    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+                        <a href="{{ route('dashboard') }}" wire:navigate style="display:inline-flex;align-items:center;gap:8px;padding:12px 0;color:#3730a3;font-size:13px;font-weight:800;letter-spacing:.02em;text-decoration:none;">
+                            <svg style="width:16px;height:16px;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                            </svg>
+                            Main Menu
+                        </a>
+                    </div>
+                </div>
+            @endunless
+
             <!-- Page Heading -->
             @if (isset($header))
                 <header class="bg-white shadow">

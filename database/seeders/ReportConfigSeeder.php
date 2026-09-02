@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Domains\Reporting\Reports\DailyIntermediateProductionReport;
 use App\Domains\Reporting\Reports\MetalDetectorVerificationSheetReport;
-use App\Domains\Reporting\Reports\Wm003IbcTraceabilityReport;
 use App\Domains\Reporting\Reports\Wm005WetMustardLabTestingReport;
 use App\Domains\Reporting\Reports\Wm010RinseWaterTestReport;
 use App\Domains\Reporting\Reports\Wm001LabScalesCalibrationReport;
@@ -35,6 +34,7 @@ class ReportConfigSeeder extends Seeder
         'dbmts_traceability_exceptions',
         'dbmts_active_master_data',
         'dbmts_batch_summary',
+        'wm003_ibc_traceability', // replaced by WinMan-triggered doc_WM003 (Settings > Documents trigger material codes)
     ];
 
     /**
@@ -43,7 +43,6 @@ class ReportConfigSeeder extends Seeder
      */
     private const REPORTS = [
         MetalDetectorVerificationSheetReport::KEY => 'Metal Detector Verification Sheet (PDF)',
-        Wm003IbcTraceabilityReport::KEY => 'WM003 Vinegar IBC Traceability (PDF)',
         Wm005WetMustardLabTestingReport::KEY => 'WM005 Wet Mustard Lab Testing (PDF)',
         Wm010RinseWaterTestReport::KEY => 'WM010 Rinse Water Test Sheet (PDF)',
         Wm001LabScalesCalibrationReport::KEY => 'WM001 Lab Scales Daily Calibration (PDF)',
@@ -57,7 +56,7 @@ class ReportConfigSeeder extends Seeder
      * [report_key => report_name].
      */
     private const SCHEDULED_REPORTS = [
-        DailyIntermediateProductionReport::KEY => 'Daily Intermediate Production',
+        DailyIntermediateProductionReport::KEY => 'Daily Wet Mustard - Manufacturing',
     ];
 
     public function run(): void

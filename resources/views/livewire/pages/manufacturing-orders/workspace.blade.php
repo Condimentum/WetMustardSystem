@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Audit\Jobs\RecordErrorLogJob;
 use App\Domains\Batch\Exceptions\BatchException;
 use App\Domains\WinMan\Exceptions\WinManException;
 use App\Domains\WinMan\Jobs\FetchManufacturingOrderJob;
@@ -80,6 +81,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                 auth()->user(),
             );
         } catch (WinManException|BatchException $e) {
+            app(RecordErrorLogJob::class)($e, 'manufacturing-orders.workspace.start-batch');
             $this->error = $e->getMessage();
 
             return;
@@ -428,6 +430,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
 
                 @if (count($existingBatches) > 0)
                     <div style="background:#fff;border:1px solid #dbe1ea;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.05);">
+                        <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200 text-sm">
                             <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
                                 <tr>
@@ -475,6 +478,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                                 @endforeach
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 @else
                     <div style="background:#fff;border:1px solid #dbe1ea;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.05);">

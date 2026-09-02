@@ -108,6 +108,7 @@ new #[Layout('layouts.app')] #[Title('Metal Detector')] class extends Component 
         </form>
 
         <div class="bg-white shadow-sm rounded-lg overflow-hidden">
+            <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50 text-left text-xs text-gray-500 uppercase">
                     <tr>
@@ -142,6 +143,7 @@ new #[Layout('layouts.app')] #[Title('Metal Detector')] class extends Component 
                     @endforelse
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 </div>

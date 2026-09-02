@@ -54,7 +54,10 @@ class SendReportOperation
             $log->recipients_to = implode(', ', $recipients['to']);
             $log->recipients_cc = implode(', ', $recipients['cc']);
 
-            if ($recipients['to'] === []) {
+            if (($report['skip_if_empty'] ?? false) === true && (int) $report['row_count'] === 0) {
+                $log->status = ReportSendLog::STATUS_SKIPPED;
+                $log->error_message = 'No trigger material usage found for this period.';
+            } elseif ($recipients['to'] === []) {
                 $log->status = ReportSendLog::STATUS_SKIPPED;
                 $log->error_message = 'No recipients resolved.';
             } else {

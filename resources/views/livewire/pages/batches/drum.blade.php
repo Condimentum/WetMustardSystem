@@ -134,6 +134,7 @@ new #[Layout('layouts.app')] #[Title('Drum Processing')] class extends Component
                             <div class="font-semibold text-gray-800">Pallet {{ $pallet->pallet_ticket_number }}</div>
                             <div class="text-xs text-gray-400">Pallecon {{ $pallet->pallecon_number ?? '—' }} · {{ $pallet->drumRecords->count() }} drums</div>
                         </div>
+                        <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200 text-sm">
                             <thead class="text-left text-xs text-gray-500 uppercase"><tr><th class="py-1">Drum</th><th class="py-1 text-right">Weight</th><th class="py-1">Bag seal</th><th class="py-1">Drum seal</th><th class="py-1">Liner</th></tr></thead>
                             <tbody class="divide-y divide-gray-100">
@@ -144,6 +145,7 @@ new #[Layout('layouts.app')] #[Title('Drum Processing')] class extends Component
                                 @endforelse
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 @empty
                     <div class="bg-white rounded-lg p-8 text-center text-sm text-gray-500">No pallets recorded yet.</div>

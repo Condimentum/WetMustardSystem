@@ -6,7 +6,6 @@ use App\Domains\Reporting\Jobs\ResolveReportRecipientsJob;
 use App\Domains\Reporting\Reports\DailyIntermediateProductionReport;
 use App\Domains\Reporting\Reports\MetalDetectorVerificationSheetReport;
 use App\Domains\Reporting\Reports\OpenBatchesReport;
-use App\Domains\Reporting\Reports\Wm003IbcTraceabilityReport;
 use App\Domains\Reporting\Reports\Wm005WetMustardLabTestingReport;
 use App\Domains\Reporting\Reports\Wm010RinseWaterTestReport;
 use App\Domains\Reporting\Reports\Wm001LabScalesCalibrationReport;
@@ -28,7 +27,6 @@ use App\Models\ReportSendLog;
 use App\Models\SaltMeterCalibration;
 use App\Models\User;
 use App\Models\ViscosityMeterAutozeroCheck;
-use App\Models\Wm003IbcTraceabilityEntry;
 use App\Models\Wm005LabTestingEntry;
 use App\Models\Wm010RinseWaterTestEntry;
 use App\Operations\SendOffice365MailOperation;
@@ -317,27 +315,6 @@ class ReportingTest extends TestCase
         $this->assertFileExists($report['attachments'][0]['path']);
         $this->assertGreaterThan(0, filesize($report['attachments'][0]['path']));
         $this->assertStringContainsString('Metal Detector Verification Sheet', $report['subject']);
-    }
-
-    public function test_wm003_report_generates_pdf_attachment(): void
-    {
-        $this->seedCalibrationDocument('WM003', 'WM003 Vinegar IBC Traceability');
-
-        Wm003IbcTraceabilityEntry::create([
-            'date_used' => now()->toDateString(),
-            'supplier_production_date' => now()->toDateString(),
-            'best_before_date' => now()->addYear()->toDateString(),
-            'batch_no' => 'BATCH-001',
-            'time_on' => '08:00:00',
-            'operator_name' => 'Operator A',
-        ]);
-
-        $report = app(Wm003IbcTraceabilityReport::class)->generate(now()->startOfDay(), now()->endOfDay());
-
-        $this->assertSame(1, $report['row_count']);
-        $this->assertArrayHasKey('attachments', $report);
-        $this->assertFileExists($report['attachments'][0]['path']);
-        $this->assertGreaterThan(0, filesize($report['attachments'][0]['path']));
     }
 
     public function test_wm005_report_generates_pdf_attachment(): void

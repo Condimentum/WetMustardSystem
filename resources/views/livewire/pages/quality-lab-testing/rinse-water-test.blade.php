@@ -115,6 +115,7 @@ new #[Layout('layouts.app')] #[Title('WM010 Rinse Water Test')] class extends Co
 
         <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mt-6">
             <div style="background:#2d3f8f;" class="px-4 py-2 text-sm font-semibold text-white">Recent WM010 entries</div>
+            <div class="overflow-x-auto">
             <table class="min-w-full text-sm">
                 <thead><tr style="background:#2d3f8f;color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-3 py-2 text-left">Date</th><th class="px-3 py-2 text-left">Section</th><th class="px-3 py-2 text-left">Equipment</th><th class="px-3 py-2 text-left">Reading</th><th class="px-3 py-2 text-left">Pass/Fail</th><th class="px-3 py-2 text-left">Operator</th></tr></thead>
                 <tbody class="divide-y divide-slate-100">
@@ -132,6 +133,7 @@ new #[Layout('layouts.app')] #[Title('WM010 Rinse Water Test')] class extends Co
                 @endforelse
                 </tbody>
             </table>
+            </div>
         </div>
             </div>
         </div>

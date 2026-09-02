@@ -49,10 +49,6 @@ new class extends Component
     #[Computed]
     public function openNotificationsCount(): int
     {
-        if (! auth()->user()?->can('admin')) {
-            return 0;
-        }
-
         return NotificationEvent::query()->where('status', NotificationEvent::STATUS_OPEN)->count();
     }
 }; ?>
@@ -70,15 +66,6 @@ new class extends Component
             <a href="{{ route('dashboard') }}" wire:navigate class="shrink-0">
                 <img src="{{ asset('assets/condimentum-logo.png') }}" alt="{{ config('app.name', 'Wet Mustard System') }}" class="h-12 w-auto" />
             </a>
-
-            @unless (request()->routeIs('dashboard'))
-                <a href="{{ route('dashboard') }}" wire:navigate class="hidden sm:inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-sky-50 hover:text-sky-700">
-                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-                    </svg>
-                    Main Menu
-                </a>
-            @endunless
         </div>
 
         <div class="hidden items-center gap-3 sm:flex">
@@ -86,7 +73,7 @@ new class extends Component
                 {{ $isTestEnvironment ? 'Test DB' : 'Live DB' }}
             </span>
             @can('admin')
-                <a href="{{ route('settings.admin') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('settings.*') || request()->routeIs('reporting.*') || request()->routeIs('notifications.*') || request()->routeIs('audit.*') ? $linkActive : $linkIdle }}">Settings</a>
+                <a href="{{ route('settings.admin') }}" wire:navigate class="{{ $linkBase }} {{ request()->routeIs('settings.*') || request()->routeIs('reporting.*') || request()->routeIs('notifications.setup') || request()->routeIs('audit.*') ? $linkActive : $linkIdle }}">Settings</a>
             @endcan
 
             <div x-data="{ userMenuOpen: false }" class="relative shrink-0">
@@ -115,14 +102,12 @@ new class extends Component
 
                     <a href="{{ route('profile') }}" wire:navigate class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">View account</a>
 
-                    @can('admin')
-                        <a href="{{ route('notifications.admin') }}" wire:navigate class="flex items-center justify-between px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                            <span>Notifications</span>
-                            @if ($this->openNotificationsCount > 0)
-                                <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">{{ $this->openNotificationsCount }} open</span>
-                            @endif
-                        </a>
-                    @endcan
+                    <a href="{{ route('notifications.index') }}" wire:navigate class="flex items-center justify-between px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                        <span>Notifications</span>
+                        @if ($this->openNotificationsCount > 0)
+                            <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">{{ $this->openNotificationsCount }} open</span>
+                        @endif
+                    </a>
 
                     <button wire:click="logout" type="button" class="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Sign out</button>
                 </div>
@@ -139,11 +124,8 @@ new class extends Component
 
     <div :class="{ 'block': open, 'hidden': !open }" class="hidden border-t border-slate-200 bg-white sm:hidden">
         <div class="space-y-1 px-4 py-3">
-            @unless (request()->routeIs('dashboard'))
-                <a href="{{ route('dashboard') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium text-slate-700 hover:bg-sky-50 hover:text-sky-700">&larr; Main Menu</a>
-            @endunless
             @can('admin')
-                <a href="{{ route('settings.admin') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.*') || request()->routeIs('reporting.*') || request()->routeIs('notifications.*') || request()->routeIs('audit.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Settings</a>
+                <a href="{{ route('settings.admin') }}" wire:navigate class="block rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.*') || request()->routeIs('reporting.*') || request()->routeIs('notifications.setup') || request()->routeIs('audit.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Settings</a>
             @endcan
         </div>
 
@@ -160,14 +142,12 @@ new class extends Component
             </div>
             <div class="flex items-center gap-2">
                 <a href="{{ route('profile') }}" wire:navigate class="inline-flex items-center rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100">View account</a>
-                @can('admin')
-                    <a href="{{ route('notifications.admin') }}" wire:navigate class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100">
-                        Notifications
-                        @if ($this->openNotificationsCount > 0)
-                            <span class="inline-flex items-center rounded-full bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">{{ $this->openNotificationsCount }}</span>
-                        @endif
-                    </a>
-                @endcan
+                <a href="{{ route('notifications.index') }}" wire:navigate class="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100">
+                    Notifications
+                    @if ($this->openNotificationsCount > 0)
+                        <span class="inline-flex items-center rounded-full bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">{{ $this->openNotificationsCount }}</span>
+                    @endif
+                </a>
                 <button wire:click="logout" type="button" class="inline-flex items-center rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100">Sign out</button>
             </div>
         </div>

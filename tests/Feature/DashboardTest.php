@@ -17,17 +17,15 @@ class DashboardTest extends TestCase
         $response = $this->actingAs($user)->get(route('dashboard'));
 
         $response->assertOk();
-        $response->assertSee('Manufacturing Dashboard');
+        $response->assertSee('Wet Mustard Booking System');
         $response->assertSee('Daily Calibrations');
         $response->assertSee('Metal Detections');
         $response->assertSee('Quality &amp; Lab Testing', false);
-        $response->assertSee('Intermediate Production');
-        $response->assertSee('IBC Production');
-        $response->assertSee('Bucketing');
+        $response->assertSee('Wet Mustard - Manufacturing');
+        $response->assertSee('Wet Mustard - Packed');
         $response->assertSee(route('metal-detector.daily'));
         $response->assertSee(route('manufacturing-orders.search'));
-        $response->assertSee(route('production.ibc'));
-        $response->assertSee(route('production.bucketing'));
+        $response->assertSee(route('production.packed'));
         $response->assertSee(route('calibrations.daily'));
         $response->assertSee(route('quality.lab-testing'));
     }

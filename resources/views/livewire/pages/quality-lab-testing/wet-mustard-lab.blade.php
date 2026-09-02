@@ -221,6 +221,7 @@ new #[Layout('layouts.app')] #[Title('WM005 Wet Mustard Lab Testing')] class ext
 
         <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mt-6">
             <div style="background:#2d3f8f;" class="px-4 py-2 text-sm font-semibold text-white">Recent WM005 entries</div>
+            <div class="overflow-x-auto">
             <table class="min-w-full text-sm">
                 <thead><tr style="background:#2d3f8f;color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-3 py-2 text-left">Date</th><th class="px-3 py-2 text-left">Time</th><th class="px-3 py-2 text-left">Batch</th><th class="px-3 py-2 text-left">pH</th><th class="px-3 py-2 text-left">Salt</th><th class="px-3 py-2 text-left">Tested by</th></tr></thead>
                 <tbody class="divide-y divide-slate-100">
@@ -238,6 +239,7 @@ new #[Layout('layouts.app')] #[Title('WM005 Wet Mustard Lab Testing')] class ext
                 @endforelse
                 </tbody>
             </table>
+            </div>
         </div>
             </div>
         </div>

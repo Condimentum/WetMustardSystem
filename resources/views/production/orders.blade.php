@@ -2,7 +2,7 @@
     <div class="py-8">
         <div class="max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-4">
             @php
-                $icon = $title === 'Bucketing' ? 'bucketing-icon.png' : 'ibc-production-icon.png';
+                $icon = 'ibc-production-icon.png';
             @endphp
 
             <div style="background:#fff;border:1px solid #dbe1ea;border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(15,23,42,0.08);">

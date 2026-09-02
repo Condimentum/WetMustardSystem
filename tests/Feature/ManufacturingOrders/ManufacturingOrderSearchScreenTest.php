@@ -23,7 +23,7 @@ class ManufacturingOrderSearchScreenTest extends TestCase
 
         Volt::test('pages.manufacturing-orders.search')
             ->assertOk()
-            ->assertSee('Manufacturing Orders')
+            ->assertSee('WET MUSTARD - MANUFACTURING')
             ->assertSee('No eligible outstanding MOs found.');
     }
 

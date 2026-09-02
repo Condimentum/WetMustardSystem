@@ -44,42 +44,29 @@ class ProductionOrdersTest extends TestCase
         $this->app->instance(SearchOutstandingManufacturingOrdersJob::class, $mock);
     }
 
-    public function test_ibc_production_page_shows_only_uom_2_orders(): void
+    public function test_packed_page_shows_all_classification_29_orders_regardless_of_uom(): void
     {
         $this->mockOrders();
         $user = User::factory()->create();
 
-        $response = $this->actingAs($user)->get(route('production.ibc'));
+        $response = $this->actingAs($user)->get(route('production.packed'));
 
         $response->assertOk();
         $response->assertSee('MO-IBC');
-        $response->assertDontSee('MO-INT');
-        $response->assertDontSee('MO-BUCKET');
-    }
-
-    public function test_bucketing_page_shows_only_uom_44_orders(): void
-    {
-        $this->mockOrders();
-        $user = User::factory()->create();
-
-        $response = $this->actingAs($user)->get(route('production.bucketing'));
-
-        $response->assertOk();
         $response->assertSee('MO-BUCKET');
         $response->assertDontSee('MO-INT');
-        $response->assertDontSee('MO-IBC');
     }
 
-    public function test_calibrations_and_quality_pages_are_placeholders(): void
+    public function test_calibrations_and_quality_pages_are_available(): void
     {
         $user = User::factory()->create();
 
         $this->actingAs($user)->get(route('calibrations.daily'))
             ->assertOk()
-            ->assertSee('Coming soon');
+            ->assertSee('DAILY CALIBRATIONS');
 
         $this->actingAs($user)->get(route('quality.lab-testing'))
             ->assertOk()
-            ->assertSee('Coming soon');
+            ->assertSee('QUALITY &amp; LAB TESTING', false);
     }
 }

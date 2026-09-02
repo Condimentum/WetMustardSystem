@@ -19,6 +19,7 @@ class DocumentReference extends Model
         'version',
         'issue_date',
         'module',
+        'trigger_material_codes',
         'status',
     ];
 
@@ -26,6 +27,7 @@ class DocumentReference extends Model
     {
         return [
             'issue_date' => 'date',
+            'trigger_material_codes' => 'array',
         ];
     }
 

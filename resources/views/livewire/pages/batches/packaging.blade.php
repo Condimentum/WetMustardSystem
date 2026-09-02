@@ -111,6 +111,7 @@ new #[Layout('layouts.app')] #[Title('Packaging Lots')] class extends Component 
         </form>
 
         <div class="bg-white shadow-sm rounded-lg overflow-hidden">
+            <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50 text-left text-xs text-gray-500 uppercase">
                     <tr><th class="px-4 py-3">Type</th><th class="px-4 py-3">Supplier</th><th class="px-4 py-3">Reference</th><th class="px-4 py-3">Machine</th><th class="px-4 py-3">Operator</th></tr>
@@ -135,6 +136,7 @@ new #[Layout('layouts.app')] #[Title('Packaging Lots')] class extends Component 
                     @endforelse
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 </div>

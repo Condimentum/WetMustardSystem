@@ -4,6 +4,7 @@ use App\Domains\Reporting\Support\DocumentSetup;
 use App\Models\DocumentLayoutSetting;
 use App\Models\DocumentReference;
 use App\Models\DocumentReferenceChange;
+use App\Models\ReportConfig;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
@@ -30,6 +31,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
     public string $module = '';
     public string $issued_by = '';
     public string $reason_for_change = '';
+    public string $trigger_material_codes = '';
 
     public string $moduleFilter = '';
 
@@ -148,6 +150,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
         $this->version = (string) ($document->version ?? '');
         $this->issue_date = $document->issue_date?->toDateString() ?? '';
         $this->module = (string) ($document->module ?? '');
+        $this->trigger_material_codes = implode(', ', (array) ($document->trigger_material_codes ?? []));
         $latestChange = Schema::hasTable('document_reference_changes')
             ? DocumentReferenceChange::query()
                 ->where('document_reference_id', $document->id)
@@ -200,6 +203,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
         }
 
         $document->delete();
+        ReportConfig::query()->where('report_key', 'doc_'.$document->code)->delete();
 
         $this->selectedDocumentId = DocumentReference::query()->orderBy('code')->value('id');
         $this->documentModalOpen = false;
@@ -217,6 +221,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
         $this->version = '';
         $this->issue_date = '';
         $this->module = '';
+        $this->trigger_material_codes = '';
         $this->issued_by = (string) (auth()->user()?->name ?? '');
         $this->reason_for_change = '';
         $this->loadDocumentSetup(null);
@@ -332,6 +337,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
             'module' => ['nullable', 'string', 'max:255'],
             'issued_by' => ['nullable', 'string', 'max:255'],
             'reason_for_change' => ['nullable', 'string', 'max:1000'],
+            'trigger_material_codes' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $normalizedCode = strtoupper(trim((string) $validated['code']));
@@ -343,6 +349,12 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
         $normalizedIssueDate = trim((string) ($validated['issue_date'] ?? '')) ?: null;
         $normalizedModule = trim((string) ($validated['module'] ?? '')) ?: null;
         $enteredReason = trim((string) ($validated['reason_for_change'] ?? ''));
+        $triggerCodes = collect(explode(',', (string) ($validated['trigger_material_codes'] ?? '')))
+            ->map(fn ($code) => trim((string) $code))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
 
         $latestReason = '';
         if ($isUpdate && $existing !== null && Schema::hasTable('document_reference_changes')) {
@@ -382,9 +394,31 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                 'version' => $normalizedVersion,
                 'issue_date' => $normalizedIssueDate,
                 'module' => $normalizedModule,
+                'trigger_material_codes' => $triggerCodes !== [] ? $triggerCodes : null,
                 'status' => 'Active',
             ],
         );
+
+        if ($isUpdate && $existing !== null && $existing->code !== $normalizedCode) {
+            ReportConfig::query()->where('report_key', 'doc_'.$existing->code)->delete();
+        }
+
+        if ($triggerCodes !== []) {
+            ReportConfig::query()->updateOrCreate(
+                ['report_key' => 'doc_'.$normalizedCode],
+                [
+                    'report_name' => $normalizedCode.' - '.$normalizedTitle,
+                    'report_type' => 'scheduled',
+                    'schedule_time' => '06:00',
+                    'date_offset_from_days' => -1,
+                    'date_offset_to_days' => -1,
+                    'enabled' => true,
+                    'updated_by' => auth()->id(),
+                ],
+            );
+        } else {
+            ReportConfig::query()->where('report_key', 'doc_'.$normalizedCode)->delete();
+        }
 
         if ($this->hasDocumentLayoutSettingsTable()) {
             DocumentLayoutSetting::query()->updateOrCreate(
@@ -426,6 +460,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
         $this->version = (string) ($document->version ?? '');
         $this->issue_date = $document->issue_date?->toDateString() ?? '';
         $this->module = (string) ($document->module ?? '');
+        $this->trigger_material_codes = implode(', ', (array) ($document->trigger_material_codes ?? []));
         $this->loadDocumentSetup($document);
 
         if (! $isUpdate) {
@@ -641,8 +676,9 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                 <a href="{{ route('settings.operator-sync') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.operator-sync') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Operator Sync</a>
                 <a href="{{ route('settings.documents') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.documents') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Documents</a>
                 <a href="{{ route('reporting.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('reporting.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Reporting</a>
-                <a href="{{ route('notifications.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Notifications</a>
-                <a href="{{ route('audit.index') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Audit</a>
+                <a href="{{ route('notifications.setup') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.setup') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Notifications Setup</a>
+                <a href="{{ route('audit.index') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.index') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Audit</a>
+                <a href="{{ route('audit.errors') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.errors') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Error Log</a>
             </div>
         </div>
 
@@ -758,6 +794,12 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                         @endforeach
                                     </select>
                                     @error('module') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-xs text-gray-600 mb-1">Trigger material codes (WinMan Product IDs)</label>
+                                    <input wire:model.defer="trigger_material_codes" class="w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="e.g. 90010012, 90010013" />
+                                    <p class="mt-1 text-xs text-gray-500">Comma-separated. When any of these materials is issued to a batch, this document auto-generates and emails for that day.</p>
+                                    @error('trigger_material_codes') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                                 </div>
                             </div>
 

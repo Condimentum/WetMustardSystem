@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Audit\Jobs\RecordErrorLogJob;
 use App\Domains\Batch\Exceptions\BatchException;
 use App\Domains\Batch\Jobs\ValidateBatchCompletionJob;
 use App\Features\Batches\ApproveBatchQaFeature;
@@ -381,6 +382,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                 auth()->user(),
             );
         } catch (WinManException $e) {
+            app(RecordErrorLogJob::class)($e, 'batches.show.bom-allocation');
             $this->activeBomMessage = $e->getMessage();
 
             return;
@@ -521,6 +523,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         try {
             app(SignIngredientLotFeature::class)($lot, $purpose, $operator);
         } catch (BatchException $e) {
+            app(RecordErrorLogJob::class)($e, 'batches.show.sign-lot');
             session()->flash('status', $e->getMessage());
 
             return;
@@ -917,6 +920,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         try {
             app(CompleteBatchFeature::class)($this->batch, auth()->user());
         } catch (BatchException $e) {
+            app(RecordErrorLogJob::class)($e, 'batches.show.complete');
             $this->completionIssues = $e->issues;
 
             return;
@@ -1129,6 +1133,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                 auth()->user(),
             );
         } catch (WinManException $e) {
+            app(RecordErrorLogJob::class)($e, 'batches.show.book-finished-goods');
             $this->bookFlash = $e->getMessage();
 
             return;
@@ -2104,6 +2109,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                         <div style="background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:12px;padding:12px 14px;font-size:14px;font-weight:600;">No component snapshot stored for this MO.</div>
                     @else
                         <div style="background:#fff;border:1px solid #dbe1ea;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.05);">
+                            <div class="overflow-x-auto">
                             <table class="min-w-full divide-y divide-gray-200 text-sm">
                                 <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
                                     <tr>
@@ -2265,6 +2271,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                     @endphp
 
                                                     <div class="border border-indigo-100 rounded-lg overflow-hidden bg-white">
+                                                        <div class="overflow-x-auto">
                                                         <table class="min-w-full divide-y divide-gray-200 text-sm">
                                                             <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
                                                                 <tr>
@@ -2336,6 +2343,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                                 @endforelse
                                                             </tbody>
                                                         </table>
+                                                        </div>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -2343,6 +2351,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                     @endforeach
                                 </tbody>
                             </table>
+                            </div>
                         </div>
                     @endif
 

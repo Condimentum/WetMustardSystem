@@ -5,8 +5,8 @@ namespace App\Features\ManufacturingOrders;
 use App\Domains\WinMan\Jobs\SearchOutstandingManufacturingOrdersJob;
 
 /**
- * Lists outstanding WinMan MOs for a single classification/UOM combination
- * (used by the IBC Production and Bucketing screens).
+ * Lists outstanding WinMan MOs for a single classification (optionally filtered
+ * by unit of measure). Used by the Wet Mustard - Packed screen.
  */
 class ShowProductionOrdersFeature
 {

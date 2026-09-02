@@ -18,7 +18,7 @@ new #[Layout('layouts.app')] #[Title('Quality & Lab Testing')] class extends Com
 
                     <div>
                         <div style="font-size:1.3rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">QUALITY &amp; LAB TESTING</div>
-                        <div style="font-size:0.75rem;font-weight:700;color:#64748b;letter-spacing:.14em;margin-top:4px;">WM003 &middot; WM005 &middot; WM010 CHECK SHEETS</div>
+                        <div style="font-size:0.75rem;font-weight:700;color:#64748b;letter-spacing:.14em;margin-top:4px;">WM005 &middot; WM010 CHECK SHEETS</div>
                     </div>
 
                     <a href="{{ route('dashboard') }}" wire:navigate style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:12px;font-weight:800;text-decoration:none;">
@@ -27,12 +27,7 @@ new #[Layout('layouts.app')] #[Title('Quality & Lab Testing')] class extends Com
                 </div>
             </div>
 
-            <div class="p-6 grid gap-4 md:grid-cols-3">
-                <a href="{{ route('quality.lab-testing.ibc-traceability') }}" wire:navigate class="rounded-xl border border-slate-200 p-4 hover:border-indigo-300 hover:bg-indigo-50/40 transition">
-                    <div class="font-semibold text-slate-900">IBC Traceability</div>
-                    <div class="text-xs text-slate-500 mt-1">WM003 Vinegar IBC Traceability</div>
-                </a>
-
+            <div class="p-6 grid gap-4 md:grid-cols-2">
                 <a href="{{ route('quality.lab-testing.wet-mustard-lab') }}" wire:navigate class="rounded-xl border border-slate-200 p-4 hover:border-indigo-300 hover:bg-indigo-50/40 transition">
                     <div class="font-semibold text-slate-900">Wet Mustard Lab Testing</div>
                     <div class="text-xs text-slate-500 mt-1">WM005 Quality analytical checks</div>

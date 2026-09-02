@@ -31,22 +31,22 @@ class ShowDashboardFeature
                 'route' => 'quality.lab-testing',
             ],
             [
-                'title' => 'Intermediate Production',
+                'title' => 'Wet Mustard - Manufacturing',
                 'subtitle' => 'Search MOs & start batches',
                 'icon' => 'gear',
                 'route' => 'manufacturing-orders.search',
             ],
             [
-                'title' => 'IBC Production',
-                'subtitle' => 'Outstanding Wet Packed IBC orders',
+                'title' => 'Wet Mustard - Packed',
+                'subtitle' => 'Outstanding packed orders, all product types',
                 'icon' => 'trolley',
-                'route' => 'production.ibc',
+                'route' => 'production.packed',
             ],
             [
-                'title' => 'Bucketing',
-                'subtitle' => 'Outstanding Wet Packed bucket orders',
-                'icon' => 'bucket',
-                'route' => 'production.bucketing',
+                'title' => 'Notifications',
+                'subtitle' => 'Alerts raised across checks & production',
+                'icon' => 'bell',
+                'route' => 'notifications.index',
             ],
         ];
 

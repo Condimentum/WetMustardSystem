@@ -41,6 +41,6 @@ class DailyMetalDetectorTest extends TestCase
         $this->actingAs($user)
             ->get(route('metal-detector.daily'))
             ->assertOk()
-            ->assertSee('Metal Detection Check Log');
+            ->assertSee('METAL DETECTION CHECK LOG');
     }
 }

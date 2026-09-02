@@ -140,6 +140,7 @@ new #[Layout('layouts.app')] #[Title('Packing Run')] class extends Component {
                             </div>
                             <x-primary-button wire:click="addIbc">Consume pallecon</x-primary-button>
                         </div>
+                        <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200 text-sm">
                             <thead class="text-left text-xs text-gray-500 uppercase"><tr><th class="py-2">Pallecon</th><th class="py-2">Source batch</th><th class="py-2">Time on</th></tr></thead>
                             <tbody class="divide-y divide-gray-100">
@@ -150,6 +151,7 @@ new #[Layout('layouts.app')] #[Title('Packing Run')] class extends Component {
                                 @endforelse
                             </tbody>
                         </table>
+                        </div>
                     </div>
 
                     {{-- Hourly --}}
@@ -162,6 +164,7 @@ new #[Layout('layouts.app')] #[Title('Packing Run')] class extends Component {
                             </div>
                             <x-primary-button wire:click="addHourly">Record hourly check</x-primary-button>
                         </div>
+                        <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200 text-sm">
                             <thead class="text-left text-xs text-gray-500 uppercase"><tr><th class="py-2">Time</th><th class="py-2">Signed by</th></tr></thead>
                             <tbody class="divide-y divide-gray-100">
@@ -172,6 +175,7 @@ new #[Layout('layouts.app')] #[Title('Packing Run')] class extends Component {
                                 @endforelse
                             </tbody>
                         </table>
+                        </div>
                     </div>
 
                     {{-- Weight --}}
@@ -190,6 +194,7 @@ new #[Layout('layouts.app')] #[Title('Packing Run')] class extends Component {
                                 <x-primary-button wire:click="addWeight">Record weight check</x-primary-button>
                             </div>
                         </div>
+                        <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200 text-sm">
                             <thead class="text-left text-xs text-gray-500 uppercase"><tr><th class="py-2">Time</th><th class="py-2 text-right">Average</th><th class="py-2">Result</th></tr></thead>
                             <tbody class="divide-y divide-gray-100">
@@ -204,6 +209,7 @@ new #[Layout('layouts.app')] #[Title('Packing Run')] class extends Component {
                                 @endforelse
                             </tbody>
                         </table>
+                        </div>
                     </div>
 
                     {{-- Pallets --}}
@@ -215,6 +221,7 @@ new #[Layout('layouts.app')] #[Title('Packing Run')] class extends Component {
                             <div><label class="block text-xs text-gray-600 mb-1">BBE label</label><input wire:model="pallet.bbe_pallet_label" class="w-full border-gray-300 rounded-md shadow-sm text-sm" /></div>
                             <x-primary-button wire:click="addPallet">Add pallet</x-primary-button>
                         </div>
+                        <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200 text-sm">
                             <thead class="text-left text-xs text-gray-500 uppercase"><tr><th class="py-2">Pallet</th><th class="py-2">Ticket</th><th class="py-2 text-right">Amount</th><th class="py-2">BBE</th></tr></thead>
                             <tbody class="divide-y divide-gray-100">
@@ -225,6 +232,7 @@ new #[Layout('layouts.app')] #[Title('Packing Run')] class extends Component {
                                 @endforelse
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 </div>
             </div>

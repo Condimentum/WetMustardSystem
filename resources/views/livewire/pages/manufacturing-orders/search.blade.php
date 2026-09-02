@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Audit\Jobs\RecordErrorLogJob;
 use App\Domains\Batch\Exceptions\BatchException;
 use App\Domains\WinMan\Exceptions\WinManException;
 use App\Features\Batches\StartBatchFromManufacturingOrderFeature;
@@ -196,6 +197,7 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                 auth()->user(),
             );
         } catch (WinManException|BatchException $e) {
+            app(RecordErrorLogJob::class)($e, 'manufacturing-orders.search.start-batch');
             $this->error = $e->getMessage();
 
             return;
@@ -380,10 +382,10 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
 
     private function loadOrders(): void
     {
-        $orders = app(SearchManufacturingOrdersFeature::class)(
+        $orders = collect(app(SearchManufacturingOrdersFeature::class)(
             $this->search !== '' ? $this->search : null,
             50,
-        );
+        ))->filter(fn ($o) => $o->classification === 30)->values()->all();
 
         $codes = collect($orders)->map(fn ($o) => $o->winmanProductId)->filter()->unique()->all();
 
@@ -458,6 +460,7 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                 @endif
 
                 <div class="rounded-lg border border-gray-200 overflow-hidden">
+                    <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                         <thead class="text-left text-xs text-gray-500 uppercase bg-gray-50">
                             <tr>
@@ -486,6 +489,7 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                             @endforelse
                         </tbody>
                     </table>
+                    </div>
                 </div>
 
                 <div class="flex flex-wrap items-end gap-3">
@@ -558,20 +562,8 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
         @endif
         <div style="background:#fff;border:1px solid #dbe1ea;border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(15,23,42,0.08);">
             @php
-                $preferredClassifications = [
-                    30 => 'Intermediate',
-                    29 => 'Wet Packed',
-                ];
-                $uomLabels = [
-                    2 => 'Pallecon',
-                    44 => 'Buckets',
-                ];
-
                 $allOrders = collect($orders);
                 $hasAnyOrder = $allOrders->isNotEmpty();
-                $intermediateCount = $allOrders->where('classification', 30)->count();
-                $wetPackedCount = $allOrders->where('classification', 29)->count();
-                $otherCount = max($allOrders->count() - $intermediateCount - $wetPackedCount, 0);
 
                 $renderOrderRow = function (array $order): string {
                     $winmanMo = (int) $order['winman_manufacturing_order'];
@@ -586,7 +578,6 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                     $actionButton = '<a href="'.e(route('manufacturing-orders.workspace', ['winmanMo' => $winmanMo])).'" wire:navigate style="display:inline-flex;align-items:center;padding:9px 14px;border-radius:10px;background:linear-gradient(180deg,#4f46e5 0%,#4338ca 100%);border:1px solid #4338ca;color:#fff;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;box-shadow:0 3px 10px rgba(67,56,202,.22);">Start</a>';
 
                     $productDescription = e(\Illuminate\Support\Str::limit((string) $order['product_description'], 52));
-                    $dbmtsName = e($order['dbmts_product_name'] ?? '—');
                     $moRef = e((string) $order['winman_manufacturing_order_id']);
                     $productId = e((string) $order['winman_product_id']);
                     $formattedOutstanding = number_format((float) $order['quantity_outstanding'], 3, '.', '');
@@ -602,7 +593,6 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                             .'<div style="color:#1e293b;font-weight:700;">'.$productDescription.'</div>'
                             .'<div style="color:#64748b;font-size:12px;margin-top:2px;">'.$productId.'</div>'
                         .'</td>'
-                        .'<td class="px-4 py-4" style="color:#334155;">'.$dbmtsName.'</td>'
                         .'<td class="px-4 py-4 text-right" style="color:#0f766e;font-weight:800;">'.$outstanding.'</td>'
                         .'<td class="px-4 py-4" style="font-weight:700;color:#1e293b;">'.$due.'</td>'
                         .'<td class="px-4 py-4 text-right">'.$actionButton.'</td>'
@@ -617,29 +607,23 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                     </div>
 
                     <div>
-                        <div style="font-size:1.3rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">INTERMEDIATE PRODUCTION</div>
-                        <div style="font-size:0.75rem;font-weight:700;color:#64748b;letter-spacing:.14em;margin-top:4px;">GROUPED OUTSTANDING ORDERS</div>
+                        <div style="font-size:1.3rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">WET MUSTARD - MANUFACTURING</div>
+                        <div style="font-size:0.75rem;font-weight:700;color:#64748b;letter-spacing:.14em;margin-top:4px;">OUTSTANDING MANUFACTURING ORDERS</div>
                     </div>
 
                     <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:12px;font-weight:800;">
                         {{ count($orders) }} shown
                     </span>
                 </div>
-
-                <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
-                    <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">Intermediate: {{ $intermediateCount }}</span>
-                    <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#ecfeff;border:1px solid #a5f3fc;color:#0e7490;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">Wet Packed: {{ $wetPackedCount }}</span>
-                    <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">Other: {{ $otherCount }}</span>
-                </div>
             </div>
 
+            <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead>
                     <tr style="background:#2d3f8f;color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
                         <th class="px-4 py-3">MO Ref</th>
                         <th class="px-4 py-3">Type</th>
                         <th class="px-4 py-3">Product</th>
-                        <th class="px-4 py-3">DBMTS Product</th>
                         <th class="px-4 py-3 text-right">Outstanding</th>
                         <th class="px-4 py-3">Due</th>
                         <th class="px-4 py-3"></th>
@@ -648,7 +632,7 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                 <tbody class="divide-y divide-slate-100">
                     @if (! $hasAnyOrder)
                         <tr>
-                            <td colspan="7" class="px-4 py-10 text-center text-sm text-gray-500">
+                            <td colspan="6" class="px-4 py-10 text-center text-sm text-gray-500">
                                 No eligible outstanding MOs found.
                                 <div class="mt-1 text-xs text-gray-400">
                                     The ProductMaster WinMan mapping may be empty (pending WM024).
@@ -656,61 +640,13 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                             </td>
                         </tr>
                     @else
-                        @foreach ($preferredClassifications as $classification => $classificationLabel)
-                            @php
-                                $classificationOrders = $allOrders
-                                    ->where('classification', $classification)
-                                    ->values();
-                            @endphp
-
-                            @if ($classificationOrders->isNotEmpty())
-                                <tr>
-                                    <td colspan="7" style="padding:9px 16px;background:linear-gradient(90deg,#eef2ff 0%,#e0e7ff 100%);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#3730a3;">
-                                        Classification {{ $classification }} - {{ $classificationLabel }}
-                                    </td>
-                                </tr>
-
-                                @foreach ($classificationOrders->groupBy(fn (array $order): string => $order['unit_of_measure'] !== null ? (string) $order['unit_of_measure'] : 'unknown') as $uom => $uomOrders)
-                                    @php
-                                        $uomInt = is_numeric($uom) ? (int) $uom : null;
-                                        $uomLabel = $uomInt === null
-                                            ? 'Unknown'
-                                            : ($classification === 29
-                                                ? ($uomLabels[$uomInt] ?? ('Other ('.number_format($uomInt).')'))
-                                                : ($uomLabels[$uomInt] ?? number_format($uomInt)));
-                                    @endphp
-                                    <tr>
-                                        <td colspan="7" style="padding:8px 16px;background:#f8fafc;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#475569;">
-                                            UnitOfMeasure: {{ $uomLabel }}
-                                        </td>
-                                    </tr>
-
-                                    @foreach ($uomOrders as $order)
-                                        {!! $renderOrderRow($order) !!}
-                                    @endforeach
-                                @endforeach
-                            @endif
+                        @foreach ($allOrders as $order)
+                            {!! $renderOrderRow($order) !!}
                         @endforeach
-
-                        @php
-                            $otherOrders = $allOrders
-                                ->filter(fn (array $order): bool => ! in_array((int) ($order['classification'] ?? -1), array_keys($preferredClassifications), true))
-                                ->values();
-                        @endphp
-
-                        @if ($otherOrders->isNotEmpty())
-                            <tr>
-                                <td colspan="7" style="padding:9px 16px;background:linear-gradient(90deg,#fffbeb 0%,#fef3c7 100%);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#92400e;">
-                                    Other classifications
-                                </td>
-                            </tr>
-                            @foreach ($otherOrders as $order)
-                                {!! $renderOrderRow($order) !!}
-                            @endforeach
-                        @endif
                     @endif
                 </tbody>
             </table>
+            </div>
         </div>
         @endif
     </div>

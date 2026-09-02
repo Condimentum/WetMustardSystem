@@ -169,8 +169,9 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
                 <a href="{{ route('settings.operator-sync') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.operator-sync') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Operator Sync</a>
                 <a href="{{ route('settings.documents') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.documents') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Documents</a>
                 <a href="{{ route('reporting.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('reporting.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Reporting</a>
-                <a href="{{ route('notifications.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Notifications</a>
-                <a href="{{ route('audit.index') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Audit</a>
+                <a href="{{ route('notifications.setup') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.setup') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Notifications Setup</a>
+                <a href="{{ route('audit.index') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.index') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Audit</a>
+                <a href="{{ route('audit.errors') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.errors') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Error Log</a>
             </div>
         </div>
 
@@ -192,6 +193,7 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
 
         {{-- Reports --}}
         <div class="bg-white shadow-sm rounded-lg overflow-hidden">
+            <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50 text-left text-xs text-gray-500 uppercase">
                     <tr><th class="px-4 py-3">Report</th><th class="px-4 py-3">Schedule</th><th class="px-4 py-3">Offsets</th><th class="px-4 py-3">Enabled</th><th class="px-4 py-3"></th></tr>
@@ -227,6 +229,7 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
                     @endforeach
                 </tbody>
             </table>
+            </div>
         </div>
 
         {{-- Recipients --}}
@@ -269,6 +272,7 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
                 <x-primary-button wire:click="addRecipient">Add</x-primary-button>
             </div>
 
+            <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="text-left text-xs text-gray-500 uppercase"><tr><th class="py-2">Scope</th><th class="py-2">Recipient</th><th class="py-2">To/CC</th><th class="py-2"></th></tr></thead>
                 <tbody class="divide-y divide-gray-100">
@@ -284,11 +288,13 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
                     @endforelse
                 </tbody>
             </table>
+            </div>
         </div>
 
         {{-- Send log --}}
         <div class="bg-white shadow-sm rounded-lg overflow-hidden">
             <div class="px-4 py-3 border-b border-gray-100 font-medium text-gray-800">Recent send log</div>
+            <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50 text-left text-xs text-gray-500 uppercase"><tr><th class="px-4 py-3">Report</th><th class="px-4 py-3">Trigger</th><th class="px-4 py-3">Range</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Rows</th><th class="px-4 py-3">When</th></tr></thead>
                 <tbody class="divide-y divide-gray-100">
@@ -306,6 +312,7 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
                     @endforelse
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 </div>
