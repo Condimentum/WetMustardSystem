@@ -118,4 +118,25 @@ return [
         'location_id' => env('WINMAN_BOOKING_LOCATION_ID'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Resilience (WinMan unavailability)
+    |--------------------------------------------------------------------------
+    |
+    | WinMan is a separate, sometimes-unreachable server. These settings keep
+    | DBMTS responsive and independently usable for existing batches when
+    | WinMan is slow or down (see Documents/POC-Feature-Overview.md tier 1).
+    |
+    */
+
+    'resilience' => [
+        // Outstanding-MO search results are cached briefly so repeated page
+        // loads/renders don't re-hit WinMan every time; a short TTL keeps the
+        // list operationally fresh while absorbing burst traffic.
+        'search_cache_seconds' => (int) env('WINMAN_SEARCH_CACHE_SECONDS', 30),
+        // How long a cached "is WinMan reachable" health-check result is
+        // trusted before probing again.
+        'health_check_cache_seconds' => (int) env('WINMAN_HEALTH_CHECK_CACHE_SECONDS', 15),
+    ],
+
 ];

@@ -4,6 +4,7 @@ use App\Domains\Audit\Jobs\RecordErrorLogJob;
 use App\Domains\Batch\Exceptions\BatchException;
 use App\Domains\WinMan\Exceptions\WinManException;
 use App\Domains\WinMan\Jobs\FetchManufacturingOrderJob;
+use App\Domains\WinMan\Support\WinManHealthCheck;
 use App\Features\Batches\StartBatchFromManufacturingOrderFeature;
 use App\Models\BatchRecord;
 use App\Models\ManufacturingOrder;
@@ -40,6 +41,8 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
     public ?string $error = null;
 
     public ?string $status = null;
+
+    public bool $winManDown = false;
 
     public function mount(int $winmanMo): void
     {
@@ -93,11 +96,18 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
 
     private function loadWorkspace(): void
     {
-        try {
-            $winmanOrder = app(FetchManufacturingOrderJob::class)($this->winmanMo);
-        } catch (\Throwable $e) {
-            report($e);
+        if (! app(WinManHealthCheck::class)->isUp()) {
+            $this->winManDown = true;
             $winmanOrder = null;
+        } else {
+            $this->winManDown = false;
+
+            try {
+                $winmanOrder = app(FetchManufacturingOrderJob::class)($this->winmanMo);
+            } catch (\Throwable $e) {
+                report($e);
+                $winmanOrder = null;
+            }
         }
 
         if ($winmanOrder !== null) {
@@ -318,6 +328,10 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
         <div class="flex items-center justify-end">
             <a href="{{ route('manufacturing-orders.search') }}" wire:navigate class="text-sm text-indigo-600 hover:underline">Back to Manufacturing Orders</a>
         </div>
+
+        @if ($winManDown)
+            <x-winman-offline-banner message="WinMan connection is currently unavailable. This order's live details can't be refreshed right now — any existing batch for it remains fully usable." />
+        @endif
 
         @if (! $order)
             <div class="bg-white shadow-sm rounded-lg p-6 text-sm text-gray-600">

@@ -3,6 +3,7 @@
 use App\Domains\Audit\Jobs\RecordErrorLogJob;
 use App\Domains\Batch\Exceptions\BatchException;
 use App\Domains\WinMan\Exceptions\WinManException;
+use App\Domains\WinMan\Support\WinManHealthCheck;
 use App\Features\Batches\StartBatchFromManufacturingOrderFeature;
 use App\Features\ManufacturingOrders\SearchManufacturingOrdersFeature;
 use App\Models\BatchRecord;
@@ -11,6 +12,7 @@ use App\Models\ProductMapping;
 use App\Models\Product;
 use App\Models\RecipeCard;
 use App\Models\RecipeVariant;
+use App\Models\WinManSyncedManufacturingOrder;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
@@ -43,6 +45,10 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
     public string $batchPlannedQuantity = '';
 
     public ?string $error = null;
+
+    public bool $winManDown = false;
+
+    public ?string $ordersSyncedAt = null;
 
     public function mount(): void
     {
@@ -382,12 +388,55 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
 
     private function loadOrders(): void
     {
+        if (! app(WinManHealthCheck::class)->isUp()) {
+            $this->winManDown = true;
+            $this->loadOrdersFromLocalSyncCache();
+
+            return;
+        }
+
+        $this->winManDown = false;
+        $this->ordersSyncedAt = null;
+
         $orders = collect(app(SearchManufacturingOrdersFeature::class)(
             $this->search !== '' ? $this->search : null,
             50,
-        ))->filter(fn ($o) => $o->classification === 30)->values()->all();
+        ))->filter(fn ($o) => $o->classification === 30)->values()->map(fn ($o) => $o->toArray())->all();
 
-        $codes = collect($orders)->map(fn ($o) => $o->winmanProductId)->filter()->unique()->all();
+        $this->orders = $this->enrichOrders($orders);
+    }
+
+    /**
+     * Fallback source when WinMan is unreachable: the last background-synced
+     * snapshot (php artisan winman:sync-manufacturing-orders), so operators
+     * can still see and continue existing batches instead of a blank screen.
+     */
+    private function loadOrdersFromLocalSyncCache(): void
+    {
+        $cached = WinManSyncedManufacturingOrder::query()
+            ->where('classification', 30)
+            ->when($this->search !== '', fn ($query) => $query->where(function ($q): void {
+                $q->where('winman_manufacturing_order_id', 'like', '%'.$this->search.'%')
+                    ->orWhere('winman_product_id', 'like', '%'.$this->search.'%')
+                    ->orWhere('product_description', 'like', '%'.$this->search.'%');
+            }))
+            ->orderBy('due_date')
+            ->orderByDesc('winman_manufacturing_order')
+            ->limit(50)
+            ->get();
+
+        $this->ordersSyncedAt = $cached->max('synced_at')?->diffForHumans();
+
+        $this->orders = $this->enrichOrders($cached->map(fn (WinManSyncedManufacturingOrder $o) => $o->toOrderArray())->all());
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rawOrders  shaped like ManufacturingOrderData::toArray()
+     * @return array<int, array<string, mixed>>
+     */
+    private function enrichOrders(array $rawOrders): array
+    {
+        $codes = collect($rawOrders)->map(fn (array $o) => $o['winman_product_id'])->filter()->unique()->all();
 
         $productsByCode = [];
         if ($codes !== []) {
@@ -406,15 +455,15 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                 });
         }
 
-        $this->orders = collect($orders)->map(function ($o) use ($productsByCode): array {
-            $product = $productsByCode[$o->winmanProductId] ?? null;
+        return collect($rawOrders)->map(function (array $o) use ($productsByCode): array {
+            $product = $productsByCode[$o['winman_product_id']] ?? null;
             $recipeCode = $product?->recipe_code;
             $hasVariants = $recipeCode !== null && RecipeVariant::query()
                 ->where('recipe_code', $recipeCode)
                 ->where('active_flag', true)
                 ->exists();
 
-            return array_merge($o->toArray(), [
+            return array_merge($o, [
                 'recipe_code' => $recipeCode,
                 'dbmts_product_name' => $product?->product_name,
                 'has_variants' => $hasVariants,
@@ -425,6 +474,10 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
 
 <div class="py-8">
     <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+
+        @if ($winManDown)
+            <x-winman-offline-banner :message="'WinMan connection is currently unavailable. Showing the last synced list of outstanding orders'.($ordersSyncedAt ? ' (synced '.$ordersSyncedAt.')' : '').' — existing in-progress batches remain fully usable from the batch screen.'" />
+        @endif
 
         @if ($workspaceTab === 'batch' && $selectedWinmanMo)
             @php

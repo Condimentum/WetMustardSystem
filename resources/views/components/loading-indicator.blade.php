@@ -1,14 +1,14 @@
 <style>
     /* Livewire's built-in top progress bar (#nprogress) fires for EVERY ajax
-       request (wire:click/wire:submit/etc), not just full-page wire:navigate
-       transitions covered by the circular indicator below - keep both visible
-       so ordinary component actions still show a loading cue. */
-    #nprogress .bar { background: #4f46e5 !important; height: 3px !important; }
+       request (wire:click/wire:submit/etc), not just full-page loads/
+       wire:navigate transitions covered by the jar overlay below - keep both
+       visible so ordinary component actions still show a loading cue. */
+    #nprogress .bar { background: #f59e0b !important; height: 3px !important; }
 </style>
 
 <div
     x-data="{
-        show: false,
+        show: true,
         percent: 0,
         timer: null,
         start() {
@@ -24,35 +24,43 @@
             this.percent = 100;
             setTimeout(() => { this.show = false; this.percent = 0; }, 350);
         },
+        init() {
+            // Covers full page loads/refreshes (not just wire:navigate): show
+            // the overlay immediately, ramp it, then finish once the browser
+            // reports the page is fully loaded.
+            this.start();
+            if (document.readyState === 'complete') {
+                this.finish();
+            } else {
+                window.addEventListener('load', () => this.finish());
+            }
+        },
     }"
     x-on:livewire:navigating.window="start()"
     x-on:livewire:navigated.window="finish()"
     x-show="show"
     x-transition.opacity.duration.200ms
-    style="display:none;"
     class="fixed inset-0 z-[9999] flex items-center justify-center"
 >
-    <div class="absolute inset-0 bg-white/60 backdrop-blur-sm"></div>
+    <div class="absolute inset-0 bg-white/70 backdrop-blur-sm"></div>
 
-    <div class="relative flex items-center justify-center" style="width:120px;height:120px;">
-        <svg width="120" height="120" viewBox="0 0 120 120" style="transform:rotate(-90deg);">
-            <defs>
-                <linearGradient id="loadingIndicatorGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#f59e0b" />
-                    <stop offset="100%" stop-color="#4f46e5" />
-                </linearGradient>
-            </defs>
-            <circle cx="60" cy="60" r="52" fill="none" stroke="#e2e8f0" stroke-width="10" />
-            <circle
-                cx="60" cy="60" r="52" fill="none"
-                stroke="url(#loadingIndicatorGradient)"
-                stroke-width="10"
-                stroke-linecap="round"
-                stroke-dasharray="326.7"
-                x-bind:stroke-dashoffset="326.7 * (1 - percent / 100)"
-                style="transition: stroke-dashoffset 0.15s linear;"
+    <div class="relative flex flex-col items-center gap-3">
+        <div class="relative" style="width:110px;height:140px;">
+            {{-- Amber fill rises behind the jar outline; the outline PNG's white
+                 background blends away via multiply, leaving only its black
+                 line-art visible on top of the fill (no real alpha channel needed). --}}
+            <div
+                class="absolute rounded-b-2xl"
+                style="left:19%;right:19%;bottom:15%;background:linear-gradient(180deg,#fde68a 0%,#f59e0b 55%,#b45309 100%);transition:height .18s ease-out;"
+                x-bind:style="'left:19%;right:19%;bottom:15%;background:linear-gradient(180deg,#fde68a 0%,#f59e0b 55%,#b45309 100%);transition:height .18s ease-out;height:' + (percent / 100 * 62) + '%'"
+            ></div>
+            <img
+                src="{{ asset('mustard-jar-loading.png') }}"
+                alt=""
+                class="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+                style="mix-blend-mode:multiply;"
             />
-        </svg>
-        <div class="absolute text-xl font-extrabold text-slate-800" x-text="Math.round(percent) + '%'"></div>
+        </div>
+        <div class="text-lg font-extrabold text-amber-800" x-text="Math.round(percent) + '%'"></div>
     </div>
 </div>

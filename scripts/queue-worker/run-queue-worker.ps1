@@ -28,7 +28,11 @@ Write-Log 'Queue worker supervisor starting.'
 while ($true) {
     Write-Log 'Starting php artisan queue:work ...'
 
-    & $php artisan queue:work database --queue=default --tries=3 --backoff=10 --max-time=3600 --sleep=3 2>> $logFile
+    # Pipe stderr through ToString() rather than `2>> $logFile`: PowerShell turns
+    # native-command stderr into ErrorRecord objects, which dump multi-line
+    # NativeCommandError blocks into the log for even harmless PHP warnings.
+    & $php artisan queue:work database --queue=default --tries=3 --backoff=10 --max-time=3600 --sleep=3 2>&1 |
+        ForEach-Object { Add-Content -Path $logFile -Value $_.ToString() }
 
     Write-Log ("queue:work exited with code {0}; restarting in 5s." -f $LASTEXITCODE)
     Start-Sleep -Seconds 5

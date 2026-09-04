@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\ManufacturingOrders;
 
+use App\Domains\WinMan\Support\WinManHealthCheck;
 use App\Features\ManufacturingOrders\SearchManufacturingOrdersFeature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -15,6 +16,10 @@ class ManufacturingOrderSearchScreenTest extends TestCase
 
     public function test_the_mo_search_screen_renders_for_an_authenticated_user(): void
     {
+        $health = Mockery::mock(WinManHealthCheck::class);
+        $health->shouldReceive('isUp')->andReturn(true);
+        $this->instance(WinManHealthCheck::class, $health);
+
         $search = Mockery::mock(SearchManufacturingOrdersFeature::class);
         $search->shouldReceive('__invoke')->andReturn([]);
         $this->instance(SearchManufacturingOrdersFeature::class, $search);

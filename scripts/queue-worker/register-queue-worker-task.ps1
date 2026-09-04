@@ -37,10 +37,15 @@ $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
     -ExecutionTimeLimit ([TimeSpan]::Zero)
 
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
-    -Principal $principal -Settings $settings -Force
+try {
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+        -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
 
-Start-ScheduledTask -TaskName $taskName
+    Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
+} catch {
+    Write-Error "Failed to register/start scheduled task '$taskName': $($_.Exception.Message)"
+    exit 1
+}
 
 Write-Host "Registered and started scheduled task '$taskName'."
 Write-Host "Logs: $((Join-Path (Split-Path $PSScriptRoot -Parent | Split-Path -Parent) 'storage\logs\queue-worker.log'))"

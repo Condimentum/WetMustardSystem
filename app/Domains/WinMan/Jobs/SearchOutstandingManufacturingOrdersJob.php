@@ -4,6 +4,7 @@ namespace App\Domains\WinMan\Jobs;
 
 use App\Domains\WinMan\Data\ManufacturingOrderData;
 use App\Domains\WinMan\Support\WinManConnection;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Fetches outstanding, eligible WinMan manufacturing orders (scope §11.2).
@@ -25,6 +26,26 @@ class SearchOutstandingManufacturingOrdersJob
      * @return array<int, ManufacturingOrderData>
      */
     public function __invoke(?string $search = null, int $limit = 50): array
+    {
+        $ttl = (int) config('winman.resilience.search_cache_seconds', 30);
+        $cacheKey = sprintf(
+            'winman:outstanding-mo-search:%s:%s:%d',
+            $this->winman->environment(),
+            $search !== null ? md5(trim($search)) : 'all',
+            $limit,
+        );
+
+        if ($ttl <= 0) {
+            return $this->query($search, $limit);
+        }
+
+        return Cache::remember($cacheKey, $ttl, fn (): array => $this->query($search, $limit));
+    }
+
+    /**
+     * @return array<int, ManufacturingOrderData>
+     */
+    private function query(?string $search, int $limit): array
     {
         $eligibleTypes = array_values((array) config('winman.eligible_system_types', ['F', 'I', 'R']));
         $eligibleClassifications = [29, 30];

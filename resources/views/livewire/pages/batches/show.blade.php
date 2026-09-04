@@ -14,6 +14,7 @@ use App\Features\Pallecon\PrintPalleconLabelFeature;
 use App\Domains\WinMan\Exceptions\WinManException;
 use App\Domains\WinMan\Jobs\FetchManufacturingOrderJob;
 use App\Domains\WinMan\Jobs\ListIssuedLotsForWorkInProgressJob;
+use App\Domains\WinMan\Support\WinManHealthCheck;
 use App\Operations\AllocateBomIngredientOperation;
 use App\Support\FeatureSettings;
 use App\Models\BatchRecord;
@@ -66,6 +67,8 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
     public bool $featureAllocationScanDebugEnabled = true;
 
     public bool $featureAllocationWinmanLookupEnabled = true;
+
+    public bool $winManDown = false;
 
     public bool $preferScannerOnMobile = false;
 
@@ -149,6 +152,14 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         $this->featureAllocationCameraAutostartEnabled = FeatureSettings::enabled('allocation.scanner_camera_autostart', true);
         $this->featureAllocationScanDebugEnabled = FeatureSettings::enabled('allocation.scanner_debug_panel', true);
         $this->featureAllocationWinmanLookupEnabled = FeatureSettings::enabled('allocation.scanner_winman_lookup', true);
+
+        // Auto-fallback to unverified manual entry when WinMan is unreachable,
+        // regardless of the admin toggle above (resilience tier 2).
+        $this->winManDown = ! app(WinManHealthCheck::class)->isUp();
+        if ($this->winManDown) {
+            $this->featureAllocationWinmanLookupEnabled = false;
+        }
+
         $this->preferScannerOnMobile = $this->featureAllocationScannerEnabled && $this->isMobileUserAgent();
 
         if (! $this->featureAllocationScannerEnabled && $this->activeBomAllocationMode === 'gr_scan') {
@@ -333,6 +344,8 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
             $this->activeBomWinManLookupMessage = 'WinMan lookup: supplier lot found and ready to issue.';
             $this->activeBomLotNumber = (string) ($matchedWinManLot['lot_number'] ?? $supplierLotNumber);
+        } elseif ($this->winManDown) {
+            $this->activeBomWinManLookupMessage = 'WinMan lookup: skipped (WinMan is currently unavailable - lot accepted unverified).';
         } else {
             $this->activeBomWinManLookupMessage = 'WinMan lookup: skipped (disabled in project settings).';
         }
@@ -2104,6 +2117,10 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
                 {{-- Unified Allocation Workspace --}}
                 <div x-show="tab === 'allocation'" class="space-y-3">
+
+                    @if ($winManDown)
+                        <x-winman-offline-banner message="WinMan connection is currently unavailable. Scanned/entered lots are accepted without live verification and issues will be attempted when you allocate - double-check quantities carefully." />
+                    @endif
 
                     @if ($batch->componentSnapshots->isEmpty())
                         <div style="background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:12px;padding:12px 14px;font-size:14px;font-weight:600;">No component snapshot stored for this MO.</div>

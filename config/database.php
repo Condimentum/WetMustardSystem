@@ -126,6 +126,14 @@ return [
             'prefix_indexes' => true,
             'encrypt' => env('WINMAN_DB_ENCRYPT', 'no'),
             'trust_server_certificate' => env('WINMAN_DB_TRUST_SERVER_CERTIFICATE', 'true'),
+            // Fail fast instead of hanging ~30s on the default TCP timeout when
+            // WinMan is unreachable (resilience: see Documents/POC-Feature-Overview.md).
+            // NOTE: the sqlsrv driver rejects PDO::ATTR_TIMEOUT ("unsupported
+            // attribute"); query timeouts must use SQLSRV_ATTR_QUERY_TIMEOUT.
+            'login_timeout' => env('WINMAN_DB_LOGIN_TIMEOUT', 5),
+            'options' => defined('PDO::SQLSRV_ATTR_QUERY_TIMEOUT') ? [
+                PDO::SQLSRV_ATTR_QUERY_TIMEOUT => (int) env('WINMAN_DB_QUERY_TIMEOUT', 15),
+            ] : [],
         ],
 
     ],
