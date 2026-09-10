@@ -31,10 +31,14 @@ class Pallecon extends Model
     ];
 
     protected $fillable = [
+        'manufacturing_order_id',
         'serial_number',
         'status',
         'mo_number',
         'capacity_kg',
+        'target_weight_kg',
+        'production_date',
+        'winman_reference',
         'final_weight',
         'top_seal_number',
         'bottom_seal_number',
@@ -51,11 +55,18 @@ class Pallecon extends Model
     {
         return [
             'capacity_kg' => 'decimal:3',
+            'target_weight_kg' => 'decimal:3',
             'final_weight' => 'decimal:3',
+            'production_date' => 'date',
             'opened_at' => 'datetime',
             'sealed_at' => 'datetime',
             'held_at' => 'datetime',
         ];
+    }
+
+    public function manufacturingOrder(): BelongsTo
+    {
+        return $this->belongsTo(ManufacturingOrder::class);
     }
 
     public function fills(): HasMany

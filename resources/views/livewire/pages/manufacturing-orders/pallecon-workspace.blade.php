@@ -22,8 +22,9 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
     /** When set (?pallecon=), the page is scoped to this one pallecon. */
     public ?int $palleconId = null;
 
-    /** Seal/liner details, edited inside the open pallecon. */
+    /** Pallecon number / seal / liner details, edited inside the open pallecon. */
     public array $containerForm = [
+        'serial_number' => '',
         'top_seal_number' => '',
         'bottom_seal_number' => '',
         'liner_number' => '',
@@ -59,12 +60,13 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
         $this->syncContainerForm();
     }
 
-    /** Mirror the open pallecon's seal/liner values into the editable form. */
+    /** Mirror the pallecon's number/seal/liner values into the editable form. */
     private function syncContainerForm(): void
     {
         $container = $this->activeContainer;
 
         $this->containerForm = [
+            'serial_number' => (string) ($container?->serial_number ?? ''),
             'top_seal_number' => (string) ($container?->top_seal_number ?? ''),
             'bottom_seal_number' => (string) ($container?->bottom_seal_number ?? ''),
             'liner_number' => (string) ($container?->liner_number ?? ''),
@@ -144,8 +146,8 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             return null;
         }
 
-        $belongsToMo = fn (Pallecon $pallecon): bool => $pallecon->fills->isNotEmpty()
-            && $pallecon->fills->contains(
+        $belongsToMo = fn (Pallecon $pallecon): bool => (int) ($pallecon->manufacturing_order_id ?? 0) === $moId
+            || $pallecon->fills->contains(
                 fn ($fill): bool => (int) ($fill->batchRecord?->manufacturing_order_id ?? 0) === $moId
             );
 
@@ -159,7 +161,9 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
 
         return Pallecon::query()
             ->whereIn('status', [Pallecon::STATUS_OPEN, Pallecon::STATUS_FILLING])
-            ->whereHas('fills.batchRecord', fn ($query) => $query->where('manufacturing_order_id', $moId))
+            ->where(fn ($query) => $query
+                ->where('manufacturing_order_id', $moId)
+                ->orWhereHas('fills.batchRecord', fn ($sub) => $sub->where('manufacturing_order_id', $moId)))
             ->with(['fills.batchRecord:id,batch_number,manufacturing_order_id'])
             ->orderByDesc('opened_at')
             ->first();
@@ -236,18 +240,29 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
         }
 
         $data = $this->validate([
+            'containerForm.serial_number' => ['nullable', 'string', 'max:255'],
             'containerForm.top_seal_number' => ['nullable', 'string', 'max:255'],
             'containerForm.bottom_seal_number' => ['nullable', 'string', 'max:255'],
             'containerForm.liner_number' => ['nullable', 'string', 'max:255'],
         ])['containerForm'];
 
+        $serial = trim((string) ($data['serial_number'] ?? ''));
+        if ($serial !== '' && $serial !== (string) $container->serial_number
+            && Pallecon::query()->where('serial_number', $serial)->whereIn('status', Pallecon::ACTIVE_STATUSES)->where('id', '!=', $container->id)->exists()) {
+            $this->flash = 'Pallecon number "'.$serial.'" is already in use by another active container.';
+            $this->flashError = true;
+
+            return;
+        }
+
         $container->update([
+            'serial_number' => $serial !== '' ? $serial : null,
             'top_seal_number' => ($data['top_seal_number'] ?? '') ?: null,
             'bottom_seal_number' => ($data['bottom_seal_number'] ?? '') ?: null,
             'liner_number' => ($data['liner_number'] ?? '') ?: null,
         ]);
 
-        $this->flash = 'Pallecon '.($container->serial_number ?? '#'.$container->id).' seal and liner details saved.';
+        $this->flash = 'Pallecon '.($container->serial_number ?? '#'.$container->id).' details saved.';
         $this->flashError = false;
         unset($this->activeContainer);
         $this->syncContainerForm();
@@ -318,7 +333,16 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             return;
         }
 
-        $messages = ['Pallecon '.$sealed->serial_number.' completed at '.$validated['final_weight'].' kg.'];
+        // On seal, the pallecon Reference is written back in the WinMan lot format
+        // "{MO WinMan id} {pallecon number} {yjjj}00M96".
+        $reference = app(PalleconFilling::class)->sealReference(
+            $sealed,
+            $this->localOrder,
+            (string) ($sealed->production_date?->toDateString() ?? $this->production_date),
+        );
+        $sealed->forceFill(['winman_reference' => $reference])->save();
+
+        $messages = ['Pallecon '.($sealed->serial_number ?? '#'.$sealed->id).' completed at '.$validated['final_weight'].' kg. Reference '.$reference.'.'];
         $this->flashError = false;
         $this->sealingId = null;
         $this->reset('sealForm');
@@ -517,8 +541,12 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
                     <div>
                         <span class="font-semibold text-slate-900">{{ $active->serial_number ?? 'Pallecon #'.$active->id }}</span>
                         <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">{{ ucfirst($active->status) }}</span>
+                        @if ($active->winman_reference)
+                            <span class="ml-2 text-xs text-slate-500">Ref: <span class="font-mono text-slate-700">{{ $active->winman_reference }}</span></span>
+                        @endif
                     </div>
-                    <div class="text-sm text-slate-500">{{ number_format($filled, 1) }} / {{ number_format($this->limitKg, 0) }} kg</div>
+                    <div class="text-sm text-slate-500">{{ number_format($filled, 1) }} / {{ number_format($this->limitKg, 0) }} kg
+                        @if ($active->target_weight_kg)· target {{ $fmtKg($active->target_weight_kg) }} kg @endif</div>
                 </div>
                 <div class="mt-2 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
                     <div class="h-full bg-amber-400" style="width: {{ $pct }}%"></div>
@@ -558,10 +586,14 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
                     </div>
                 </div>
 
-                {{-- Seal & liner details --}}
+                {{-- Pallecon number, seals & liner --}}
                 <div class="mt-4 border-t border-slate-100 pt-4">
-                    <h3 class="text-xs font-semibold uppercase text-slate-400 mb-2">Seals &amp; liner</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <h3 class="text-xs font-semibold uppercase text-slate-400 mb-2">Pallecon number, seals &amp; liner</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Pallecon number</label>
+                            <input type="text" wire:model="containerForm.serial_number" class="w-full rounded-lg border-slate-300 text-sm" placeholder="e.g. PAL-00123" />
+                        </div>
                         <div>
                             <label class="block text-xs font-medium text-slate-500 mb-1">Top seal</label>
                             <input type="text" wire:model="containerForm.top_seal_number" class="w-full rounded-lg border-slate-300 text-sm" />

@@ -2,12 +2,12 @@
 
 use App\Domains\Audit\Jobs\RecordErrorLogJob;
 use App\Domains\Batch\Exceptions\BatchException;
-use App\Domains\Pallecon\Support\PalleconFilling;
+use App\Domains\Pallecon\Support\PalleconCapacity;
 use App\Domains\WinMan\Exceptions\WinManException;
 use App\Domains\WinMan\Jobs\FetchManufacturingOrderJob;
 use App\Domains\WinMan\Support\WinManHealthCheck;
 use App\Features\Batches\StartBatchFromManufacturingOrderFeature;
-use App\Features\Pallecon\CreatePalleconWithFillFeature;
+use App\Features\Pallecon\OpenPalleconFeature;
 use App\Models\BatchRecord;
 use App\Models\ManufacturingOrder;
 use App\Models\Pallecon;
@@ -47,11 +47,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
 
     public bool $winManDown = false;
 
-    public string $palleconNumber = '';
-
-    public string $palleconFillWeight = '';
-
-    public string $palleconBatchId = '';
+    public string $palleconWeight = '';
 
     public ?string $palleconError = null;
 
@@ -115,8 +111,8 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
     }
 
     /**
-     * Every pallecon worked for this MO (any status) - the list under the
-     * Pallecon Workspace header, mirroring the batch list above.
+     * Every pallecon for this MO (any status) - the list under the Pallecon
+     * Workspace header, mirroring the batch list above.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -130,34 +126,20 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
         }
 
         return Pallecon::query()
-            ->whereHas('fills.batchRecord', fn ($query) => $query->where('manufacturing_order_id', $moId))
-            ->with(['fills.batchRecord:id,manufacturing_order_id'])
+            ->where('manufacturing_order_id', $moId)
             ->orderByDesc('id')
             ->get()
-            ->filter(fn (Pallecon $pallecon): bool => $pallecon->fills->isNotEmpty()
-                && $pallecon->fills->every(
-                    fn ($fill): bool => (int) ($fill->batchRecord?->manufacturing_order_id ?? 0) === $moId
-                ))
             ->map(fn (Pallecon $pallecon): array => [
                 'id' => $pallecon->id,
-                'reference' => (string) ($pallecon->serial_number ?? 'Pallecon #'.$pallecon->id),
-                'filled_kg' => $pallecon->filledWeight(),
-                'final_weight' => $pallecon->final_weight !== null ? (float) $pallecon->final_weight : null,
-                'opened_date' => $pallecon->opened_at?->format('Y-m-d'),
+                'reference' => (string) ($pallecon->winman_reference ?? ''),
+                'quantity_kg' => $pallecon->final_weight !== null
+                    ? (float) $pallecon->final_weight
+                    : ($pallecon->target_weight_kg !== null ? (float) $pallecon->target_weight_kg : $pallecon->filledWeight()),
+                'production_date' => $pallecon->production_date?->format('Y-m-d'),
                 'status' => (string) $pallecon->status,
                 'on_hold' => $pallecon->isOnHold(),
             ])
-            ->values()
             ->all();
-    }
-
-    /** @return array<int, array<string, mixed>> */
-    #[Computed]
-    public function palleconFillBatches(): array
-    {
-        $order = $this->localMoOrder();
-
-        return $order === null ? [] : app(PalleconFilling::class)->fillableBatches($order);
     }
 
     #[Computed]
@@ -174,9 +156,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
         $this->palleconStatus = null;
 
         $this->validate([
-            'palleconNumber' => ['required', 'string', 'max:255'],
-            'palleconBatchId' => ['required', 'integer'],
-            'palleconFillWeight' => ['required', 'numeric', 'min:0.001'],
+            'palleconWeight' => ['required', 'numeric', 'min:0.001'],
         ]);
 
         $order = $this->localMoOrder();
@@ -186,26 +166,30 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
             return;
         }
 
-        $filling = app(PalleconFilling::class);
-        $batchMeta = collect($filling->fillableBatches($order))->firstWhere('id', (int) $this->palleconBatchId);
-
-        $guard = $filling->guardFill($batchMeta, (float) $this->palleconFillWeight);
-        if ($guard !== null) {
-            $this->palleconError = $guard;
+        if ($this->hasOpenPalleconForMo) {
+            $this->palleconError = 'A pallecon is already open for this MO. Complete it before starting another.';
 
             return;
         }
 
-        $batch = BatchRecord::with('manufacturingOrder', 'product')->findOrFail((int) $this->palleconBatchId);
+        $weight = (float) $this->palleconWeight;
+        if (PalleconCapacity::exceedsLimit($weight)) {
+            $this->palleconError = sprintf(
+                'Target weight %s kg is above the %s kg pallecon limit.',
+                rtrim(rtrim(number_format($weight, 3, '.', ''), '0'), '.'),
+                rtrim(rtrim(number_format(PalleconCapacity::limitKg(), 3, '.', ''), '0'), '.'),
+            );
+
+            return;
+        }
 
         try {
-            ['pallecon' => $pallecon, 'fill' => $fill] = app(CreatePalleconWithFillFeature::class)(
-                $order,
-                $this->palleconNumber,
-                $batch,
-                (float) $this->palleconFillWeight,
-                auth()->user(),
-            );
+            $pallecon = app(OpenPalleconFeature::class)([
+                'manufacturing_order_id' => $order->id,
+                'mo_number' => $order->mo_number,
+                'target_weight_kg' => $weight,
+                'production_date' => now()->toDateString(),
+            ], auth()->user());
         } catch (\Throwable $e) {
             app(RecordErrorLogJob::class)($e, 'manufacturing-orders.workspace.create-pallecon');
             $this->palleconError = $e->getMessage();
@@ -213,17 +197,9 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
             return;
         }
 
-        $booking = $filling->bookFill($batch, $pallecon, $fill, now()->toDateString(), auth()->user());
-
-        $message = 'Pallecon '.($pallecon->serial_number ?? '#'.$pallecon->id)
-            .' created with a '.$this->palleconFillWeight.' kg fill from batch '.$batch->batch_number.'.';
-        if ($booking['messages'] !== []) {
-            $message .= ' '.implode(' ', $booking['messages']);
-        }
-
-        $this->palleconStatus = $message;
-        $this->reset('palleconNumber', 'palleconFillWeight', 'palleconBatchId');
-        unset($this->moPallecons, $this->palleconFillBatches, $this->hasOpenPalleconForMo);
+        $this->palleconStatus = 'Pallecon opened with a '.$this->palleconWeight.' kg target. Continue to record fills, number and seals.';
+        $this->reset('palleconWeight');
+        unset($this->moPallecons, $this->hasOpenPalleconForMo);
     }
 
     private function loadWorkspace(): void
@@ -762,7 +738,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                                     <tr>
                                         <th class="px-4 py-3">Reference</th>
                                         <th class="px-3 py-2">Qty (kg)</th>
-                                        <th class="px-3 py-2">Date</th>
+                                        <th class="px-3 py-2">Production Date</th>
                                         <th class="px-3 py-2">Status</th>
                                         <th class="px-3 py-2 text-right"></th>
                                     </tr>
@@ -771,12 +747,11 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                                     @foreach ($this->moPallecons as $pallecon)
                                         @php
                                             $pStyle = $palleconStatusStyle($pallecon['on_hold'] ? 'on_hold' : $pallecon['status']);
-                                            $qty = $pallecon['final_weight'] ?? $pallecon['filled_kg'];
                                         @endphp
                                         <tr>
-                                            <td class="px-4 py-3 font-medium text-gray-800">{{ $pallecon['reference'] }}</td>
-                                            <td class="px-3 py-2">{{ rtrim(rtrim(number_format((float) $qty, 3, '.', ''), '0'), '.') ?: '0' }}</td>
-                                            <td class="px-3 py-2">{{ $pallecon['opened_date'] ?? '-' }}</td>
+                                            <td class="px-4 py-3 font-medium text-gray-800">{{ $pallecon['reference'] !== '' ? $pallecon['reference'] : '—' }}</td>
+                                            <td class="px-3 py-2">{{ rtrim(rtrim(number_format((float) $pallecon['quantity_kg'], 3, '.', ''), '0'), '.') ?: '0' }}</td>
+                                            <td class="px-3 py-2">{{ $pallecon['production_date'] ?? '-' }}</td>
                                             <td class="px-3 py-2">
                                                 <span style="display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid {{ $pStyle['border'] }};background:{{ $pStyle['bg'] }};color:{{ $pStyle['color'] }};font-size:13px;font-weight:700;">
                                                     <span style="height:8px;width:8px;border-radius:999px;background:{{ $pStyle['dot'] }};display:inline-block;"></span>
@@ -794,38 +769,20 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                         </div>
                     @endif
 
-                    @php
-                        $signedOffFillBatches = collect($this->palleconFillBatches)->where('signoff_complete', true)->values();
-                    @endphp
-
                     @if ($this->hasOpenPalleconForMo)
                         <div class="text-xs text-slate-500">Complete the open pallecon before creating another one for this MO.</div>
-                    @elseif ($signedOffFillBatches->isEmpty())
-                        <div class="text-xs text-slate-500">No signed-off batch is available to fill a pallecon yet.</div>
                     @else
                         <div class="flex flex-wrap items-end gap-3">
                             <div>
-                                <label class="block text-xs text-gray-600 mb-1">Pallecon number</label>
-                                <input type="text" wire:model="palleconNumber" class="border-gray-300 rounded-md shadow-sm text-sm w-44" placeholder="e.g. PAL-00123" />
-                            </div>
-                            <div>
-                                <label class="block text-xs text-gray-600 mb-1">Source batch</label>
-                                <select wire:model="palleconBatchId" class="border-gray-300 rounded-md shadow-sm text-sm w-56">
-                                    <option value="">- select batch -</option>
-                                    @foreach ($signedOffFillBatches as $b)
-                                        <option value="{{ $b['id'] }}">{{ $b['batch_number'] }} ({{ rtrim(rtrim(number_format($b['remaining_kg'], 3, '.', ''), '0'), '.') ?: '0' }} kg left)</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs text-gray-600 mb-1">Fill weight (kg)</label>
-                                <input type="number" step="0.001" min="0.001" wire:model="palleconFillWeight" class="border-gray-300 rounded-md shadow-sm text-sm w-32" placeholder="e.g. 400" />
+                                <label class="block text-xs text-gray-600 mb-1">Pallecon weight (kg)</label>
+                                <input type="number" step="0.001" min="0.001" wire:model="palleconWeight" class="border-gray-300 rounded-md shadow-sm text-sm w-40" placeholder="e.g. 1000" />
+                                <span class="block text-xs text-gray-500 mt-1">Target weight for this pallecon.</span>
                             </div>
                             <x-primary-button wire:click="createPallecon" wire:loading.attr="disabled">
                                 {{ count($this->moPallecons) === 0 ? 'Add pallecon' : 'Add another pallecon' }}
                             </x-primary-button>
                         </div>
-                        <p class="text-xs text-slate-500">Creates the pallecon and records the first fill. Use Continue on a row to add more fills, seals and complete it.</p>
+                        <p class="text-xs text-slate-500">Opens the pallecon. Use Continue on a row to record batch fills, the pallecon number, seals and completion — the WinMan reference is written back on seal.</p>
                     @endif
                 </div>
             </div>

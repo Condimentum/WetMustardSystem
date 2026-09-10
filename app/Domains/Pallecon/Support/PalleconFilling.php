@@ -188,6 +188,24 @@ class PalleconFilling
         }
     }
 
+    /**
+     * The pallecon Reference stamped on seal: "{MO WinMan id} {pallecon number}
+     * {yjjj}00M96". Blank before the pallecon is sealed and submitted to WinMan.
+     */
+    public function sealReference(Pallecon $pallecon, ?ManufacturingOrder $order, string $productionDate): string
+    {
+        $moId = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', (string) (
+            $order?->winman_manufacturing_order_id ?? $order?->mo_number ?? $pallecon->mo_number ?? 'MO'
+        ))) ?: 'MO';
+
+        $palleconNumber = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', (string) ($pallecon->serial_number ?? '')));
+        if ($palleconNumber === '') {
+            $palleconNumber = 'P'.$pallecon->id;
+        }
+
+        return substr(trim($moId.' '.$palleconNumber.' '.$this->resolveLabelStyleLotNumber($productionDate)), 0, 100);
+    }
+
     private function resolveWinManLotNumber(BatchRecord $batch, PalleconRecord $pallecon, string $productionDate): string
     {
         $moId = trim((string) ($batch->manufacturingOrder?->winman_manufacturing_order_id

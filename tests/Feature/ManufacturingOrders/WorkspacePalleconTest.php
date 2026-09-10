@@ -5,10 +5,7 @@ namespace Tests\Feature\ManufacturingOrders;
 use App\Domains\WinMan\Data\ManufacturingOrderData;
 use App\Domains\WinMan\Jobs\FetchManufacturingOrderJob;
 use App\Domains\WinMan\Support\WinManHealthCheck;
-use App\Models\BatchIngredientLot;
-use App\Models\BatchRecord;
 use App\Models\ManufacturingOrder;
-use App\Models\PaperworkRow;
 use App\Models\Pallecon;
 use App\Models\Product;
 use App\Models\User;
@@ -17,6 +14,10 @@ use Livewire\Volt\Volt;
 use Mockery;
 use Tests\TestCase;
 
+/**
+ * The MO Workspace "Pallecon Workspace" panel: a list of this MO's pallecons
+ * plus a weight-only add form that opens an empty pallecon.
+ */
 class WorkspacePalleconTest extends TestCase
 {
     use RefreshDatabase;
@@ -61,113 +62,65 @@ class WorkspacePalleconTest extends TestCase
         ]);
     }
 
-    private function signedOffBatch(ManufacturingOrder $order, string $ref, float $planned = 800, bool $signedOff = true): BatchRecord
-    {
-        $batch = BatchRecord::create([
-            'manufacturing_order_id' => $order->id, 'product_id' => $order->product_id, 'batch_number' => $ref,
-            'production_date' => now()->toDateString(), 'planned_quantity' => $planned, 'status' => BatchRecord::STATUS_COMPLETED,
-        ]);
-        BatchIngredientLot::create([
-            'batch_record_id' => $batch->id, 'material_code' => 'MAT1', 'material_description' => 'Material',
-            'lot_number' => 'LOT-1', 'actual_quantity' => 10,
-        ]);
-
-        if ($signedOff) {
-            foreach ([
-                'ingredients_signoff.powders_weighed_by' => ['Powders Weighed By', 900],
-                'ingredients_signoff.liquids_weighed_by' => ['Liquids Weighed By', 901],
-                'ingredients_signoff.tipping_batch_by' => ['Tipping Batch By', 902],
-            ] as $rowKey => [$label, $rowOrder]) {
-                PaperworkRow::create([
-                    'manufacturing_order_id' => $order->id, 'batch_record_id' => $batch->id,
-                    'batch_number' => $ref, 'batch_column_index' => 1,
-                    'row_key' => $rowKey, 'row_label' => $label, 'row_order' => $rowOrder,
-                    'value_text' => 'Op', 'status' => 'completed',
-                ]);
-            }
-        }
-
-        return $batch;
-    }
-
-    public function test_add_pallecon_creates_the_container_with_its_first_fill(): void
+    public function test_add_pallecon_opens_an_empty_container_with_a_target_and_production_date(): void
     {
         $order = $this->setUpMo(7300);
-        $batch = $this->signedOffBatch($order, 'WM-WP-01');
         $this->actingAs(User::factory()->create());
 
         Volt::test('pages.manufacturing-orders.workspace', ['winmanMo' => 7300])
             ->assertOk()
-            ->set('palleconNumber', 'PAL-WP-1')
-            ->set('palleconBatchId', (string) $batch->id)
-            ->set('palleconFillWeight', '400')
+            ->set('palleconWeight', '1000')
             ->call('createPallecon')
-            ->assertHasNoErrors()
-            ->assertSee('PAL-WP-1');
+            ->assertHasNoErrors();
 
-        $pallecon = Pallecon::where('serial_number', 'PAL-WP-1')->first();
+        $pallecon = Pallecon::where('manufacturing_order_id', $order->id)->first();
         $this->assertNotNull($pallecon);
-        $this->assertSame(Pallecon::STATUS_FILLING, $pallecon->status);
-        $this->assertDatabaseHas('pallecon_fills', ['pallecon_id' => $pallecon->id, 'batch_record_id' => $batch->id, 'fill_weight' => 400]);
+        $this->assertSame(Pallecon::STATUS_OPEN, $pallecon->status);
+        $this->assertSame('1000.000', (string) $pallecon->target_weight_kg);
+        $this->assertSame(now()->toDateString(), $pallecon->production_date->toDateString());
+        $this->assertNull($pallecon->winman_reference);
+        $this->assertSame(0, $pallecon->fills()->count());
     }
 
     public function test_only_one_open_pallecon_per_mo(): void
     {
         $order = $this->setUpMo(7301);
-        $batch = $this->signedOffBatch($order, 'WM-WP-02');
         $this->actingAs(User::factory()->create());
 
         $component = Volt::test('pages.manufacturing-orders.workspace', ['winmanMo' => 7301])
-            ->set('palleconNumber', 'PAL-WP-2A')
-            ->set('palleconBatchId', (string) $batch->id)
-            ->set('palleconFillWeight', '300')
+            ->set('palleconWeight', '900')
             ->call('createPallecon')
             ->assertHasNoErrors();
 
-        $component
-            ->set('palleconNumber', 'PAL-WP-2B')
-            ->set('palleconBatchId', (string) $batch->id)
-            ->set('palleconFillWeight', '100')
-            ->call('createPallecon');
+        $component->set('palleconWeight', '500')->call('createPallecon');
 
-        $this->assertNull(Pallecon::where('serial_number', 'PAL-WP-2B')->first());
+        $this->assertSame(1, Pallecon::where('manufacturing_order_id', $order->id)->count());
         $this->assertStringContainsString('already open for this MO', (string) $component->get('palleconError'));
     }
 
-    public function test_fill_weight_cannot_exceed_the_batch_planned_quantity(): void
+    public function test_target_weight_cannot_exceed_the_pallecon_capacity_limit(): void
     {
         $order = $this->setUpMo(7302);
-        $batch = $this->signedOffBatch($order, 'WM-WP-03', planned: 800);
         $this->actingAs(User::factory()->create());
 
         $component = Volt::test('pages.manufacturing-orders.workspace', ['winmanMo' => 7302])
-            ->set('palleconNumber', 'PAL-WP-3')
-            ->set('palleconBatchId', (string) $batch->id)
-            ->set('palleconFillWeight', '900')
+            ->set('palleconWeight', '5000')
             ->call('createPallecon');
 
-        $this->assertDatabaseCount('pallecons', 0);
-        $this->assertStringContainsString('remaining on batch', (string) $component->get('palleconError'));
+        $this->assertSame(0, Pallecon::where('manufacturing_order_id', $order->id)->count());
+        $this->assertStringContainsString('above the', (string) $component->get('palleconError'));
     }
 
-    public function test_a_batch_from_another_mo_cannot_be_used(): void
+    public function test_the_pallecon_row_links_to_its_detail_page(): void
     {
-        $this->setUpMo(7303);
-        $this->setUpMo(7304);
-        $otherBatch = BatchRecord::create([
-            'manufacturing_order_id' => ManufacturingOrder::where('winman_manufacturing_order', 7304)->value('id'),
-            'batch_number' => 'WM-WP-OTHER', 'production_date' => now()->toDateString(),
-            'planned_quantity' => 800, 'status' => BatchRecord::STATUS_COMPLETED,
-        ]);
+        $order = $this->setUpMo(7303);
         $this->actingAs(User::factory()->create());
 
         $component = Volt::test('pages.manufacturing-orders.workspace', ['winmanMo' => 7303])
-            ->set('palleconNumber', 'PAL-WP-4')
-            ->set('palleconBatchId', (string) $otherBatch->id)
-            ->set('palleconFillWeight', '100')
+            ->set('palleconWeight', '800')
             ->call('createPallecon');
 
-        $this->assertDatabaseCount('pallecons', 0);
-        $this->assertStringContainsString('Select a batch from this manufacturing order', (string) $component->get('palleconError'));
+        $pallecon = Pallecon::where('manufacturing_order_id', $order->id)->first();
+        $component->assertSee(route('manufacturing-orders.pallecons', ['winmanMo' => 7303, 'pallecon' => $pallecon->id]), escape: false);
     }
 }

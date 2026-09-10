@@ -29,10 +29,13 @@ class OpenPalleconJob
         }
 
         return Pallecon::create([
+            'manufacturing_order_id' => $attributes['manufacturing_order_id'] ?? null,
             'serial_number' => $serial !== '' ? $serial : null,
             'status' => Pallecon::STATUS_OPEN,
             'mo_number' => $attributes['mo_number'] ?? null,
             'capacity_kg' => PalleconCapacity::capacityKg(),
+            'target_weight_kg' => $attributes['target_weight_kg'] ?? null,
+            'production_date' => $attributes['production_date'] ?? null,
             'top_seal_number' => $attributes['top_seal_number'] ?? null,
             'bottom_seal_number' => $attributes['bottom_seal_number'] ?? null,
             'liner_number' => $attributes['liner_number'] ?? null,
