@@ -547,7 +547,16 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                     </div>
                 @endif
 
-                @if (count($existingBatches) === 0)
+                @php
+                    // Multiple batches per MO are allowed; only block a new one
+                    // while an earlier batch is still in progress. start() enforces
+                    // the same rule server-side.
+                    $hasInProgressBatch = collect($existingBatches)->contains(
+                        fn ($b): bool => (string) ($b['status'] ?? '') === \App\Models\BatchRecord::STATUS_IN_PROGRESS
+                    );
+                @endphp
+
+                @if (! $hasInProgressBatch)
                     <div class="flex flex-wrap items-end gap-3">
                         @if (count($variantOptions) > 0)
                             <div>
@@ -581,9 +590,11 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                         @endif
 
                         <x-primary-button wire:click="start" wire:loading.attr="disabled">
-                            Add batch
+                            {{ count($existingBatches) === 0 ? 'Add batch' : 'Add another batch' }}
                         </x-primary-button>
                     </div>
+                @elseif (count($existingBatches) > 0)
+                    <div class="text-xs text-slate-500">Complete the in-progress batch before adding another one to this MO.</div>
                 @endif
             </div>
 
