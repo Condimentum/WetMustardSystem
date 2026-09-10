@@ -1871,22 +1871,21 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                             }
 
                                             $allocatedQty = (float) $allocatedPreviewRows->sum('quantity');
+                                            // quantity_issued on the snapshot is MO-wide, not per batch. Only
+                                            // trust it as an "allocated" fallback on a single-batch MO - otherwise
+                                            // an earlier batch's WinMan issues zero out this batch's outstanding.
                                             $snapshotIssuedQty = abs((float) ($bomLine->quantity_issued ?? 0));
-                                            if ($allocatedQty <= 0 && $snapshotIssuedQty > 0) {
+                                            if ($allocatedQty <= 0 && $snapshotIssuedQty > 0 && $this->moBatchCount <= 1) {
                                                 $allocatedQty = $snapshotIssuedQty;
                                             }
 
-                                            $allocatedQtyDisplay = rtrim(rtrim((string) $allocatedQty, '0'), '.');
-                                            if ($allocatedQtyDisplay === '') {
-                                                $allocatedQtyDisplay = '0';
-                                            }
+                                            // formatQty() trims via number_format; a bare (string) cast + rtrim
+                                            // '0' would turn 150 into "15" / 90 into "9".
+                                            $allocatedQtyDisplay = $this->formatQty($allocatedQty);
 
                                             $requiredForBatch = round(abs((float) ($bomLine->quantity ?? 0)) * $this->batchScaleRatio, 3);
                                             $outstandingForBatch = max($requiredForBatch - $allocatedQty, 0.0);
-                                            $outstandingForBatchDisplay = rtrim(rtrim((string) round($outstandingForBatch, 3), '0'), '.');
-                                            if ($outstandingForBatchDisplay === '') {
-                                                $outstandingForBatchDisplay = '0';
-                                            }
+                                            $outstandingForBatchDisplay = $this->formatQty($outstandingForBatch);
 
                                             $allocatedLotCount = $allocatedPreviewRows->count();
                                         @endphp
