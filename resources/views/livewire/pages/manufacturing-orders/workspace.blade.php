@@ -179,16 +179,32 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
         return BatchRecord::query()
             ->where('manufacturing_order_id', $localOrder->id)
             ->orderBy('id')
+            ->withCount('palleconFills as pallecon_fills_count')
+            ->withSum('palleconFills as pallecon_allocated_kg', 'fill_weight')
             ->get(['id', 'batch_number', 'planned_quantity', 'production_date', 'status'])
             ->map(function (BatchRecord $batch): array {
+                $planned = (float) ($batch->planned_quantity ?? 0);
+                $allocatedKg = (float) ($batch->pallecon_allocated_kg ?? 0);
+                $fills = (int) ($batch->pallecon_fills_count ?? 0);
+
+                // Pallecon allocation state: nothing filled yet, part of the
+                // planned quantity filled, or the whole batch accounted for.
+                $allocationState = match (true) {
+                    $fills === 0 => 'awaiting',
+                    $planned > 0 && $allocatedKg + 0.0001 >= $planned => 'allocated',
+                    default => 'partial',
+                };
+
                 return [
                     'id' => $batch->id,
                     // Batch Reference is app-only; WinMan references belong to pallecons.
                     'reference' => (string) $batch->batch_number,
                     'application_batch_number' => (string) $batch->batch_number,
-                    'planned_quantity' => (float) ($batch->planned_quantity ?? 0),
+                    'planned_quantity' => $planned,
                     'production_date' => $batch->production_date?->format('Y-m-d'),
                     'status' => (string) $batch->status,
+                    'allocation_state' => $allocationState,
+                    'allocated_kg' => $allocatedKg,
                 ];
             })
             ->all();
@@ -440,6 +456,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                                     <th class="px-3 py-2">Qty</th>
                                     <th class="px-3 py-2">Production Date</th>
                                     <th class="px-3 py-2">Status</th>
+                                    <th class="px-3 py-2">Allocation</th>
                                     <th class="px-3 py-2 text-right"></th>
                                 </tr>
                             </thead>
@@ -472,6 +489,24 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                                                 <span style="height:8px;width:8px;border-radius:999px;background:{{ $batchStatusStyles['dot'] }};display:inline-block;"></span>
                                                 {{ $batchStatusLabel }}
                                             </span>
+                                        </td>
+                                        <td class="px-3 py-2">
+                                            @php
+                                                $allocState = (string) ($batch['allocation_state'] ?? 'awaiting');
+                                                $allocStyles = match ($allocState) {
+                                                    'allocated' => ['bg' => '#dcfce7', 'border' => '#86efac', 'color' => '#166534', 'dot' => '#22c55e', 'label' => 'Allocated'],
+                                                    'partial' => ['bg' => '#dbeafe', 'border' => '#93c5fd', 'color' => '#1e40af', 'dot' => '#3b82f6', 'label' => 'Partially Allocated'],
+                                                    default => ['bg' => '#fef9c3', 'border' => '#fde68a', 'color' => '#92400e', 'dot' => '#f59e0b', 'label' => 'Awaiting Allocation'],
+                                                };
+                                                $allocatedKg = (float) ($batch['allocated_kg'] ?? 0);
+                                                $plannedKg = (float) ($batch['planned_quantity'] ?? 0);
+                                            @endphp
+                                            <a href="{{ route('manufacturing-orders.pallecons', ['winmanMo' => $winmanMo]) }}" wire:navigate
+                                               title="{{ $fmt($allocatedKg) }} of {{ $fmt($plannedKg) }} kg allocated to pallecons"
+                                               style="display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid {{ $allocStyles['border'] }};background:{{ $allocStyles['bg'] }};color:{{ $allocStyles['color'] }};font-size:13px;font-weight:700;text-decoration:none;">
+                                                <span style="height:8px;width:8px;border-radius:999px;background:{{ $allocStyles['dot'] }};display:inline-block;"></span>
+                                                {{ $allocStyles['label'] }}
+                                            </a>
                                         </td>
                                         <td class="px-3 py-2 text-right">
                                             <a href="{{ route('batches.show', ['batch' => (int) $batch['id'], 'tab' => 'allocation']) }}" wire:navigate style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;background:#eef2ff;border:1px solid #c7d2fe;color:#4338ca;font-size:13px;font-weight:700;text-decoration:none;">Continue</a>
