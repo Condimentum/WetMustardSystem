@@ -2,16 +2,20 @@
 
 use App\Domains\Audit\Jobs\RecordErrorLogJob;
 use App\Domains\Batch\Exceptions\BatchException;
+use App\Domains\Pallecon\Support\PalleconFilling;
 use App\Domains\WinMan\Exceptions\WinManException;
 use App\Domains\WinMan\Jobs\FetchManufacturingOrderJob;
 use App\Domains\WinMan\Support\WinManHealthCheck;
 use App\Features\Batches\StartBatchFromManufacturingOrderFeature;
+use App\Features\Pallecon\CreatePalleconWithFillFeature;
 use App\Models\BatchRecord;
 use App\Models\ManufacturingOrder;
+use App\Models\Pallecon;
 use App\Models\ProductMapping;
 use App\Models\Product;
 use App\Models\RecipeCard;
 use App\Models\RecipeVariant;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
@@ -42,6 +46,16 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
     public ?string $status = null;
 
     public bool $winManDown = false;
+
+    public string $palleconNumber = '';
+
+    public string $palleconFillWeight = '';
+
+    public string $palleconBatchId = '';
+
+    public ?string $palleconError = null;
+
+    public ?string $palleconStatus = null;
 
     public function mount(int $winmanMo): void
     {
@@ -91,6 +105,125 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
 
         $this->loadWorkspace();
         $this->status = 'Batch '.$batch->batch_number.' created. You can continue with any batch below.';
+    }
+
+    private function localMoOrder(): ?ManufacturingOrder
+    {
+        return ManufacturingOrder::query()
+            ->where('winman_manufacturing_order', $this->winmanMo)
+            ->first();
+    }
+
+    /**
+     * Every pallecon worked for this MO (any status) - the list under the
+     * Pallecon Workspace header, mirroring the batch list above.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    #[Computed]
+    public function moPallecons(): array
+    {
+        $moId = (int) ($this->localMoOrder()?->id ?? 0);
+
+        if ($moId <= 0) {
+            return [];
+        }
+
+        return Pallecon::query()
+            ->whereHas('fills.batchRecord', fn ($query) => $query->where('manufacturing_order_id', $moId))
+            ->with(['fills.batchRecord:id,manufacturing_order_id'])
+            ->orderByDesc('id')
+            ->get()
+            ->filter(fn (Pallecon $pallecon): bool => $pallecon->fills->isNotEmpty()
+                && $pallecon->fills->every(
+                    fn ($fill): bool => (int) ($fill->batchRecord?->manufacturing_order_id ?? 0) === $moId
+                ))
+            ->map(fn (Pallecon $pallecon): array => [
+                'id' => $pallecon->id,
+                'reference' => (string) ($pallecon->serial_number ?? 'Pallecon #'.$pallecon->id),
+                'filled_kg' => $pallecon->filledWeight(),
+                'final_weight' => $pallecon->final_weight !== null ? (float) $pallecon->final_weight : null,
+                'opened_date' => $pallecon->opened_at?->format('Y-m-d'),
+                'status' => (string) $pallecon->status,
+                'on_hold' => $pallecon->isOnHold(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    #[Computed]
+    public function palleconFillBatches(): array
+    {
+        $order = $this->localMoOrder();
+
+        return $order === null ? [] : app(PalleconFilling::class)->fillableBatches($order);
+    }
+
+    #[Computed]
+    public function hasOpenPalleconForMo(): bool
+    {
+        return collect($this->moPallecons)->contains(
+            fn (array $pallecon): bool => in_array($pallecon['status'], ['open', 'filling'], true)
+        );
+    }
+
+    public function createPallecon(): void
+    {
+        $this->palleconError = null;
+        $this->palleconStatus = null;
+
+        $this->validate([
+            'palleconNumber' => ['required', 'string', 'max:255'],
+            'palleconBatchId' => ['required', 'integer'],
+            'palleconFillWeight' => ['required', 'numeric', 'min:0.001'],
+        ]);
+
+        $order = $this->localMoOrder();
+        if ($order === null) {
+            $this->palleconError = 'Manufacturing order was not found.';
+
+            return;
+        }
+
+        $filling = app(PalleconFilling::class);
+        $batchMeta = collect($filling->fillableBatches($order))->firstWhere('id', (int) $this->palleconBatchId);
+
+        $guard = $filling->guardFill($batchMeta, (float) $this->palleconFillWeight);
+        if ($guard !== null) {
+            $this->palleconError = $guard;
+
+            return;
+        }
+
+        $batch = BatchRecord::with('manufacturingOrder', 'product')->findOrFail((int) $this->palleconBatchId);
+
+        try {
+            ['pallecon' => $pallecon, 'fill' => $fill] = app(CreatePalleconWithFillFeature::class)(
+                $order,
+                $this->palleconNumber,
+                $batch,
+                (float) $this->palleconFillWeight,
+                auth()->user(),
+            );
+        } catch (\Throwable $e) {
+            app(RecordErrorLogJob::class)($e, 'manufacturing-orders.workspace.create-pallecon');
+            $this->palleconError = $e->getMessage();
+
+            return;
+        }
+
+        $booking = $filling->bookFill($batch, $pallecon, $fill, now()->toDateString(), auth()->user());
+
+        $message = 'Pallecon '.($pallecon->serial_number ?? '#'.$pallecon->id)
+            .' created with a '.$this->palleconFillWeight.' kg fill from batch '.$batch->batch_number.'.';
+        if ($booking['messages'] !== []) {
+            $message .= ' '.implode(' ', $booking['messages']);
+        }
+
+        $this->palleconStatus = $message;
+        $this->reset('palleconNumber', 'palleconFillWeight', 'palleconBatchId');
+        unset($this->moPallecons, $this->palleconFillBatches, $this->hasOpenPalleconForMo);
     }
 
     private function loadWorkspace(): void
@@ -599,32 +732,101 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
             </div>
 
             <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-                <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-                    <div>
-                        <div class="text-base font-semibold text-gray-800">Pallecon Workspace</div>
-                        <div class="text-sm text-slate-500 mt-1">Open pallecons and record each batch contribution by quantity.</div>
-                    </div>
-                    <a href="{{ route('manufacturing-orders.pallecons', ['winmanMo' => $winmanMo]) }}" wire:navigate style="display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;border:2px solid #4f46e5;background:#fff;color:#4f46e5;font-size:13px;font-weight:800;text-decoration:none;white-space:nowrap;">
-                        Open Pallecon Workspace &rarr;
-                    </a>
+                <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);">
+                    <div class="text-base font-semibold text-gray-800">Pallecon Workspace</div>
                 </div>
-                <div class="p-5">
-                    <div style="background:#fff;border:1px solid #dbe1ea;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.05);">
-                        <div style="padding:14px 22px;display:flex;align-items:center;gap:22px;flex-wrap:wrap;">
-                            <div style="min-width:180px;">
-                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Workflow</div>
-                                <div style="margin-top:7px;font-size:17px;line-height:1.2;font-weight:800;color:#0f172a;">Create pallecon + fill</div>
-                            </div>
-                            <div style="min-width:210px;border-left:1px solid #dbe1ea;padding-left:22px;">
-                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Traceability</div>
-                                <div style="margin-top:7px;font-size:14px;line-height:1.35;font-weight:600;color:#334155;">Select batch, state fill weight, create</div>
-                            </div>
-                            <div style="min-width:210px;border-left:1px solid #dbe1ea;padding-left:22px;">
-                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Next Step</div>
-                                <div style="margin-top:7px;font-size:14px;line-height:1.35;font-weight:600;color:#334155;">Complete pallecon → label + WinMan inventory</div>
+                <div class="p-6 space-y-6">
+                    @if ($palleconError)
+                        <div class="text-sm bg-red-50 border border-red-200 rounded px-3 py-2 text-red-700">{{ $palleconError }}</div>
+                    @endif
+                    @if ($palleconStatus)
+                        <div class="text-sm bg-green-50 border border-green-200 rounded px-3 py-2 text-green-700">{{ $palleconStatus }}</div>
+                    @endif
+
+                    @php
+                        $palleconStatusStyle = fn (string $s): array => match ($s) {
+                            'filling' => ['bg' => '#fef9c3', 'border' => '#fde68a', 'color' => '#92400e', 'dot' => '#f59e0b'],
+                            'open' => ['bg' => '#eff6ff', 'border' => '#bfdbfe', 'color' => '#1e40af', 'dot' => '#3b82f6'],
+                            'sealed' => ['bg' => '#dcfce7', 'border' => '#86efac', 'color' => '#166534', 'dot' => '#22c55e'],
+                            'consumed' => ['bg' => '#f1f5f9', 'border' => '#cbd5e1', 'color' => '#334155', 'dot' => '#64748b'],
+                            'on_hold' => ['bg' => '#fee2e2', 'border' => '#fca5a5', 'color' => '#991b1b', 'dot' => '#ef4444'],
+                            default => ['bg' => '#f3f4f6', 'border' => '#d1d5db', 'color' => '#4b5563', 'dot' => '#6b7280'],
+                        };
+                    @endphp
+
+                    @if (count($this->moPallecons) > 0)
+                        <div style="background:#fff;border:1px solid #dbe1ea;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.05);">
+                            <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
+                                    <tr>
+                                        <th class="px-4 py-3">Reference</th>
+                                        <th class="px-3 py-2">Qty (kg)</th>
+                                        <th class="px-3 py-2">Date</th>
+                                        <th class="px-3 py-2">Status</th>
+                                        <th class="px-3 py-2 text-right"></th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    @foreach ($this->moPallecons as $pallecon)
+                                        @php
+                                            $pStyle = $palleconStatusStyle($pallecon['on_hold'] ? 'on_hold' : $pallecon['status']);
+                                            $qty = $pallecon['final_weight'] ?? $pallecon['filled_kg'];
+                                        @endphp
+                                        <tr>
+                                            <td class="px-4 py-3 font-medium text-gray-800">{{ $pallecon['reference'] }}</td>
+                                            <td class="px-3 py-2">{{ rtrim(rtrim(number_format((float) $qty, 3, '.', ''), '0'), '.') ?: '0' }}</td>
+                                            <td class="px-3 py-2">{{ $pallecon['opened_date'] ?? '-' }}</td>
+                                            <td class="px-3 py-2">
+                                                <span style="display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid {{ $pStyle['border'] }};background:{{ $pStyle['bg'] }};color:{{ $pStyle['color'] }};font-size:13px;font-weight:700;">
+                                                    <span style="height:8px;width:8px;border-radius:999px;background:{{ $pStyle['dot'] }};display:inline-block;"></span>
+                                                    {{ $pallecon['on_hold'] ? 'On Hold' : \Illuminate\Support\Str::headline($pallecon['status']) }}
+                                                </span>
+                                            </td>
+                                            <td class="px-3 py-2 text-right">
+                                                <a href="{{ route('manufacturing-orders.pallecons', ['winmanMo' => $winmanMo, 'pallecon' => $pallecon['id']]) }}" wire:navigate style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;background:#eef2ff;border:1px solid #c7d2fe;color:#4338ca;font-size:13px;font-weight:700;text-decoration:none;">Continue</a>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
                             </div>
                         </div>
-                    </div>
+                    @endif
+
+                    @php
+                        $signedOffFillBatches = collect($this->palleconFillBatches)->where('signoff_complete', true)->values();
+                    @endphp
+
+                    @if ($this->hasOpenPalleconForMo)
+                        <div class="text-xs text-slate-500">Complete the open pallecon before creating another one for this MO.</div>
+                    @elseif ($signedOffFillBatches->isEmpty())
+                        <div class="text-xs text-slate-500">No signed-off batch is available to fill a pallecon yet.</div>
+                    @else
+                        <div class="flex flex-wrap items-end gap-3">
+                            <div>
+                                <label class="block text-xs text-gray-600 mb-1">Pallecon number</label>
+                                <input type="text" wire:model="palleconNumber" class="border-gray-300 rounded-md shadow-sm text-sm w-44" placeholder="e.g. PAL-00123" />
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-600 mb-1">Source batch</label>
+                                <select wire:model="palleconBatchId" class="border-gray-300 rounded-md shadow-sm text-sm w-56">
+                                    <option value="">- select batch -</option>
+                                    @foreach ($signedOffFillBatches as $b)
+                                        <option value="{{ $b['id'] }}">{{ $b['batch_number'] }} ({{ rtrim(rtrim(number_format($b['remaining_kg'], 3, '.', ''), '0'), '.') ?: '0' }} kg left)</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-600 mb-1">Fill weight (kg)</label>
+                                <input type="number" step="0.001" min="0.001" wire:model="palleconFillWeight" class="border-gray-300 rounded-md shadow-sm text-sm w-32" placeholder="e.g. 400" />
+                            </div>
+                            <x-primary-button wire:click="createPallecon" wire:loading.attr="disabled">
+                                {{ count($this->moPallecons) === 0 ? 'Add pallecon' : 'Add another pallecon' }}
+                            </x-primary-button>
+                        </div>
+                        <p class="text-xs text-slate-500">Creates the pallecon and records the first fill. Use Continue on a row to add more fills, seals and complete it.</p>
+                    @endif
                 </div>
             </div>
         @endif

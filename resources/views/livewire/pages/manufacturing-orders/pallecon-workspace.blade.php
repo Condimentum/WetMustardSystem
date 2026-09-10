@@ -1,17 +1,14 @@
 <?php
 
 use App\Domains\Pallecon\Support\PalleconCapacity;
-use App\Features\Booking\BookFinishedGoodsFeature;
+use App\Domains\Pallecon\Support\PalleconFilling;
 use App\Features\Pallecon\AttachBatchFillFeature;
-use App\Features\Pallecon\OpenPalleconFeature;
 use App\Features\Pallecon\PrintPalleconLabelFeature;
 use App\Features\Pallecon\SealPalleconFeature;
 use App\Models\BatchRecord;
 use App\Models\ManufacturingOrder;
 use App\Models\Pallecon;
-use App\Models\PalleconFill;
 use App\Models\PalleconRecord;
-use Illuminate\Support\Carbon;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -22,7 +19,8 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
 
     public ?ManufacturingOrder $localOrder = null;
 
-    public string $palleconNumber = '';
+    /** When set (?pallecon=), the page is scoped to this one pallecon. */
+    public ?int $palleconId = null;
 
     /** Seal/liner details, edited inside the open pallecon. */
     public array $containerForm = [
@@ -56,6 +54,7 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
         $this->localOrder = ManufacturingOrder::query()
             ->where('winman_manufacturing_order', $winmanMo)
             ->first();
+        $this->palleconId = request()->integer('pallecon') ?: null;
         $this->production_date = now()->toDateString();
         $this->syncContainerForm();
     }
@@ -121,63 +120,20 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
      * Batches of this MO as fill sources, with per-batch planned/filled/remaining
      * quantities. "remaining" is the hard cap for further fills from that batch.
      *
-     * @return array<int, array{id:int, batch_number:string, status:string, signoff_complete:bool, planned_kg:float, filled_kg:float, remaining_kg:float}>
+     * @return array<int, array<string, mixed>>
      */
     #[Computed]
     public function moBatches(): array
     {
-        if ($this->localOrder === null) {
-            return [];
-        }
-
-        $batches = BatchRecord::query()
-            ->where('manufacturing_order_id', $this->localOrder->id)
-            ->whereNotIn('status', [BatchRecord::STATUS_CANCELLED])
-            ->orderBy('id')
-            ->get();
-
-        // Sign-off is a batch-level confirmation (powders/liquids/tipping names
-        // recorded once per batch), not per-lot signatures.
-        $confirmationCounts = \App\Models\PaperworkRow::query()
-            ->whereIn('batch_record_id', $batches->pluck('id'))
-            ->whereIn('row_key', [
-                'ingredients_signoff.powders_weighed_by',
-                'ingredients_signoff.liquids_weighed_by',
-                'ingredients_signoff.tipping_batch_by',
-            ])
-            ->whereNotNull('value_text')
-            ->where('value_text', '<>', '')
-            ->selectRaw('batch_record_id, count(*) as confirmations')
-            ->groupBy('batch_record_id')
-            ->pluck('confirmations', 'batch_record_id');
-
-        $filledByBatch = \App\Models\PalleconFill::query()
-            ->whereIn('batch_record_id', $batches->pluck('id'))
-            ->selectRaw('batch_record_id, COALESCE(SUM(fill_weight), 0) as filled')
-            ->groupBy('batch_record_id')
-            ->pluck('filled', 'batch_record_id');
-
-        return $batches
-            ->map(function (BatchRecord $batch) use ($confirmationCounts, $filledByBatch): array {
-                $planned = (float) ($batch->planned_quantity ?? 0);
-                $filled = (float) ($filledByBatch[$batch->id] ?? 0);
-
-                return [
-                    'id' => $batch->id,
-                    'batch_number' => (string) $batch->batch_number,
-                    'status' => (string) $batch->status,
-                    'signoff_complete' => (int) ($confirmationCounts[$batch->id] ?? 0) >= 3,
-                    'planned_kg' => $planned,
-                    'filled_kg' => $filled,
-                    'remaining_kg' => max($planned - $filled, 0.0),
-                ];
-            })
-            ->all();
+        return $this->localOrder === null
+            ? []
+            : app(PalleconFilling::class)->fillableBatches($this->localOrder);
     }
 
     /**
-     * The single open/filling pallecon that carries a fill from this MO. Only one
-     * may be worked at a time per MO.
+     * The pallecon this page works on. When ?pallecon= is given it is that one
+     * (must belong to this MO); otherwise the single open/filling pallecon for
+     * this MO, if any.
      */
     #[Computed]
     public function activeContainer(): ?Pallecon
@@ -186,6 +142,19 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
 
         if ($moId <= 0) {
             return null;
+        }
+
+        $belongsToMo = fn (Pallecon $pallecon): bool => $pallecon->fills->isNotEmpty()
+            && $pallecon->fills->contains(
+                fn ($fill): bool => (int) ($fill->batchRecord?->manufacturing_order_id ?? 0) === $moId
+            );
+
+        if ($this->palleconId !== null) {
+            $pallecon = Pallecon::query()
+                ->with(['fills.batchRecord:id,batch_number,manufacturing_order_id'])
+                ->find($this->palleconId);
+
+            return ($pallecon !== null && $belongsToMo($pallecon)) ? $pallecon : null;
         }
 
         return Pallecon::query()
@@ -199,92 +168,21 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
     /**
      * Resolves and guards the selected source batch for a fill of $weight kg.
      *
-     * @return array{0: array<string,mixed>, 1: BatchRecord}|null  null on failure (flash set)
+     * @return BatchRecord|null  null on failure (flash set)
      */
-    private function resolveFillBatch(float $weight): ?array
+    private function resolveFillBatch(float $weight): ?BatchRecord
     {
         $batchMeta = collect($this->moBatches)->firstWhere('id', (int) $this->fillBatchId);
 
-        if ($batchMeta === null) {
-            $this->flash = 'Select a batch from this manufacturing order first.';
+        $error = app(PalleconFilling::class)->guardFill($batchMeta, $weight);
+        if ($error !== null) {
+            $this->flash = $error;
             $this->flashError = true;
 
             return null;
         }
 
-        if (! $batchMeta['signoff_complete']) {
-            $this->flash = 'Batch '.$batchMeta['batch_number'].' has not completed Ingredients Sign Off yet.';
-            $this->flashError = true;
-
-            return null;
-        }
-
-        // The batch planned quantity is a hard cap - total fills from a batch can
-        // never exceed it. Only enforced when a planned quantity is on record.
-        $remaining = (float) ($batchMeta['remaining_kg'] ?? 0);
-        if ((float) ($batchMeta['planned_kg'] ?? 0) > 0 && $weight > $remaining + 0.0001) {
-            $this->flash = sprintf(
-                'Only %s kg remaining on batch %s - the fill weight cannot exceed it.',
-                rtrim(rtrim(number_format($remaining, 3, '.', ''), '0'), '.') ?: '0',
-                $batchMeta['batch_number'],
-            );
-            $this->flashError = true;
-
-            return null;
-        }
-
-        return [$batchMeta, BatchRecord::with('manufacturingOrder', 'product')->findOrFail((int) $this->fillBatchId)];
-    }
-
-    public function createPallecon(): void
-    {
-        $this->validate([
-            'palleconNumber' => ['required', 'string', 'max:255'],
-            'fillBatchId' => ['required', 'integer'],
-            'fillWeight' => ['required', 'numeric', 'min:0.001'],
-        ]);
-
-        $this->flash = null;
-        $this->winman_booking_preview = null;
-
-        if ($this->activeContainer !== null) {
-            $this->flash = 'A pallecon is already open for this MO. Complete it before starting another.';
-            $this->flashError = true;
-
-            return;
-        }
-
-        $resolved = $this->resolveFillBatch((float) $this->fillWeight);
-        if ($resolved === null) {
-            return;
-        }
-        [, $batch] = $resolved;
-
-        try {
-            $container = app(OpenPalleconFeature::class)([
-                'serial_number' => $this->palleconNumber,
-                'mo_number' => $this->localOrder?->mo_number,
-            ], auth()->user());
-
-            $fill = app(AttachBatchFillFeature::class)($container, $batch, [
-                'fill_weight' => $this->fillWeight,
-            ], auth()->user());
-        } catch (\Throwable $e) {
-            $this->flash = $e->getMessage();
-            $this->flashError = true;
-
-            return;
-        }
-
-        $messages = ['Pallecon '.($container->serial_number ?? '#'.$container->id).' created with a '.$this->fillWeight.' kg fill from batch '.$batch->batch_number.'.'];
-        $this->flashError = false;
-        $messages = $this->bookFillToWinMan($batch, $container, $fill, $messages);
-
-        $this->flash = implode(' ', $messages);
-        $this->palleconNumber = '';
-        $this->fillWeight = '';
-        unset($this->activeContainer, $this->moBatches);
-        $this->syncContainerForm();
+        return BatchRecord::with('manufacturingOrder', 'product')->findOrFail((int) $this->fillBatchId);
     }
 
     public function addFill(): void
@@ -299,17 +197,16 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
 
         $container = $this->activeContainer;
         if ($container === null) {
-            $this->flash = 'Create a pallecon first, then add further fills to it.';
+            $this->flash = 'No pallecon selected. Create one on the MO Workspace first.';
             $this->flashError = true;
 
             return;
         }
 
-        $resolved = $this->resolveFillBatch((float) $this->fillWeight);
-        if ($resolved === null) {
+        $batch = $this->resolveFillBatch((float) $this->fillWeight);
+        if ($batch === null) {
             return;
         }
-        [, $batch] = $resolved;
 
         try {
             $fill = app(AttachBatchFillFeature::class)($container, $batch, [
@@ -357,83 +254,28 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
     }
 
     /**
-     * Per-fill WinMan booking (unchanged wire protocol): books this fill's weight
-     * to the source batch's MO and records a preview.
-     *
      * @param  array<int, string>  $messages
      * @return array<int, string>
      */
-    private function bookFillToWinMan(BatchRecord $batch, Pallecon $container, PalleconFill $fill, array $messages): array
+    private function bookFillToWinMan(BatchRecord $batch, Pallecon $container, \App\Models\PalleconFill $fill, array $messages): array
     {
-        if (! (bool) config('winman.booking.enabled', false)) {
-            return $messages;
+        $result = app(PalleconFilling::class)->bookFill(
+            $batch,
+            $container,
+            $fill,
+            $this->production_date !== '' ? $this->production_date : now()->toDateString(),
+            auth()->user(),
+        );
+
+        if ($result['preview'] !== null) {
+            $this->winman_booking_preview = $result['preview'];
         }
 
-        try {
-            $bookedQuantity = (float) ($fill->fill_weight ?? 0);
-
-            if ($bookedQuantity > 0) {
-                $palleconLike = new PalleconRecord([
-                    'mo_number' => $batch->manufacturingOrder?->mo_number,
-                    'ticket_number' => $container->serial_number,
-                    'serial_number' => $container->serial_number,
-                    'fill_weight' => $bookedQuantity,
-                ]);
-                $palleconLike->setRelation('batchRecord', $batch);
-                $palleconLike->id = $container->id;
-
-                $finished = now();
-                $expiry = $this->resolveBookingExpiryDate($batch, $palleconLike, $finished);
-                $lotNumber = $this->resolveWinManLotNumber($batch, $palleconLike);
-                $requestPreview = [
-                    'manufacturing_order_id' => (string) ($batch->manufacturingOrder?->winman_manufacturing_order_id ?? $palleconLike->mo_number ?? ''),
-                    'manufacturing_order_internal' => (int) ($batch->manufacturingOrder?->winman_manufacturing_order ?? 0),
-                    'product_id' => (string) ($batch->manufacturingOrder?->winman_product_id ?? ''),
-                    'quantity_kg' => $bookedQuantity,
-                    'lot_number' => $lotNumber,
-                    'finished_date' => $finished->format('Y-m-d H:i:s'),
-                    'expiry_date' => $expiry->format('Y-m-d H:i:s'),
-                    'pallecon_number' => (string) ($container->serial_number ?? ''),
-                ];
-
-                $log = app(BookFinishedGoodsFeature::class)(
-                    $batch,
-                    $bookedQuantity,
-                    $lotNumber,
-                    [$lotNumber],
-                    $finished,
-                    $expiry,
-                    auth()->user(),
-                    true,
-                );
-
-                $this->winman_booking_preview = $requestPreview + [
-                    'booking_status' => (string) $log->booking_status,
-                    'winman_inventory_id' => $log->winman_inventory_id !== null ? (string) $log->winman_inventory_id : null,
-                    'error_message' => $log->error_message,
-                    'booked_at' => $log->booking_date?->format('Y-m-d H:i:s') ?? now()->format('Y-m-d H:i:s'),
-                    'booked_quantity_kg_logged' => $log->quantity_booked_kg !== null ? (string) $log->quantity_booked_kg : null,
-                    'booked_quantity_traded_units' => $log->quantity_booked_traded_units !== null ? (string) $log->quantity_booked_traded_units : null,
-                    'logged_lot_number' => $log->lot_number,
-                ];
-
-                if ($log->booking_status === 'success') {
-                    $messages[] = 'WinMan inventory created (Inventory '.($log->winman_inventory_id ?? '—').').';
-                } else {
-                    $this->flashError = true;
-                    $messages[] = 'WinMan booking '.$log->booking_status.': '.($log->error_message ?: 'unknown error').'.';
-                }
-            }
-        } catch (\Throwable $e) {
+        if ($result['error']) {
             $this->flashError = true;
-            $this->winman_booking_preview = [
-                'booking_status' => 'failed',
-                'error_message' => $e->getMessage(),
-            ];
-            $messages[] = 'Fill saved, but WinMan booking failed: '.$e->getMessage();
         }
 
-        return $messages;
+        return array_merge($messages, $result['messages']);
     }
 
     public function startSeal(int $palleconId): void
@@ -546,99 +388,6 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
         }
     }
 
-    private function resolveWinManLotNumber(BatchRecord $batch, PalleconRecord $pallecon): string
-    {
-        $moId = trim((string) ($batch->manufacturingOrder?->winman_manufacturing_order_id
-            ?? $pallecon->mo_number
-            ?? 'MO'));
-        $palleconNumber = trim((string) ($pallecon->ticket_number ?? ''));
-        $labelStyleLot = $this->resolveLabelStyleLotNumber();
-
-        $moId = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $moId));
-        $palleconNumber = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $palleconNumber));
-
-        if ($moId === '') {
-            $moId = 'MO';
-        }
-
-        if ($palleconNumber === '') {
-            $palleconNumber = 'P'.$pallecon->id;
-        }
-
-        $fullLot = trim($moId.' '.$palleconNumber.' '.$labelStyleLot);
-
-        return substr($fullLot, 0, 100);
-    }
-
-    private function resolveLabelStyleLotNumber(): string
-    {
-        $productionDate = $this->production_date !== ''
-            ? Carbon::parse($this->production_date)
-            : now();
-
-        $yjjj = $productionDate->format('y');
-        $yjjj = substr($yjjj, -1).str_pad((string) $productionDate->dayOfYear, 3, '0', STR_PAD_LEFT);
-
-        return $yjjj.'00M96';
-    }
-
-    private function resolveBookingExpiryDate(BatchRecord $batch, PalleconRecord $pallecon, Carbon $fallbackBase): Carbon
-    {
-        $productionDate = $this->production_date !== ''
-            ? Carbon::parse($this->production_date)
-            : now();
-
-        $previewPallecon = new PalleconRecord([
-            'mo_number' => $batch->manufacturingOrder?->mo_number,
-            'fill_weight' => (float) ($pallecon->fill_weight ?? 0),
-        ]);
-        $previewPallecon->setRelation('batchRecord', $batch);
-
-        try {
-            $payload = app(PrintPalleconLabelFeature::class)->buildPrintPayload($previewPallecon, 1, [
-                'production_date' => $productionDate->toDateString(),
-            ]);
-
-            $sources = is_array($payload['options']['named_data_sources'] ?? null)
-                ? $payload['options']['named_data_sources']
-                : [];
-
-            $bbeFormat = strtoupper(trim((string) ($sources['BBEformat'] ?? '')));
-            $bbeValue = isset($sources['BBE']) && is_numeric((string) $sources['BBE'])
-                ? max(1, (int) $sources['BBE'])
-                : null;
-
-            // SQL says shelf life in days: use exact day result.
-            if ($bbeValue !== null && $bbeFormat === 'DDMMYYYY') {
-                return $productionDate->copy()->addDays($bbeValue)->endOfDay();
-            }
-
-            // SQL says shelf life in months: use last day of target month.
-            if ($bbeValue !== null && $bbeFormat === 'MMYYYY') {
-                return $productionDate->copy()->addMonthsNoOverflow($bbeValue)->endOfMonth();
-            }
-
-            $bestBeforeRaw = trim((string) ($sources['BestBeforeEnd'] ?? ''));
-
-            if ($bestBeforeRaw !== '') {
-                if (preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $bestBeforeRaw) === 1) {
-                    return Carbon::createFromFormat('d/m/Y', $bestBeforeRaw)->endOfDay();
-                }
-
-                if (preg_match('/^\d{2}\/\d{4}$/', $bestBeforeRaw) === 1) {
-                    return Carbon::createFromFormat('m/Y', $bestBeforeRaw)->endOfMonth();
-                }
-
-                return Carbon::parse($bestBeforeRaw)->endOfDay();
-            }
-        } catch (\Throwable) {
-            // Fall through to configured shelf-life fallback.
-        }
-
-        $shelfDays = (int) ($batch->product?->shelf_life_days ?? 180);
-
-        return $fallbackBase->copy()->addDays($shelfDays)->endOfMonth();
-    }
 }; ?>
 
 <div class="py-8">
@@ -748,45 +497,17 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             @endif
         </div>
 
-        {{-- Pallecon Workspace: one open pallecon at a time for this MO --}}
+        {{-- Pallecon Workspace: the one pallecon this page works on --}}
         @php $active = $this->activeContainer; @endphp
         <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
             <h2 class="text-sm font-semibold text-slate-800 mb-3">Pallecon Workspace</h2>
 
             @if ($active === null)
-                @if ($selectedBatch)
-                    <p class="text-sm text-slate-600 mb-3">
-                        First fill from batch <strong>{{ $selectedBatch['batch_number'] }}</strong> &mdash;
-                        <span class="font-semibold {{ $selectedBatch['remaining_kg'] <= 0.0001 ? 'text-emerald-600' : 'text-slate-900' }}">{{ $fmtKg($selectedBatch['remaining_kg']) }} kg</span> remaining
-                        (the fill weight cannot exceed this).
-                    </p>
-                @else
-                    <p class="text-sm text-amber-700 mb-3">Select a batch above, then create the pallecon.</p>
-                @endif
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                        <label class="block text-xs font-medium text-slate-500 mb-1">Pallecon number *</label>
-                        <input type="text" wire:model="palleconNumber" class="w-full rounded-lg border-slate-300 text-sm" placeholder="e.g. PAL-00123" />
-                        @error('palleconNumber') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-500 mb-1">Fill weight (kg) *</label>
-                        <input type="number" step="0.001" min="0.001"
-                            @if ($selectedBatch) max="{{ $fmtKg($selectedBatch['remaining_kg']) }}" @endif
-                            wire:model="fillWeight" class="w-full rounded-lg border-slate-300 text-sm" placeholder="e.g. 400" />
-                        @error('fillWeight') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-500 mb-1">Production date (booking expiry)</label>
-                        <input type="date" wire:model="production_date" class="w-full rounded-lg border-slate-300 text-sm" />
-                    </div>
-                </div>
-                <div class="mt-4">
-                    <button type="button" wire:click="createPallecon" wire:loading.attr="disabled" @disabled(! $selectedBatch)
-                        class="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed">Create pallecon</button>
-                    @error('fillBatchId') <span class="ml-2 text-xs text-red-600">{{ $message }}</span> @enderror
-                </div>
+                <p class="text-sm text-slate-500">
+                    No pallecon selected.
+                    <a href="{{ route('manufacturing-orders.workspace', ['winmanMo' => $winmanMo]) }}" wire:navigate class="text-indigo-600 font-semibold">Go to the MO Workspace</a>
+                    to create one or pick one from the list.
+                </p>
             @else
                 @php
                     $filled = $active->filledWeight();
