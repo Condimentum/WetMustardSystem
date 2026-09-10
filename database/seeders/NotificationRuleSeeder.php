@@ -16,6 +16,7 @@ class NotificationRuleSeeder extends Seeder
     private const RULES = [
         'ccp_failure' => ['CCP Failure', 'event', 'critical', null, 0],
         'packing_weight_breach' => ['Packing Weight Breach', 'event', 'warning', null, 0],
+        'lab_hold' => ['Lab Failure Hold', 'event', 'critical', null, 0],
         'missed_metal_detector_check' => ['Missed Metal Detector Check', 'detector', 'warning', '2', 120],
         'batch_open_too_long' => ['Batch Open Too Long', 'detector', 'warning', '24', 720],
         'qa_approval_overdue' => ['QA Approval Overdue', 'detector', 'warning', '4', 240],

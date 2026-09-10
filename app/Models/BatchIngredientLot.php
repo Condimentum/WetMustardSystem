@@ -20,6 +20,7 @@ class BatchIngredientLot extends Model
         'uom',
         'sequence',
         'lot_number',
+        'supplier_lot_number',
         'actual_quantity',
         'weighed_by',
         'weighed_at',

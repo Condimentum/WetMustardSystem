@@ -57,7 +57,15 @@ class StartBatchFromManufacturingOrderFeature
             $order->forceFill(['variant_id' => $variant->id])->save();
         }
 
-        $batchNumber = ($this->generateBatchNumber)();
+        $existingBatchCount = BatchRecord::query()
+            ->where('manufacturing_order_id', $order->id)
+            ->count();
+
+        $batchNumber = ($this->generateBatchNumber)(
+            (string) ($order->mo_number ?? $order->winman_manufacturing_order_id ?? ''),
+            (string) ($order->winman_product_id ?? ''),
+            $existingBatchCount + 1,
+        );
 
         $batch = ($this->createBatchRecord)($order, $batchNumber, $variant, null, $user, $shift, $plannedQuantity);
         ($this->seedPaperworkRows)($batch->fresh('manufacturingOrder'), $recipeCode, $user);

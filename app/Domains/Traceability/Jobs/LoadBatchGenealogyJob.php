@@ -20,6 +20,7 @@ class LoadBatchGenealogyJob
             'ingredientLots',
             'processSteps',
             'pallecons',
+            'palleconContainers.fills.batchRecord',
             'metalDetectorChecks',
             'packingRuns.ibcs.palleconRecord',
             'packingRuns.weightChecks',

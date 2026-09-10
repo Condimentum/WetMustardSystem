@@ -21,6 +21,7 @@ class BatchRecordExporter
             'ingredientLots.weighedBy', 'ingredientLots.tippedBy',
             'processSteps.completedBy', 'processParameters',
             'metalDetectorChecks.signedBy', 'pallecons.checkedBy',
+            'palleconContainers.fills.batchRecord',
             'packingRuns.weightChecks', 'packingRuns.pallets',
             'drumProcessingRuns.pallets.drumRecords',
             'packagingLots',
@@ -129,12 +130,30 @@ class BatchRecordExporter
 
     private function palleconsSection(BatchRecord $batch): string
     {
-        $rows = $batch->pallecons->map(fn ($p) => [
-            $p->serial_number, $p->fill_weight, $p->top_seal_number, $p->bottom_seal_number,
-            $p->liner_number.' / '.$p->liner_batch_code, $p->checkedBy?->name,
-        ])->all();
+        $rows = $batch->palleconContainers->map(function ($container) use ($batch) {
+            $thisBatchFill = $container->fills->firstWhere('batch_record_id', $batch->id)?->fill_weight;
+            $otherBatches = $container->fills
+                ->map(fn ($fill) => $fill->batchRecord?->batch_number)
+                ->filter()
+                ->reject(fn ($number) => $number === $batch->batch_number)
+                ->unique()
+                ->implode(', ');
 
-        return $this->table('Pallecons', ['Serial', 'Fill weight', 'Top seal', 'Bottom seal', 'Liner', 'Checked by'], $rows);
+            return [
+                $container->serial_number,
+                $container->status,
+                $thisBatchFill,
+                $container->final_weight,
+                $otherBatches !== '' ? $otherBatches : '—',
+                trim(($container->top_seal_number ?? '').' / '.($container->bottom_seal_number ?? ''), ' /'),
+            ];
+        })->all();
+
+        return $this->table(
+            'Pallecons',
+            ['Serial', 'Status', 'This batch fill', 'Container final weight', 'Also contains batches', 'Seals (top / bottom)'],
+            $rows,
+        );
     }
 
     private function packingSection(BatchRecord $batch): string
@@ -196,6 +215,8 @@ class BatchRecordExporter
             'batch_process_steps' => $batch->processSteps->pluck('id')->all(),
             'metal_detector_checks' => $batch->metalDetectorChecks->pluck('id')->all(),
             'pallecon_records' => $batch->pallecons->pluck('id')->all(),
+            'pallecons' => $batch->palleconContainers->pluck('id')->all(),
+            'pallecon_fills' => $batch->palleconContainers->flatMap->fills->pluck('id')->all(),
         ];
 
         return ElectronicSignature::query()

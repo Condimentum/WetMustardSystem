@@ -75,6 +75,7 @@ class AllocateBomIngredientOperation
             'material_code' => (string) $component->winman_component_product_id,
             'material_description' => (string) $component->component_description,
             'lot_number' => $lotNumber,
+            'supplier_lot_number' => $issueResult['supplier_lot_number'] ?? null,
             'actual_quantity' => (float) ($issueResult['issued_quantity'] ?? 0),
             'uom' => 'kg',
         ], $user);

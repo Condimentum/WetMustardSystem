@@ -10,7 +10,7 @@ use PDO;
  * Issues a specific quantity from a selected lot against a specific WinMan
  * WorkInProgress line using approved WinMan procedures.
  *
- * @return array{issued_quantity: float, issued_inventory_ids: array<int, int>}
+ * @return array{issued_quantity: float, issued_inventory_ids: array<int, int>, supplier_lot_number: ?string}
  */
 class IssueWorkInProgressFromLotJob
 {
@@ -21,7 +21,7 @@ class IssueWorkInProgressFromLotJob
 
     /**
      * @param  array{work_in_progress: int, component_product: int, lot_number: string, quantity: float, user_name: string}  $params
-    * @return array{issued_quantity: float, issued_inventory_ids: array<int, int>}
+        * @return array{issued_quantity: float, issued_inventory_ids: array<int, int>, supplier_lot_number: ?string}
      */
     public function __invoke(array $params): array
     {
@@ -88,7 +88,7 @@ class IssueWorkInProgressFromLotJob
         $lastModifiedDate = (string) ($context->LastModifiedDate ?? '');
 
         $inventoryRows = $connection->select(
-            'SELECT i.Inventory, i.QuantityOutstanding
+            'SELECT i.Inventory, i.QuantityOutstanding, i.SupplierLotNumber
              FROM Inventory i
              WHERE i.Product = ?
                AND i.LotNumber = ?
@@ -102,6 +102,7 @@ class IssueWorkInProgressFromLotJob
         }
 
         $issuedInventoryIds = [];
+        $issuedSupplierLots = [];
         $issuedQuantity = 0.0;
 
         $connection->transaction(function () use (
@@ -119,6 +120,7 @@ class IssueWorkInProgressFromLotJob
             $statusOnlyProcedure,
             $runStatusOnlyAfterIssue,
             &$issuedInventoryIds,
+            &$issuedSupplierLots,
             &$issuedQuantity,
         ): void {
             $remaining = $quantity;
@@ -167,6 +169,10 @@ class IssueWorkInProgressFromLotJob
                 }
 
                 $issuedInventoryIds[] = $inventoryId;
+                $supplierLot = trim((string) ($row->SupplierLotNumber ?? ''));
+                if ($supplierLot !== '') {
+                    $issuedSupplierLots[] = $supplierLot;
+                }
                 $issuedQuantity += $toIssue;
                 $remaining -= $toIssue;
             }
@@ -240,6 +246,9 @@ class IssueWorkInProgressFromLotJob
         return [
             'issued_quantity' => $issuedQuantity,
             'issued_inventory_ids' => array_values(array_unique($issuedInventoryIds)),
+            'supplier_lot_number' => ($supplierLots = array_values(array_unique($issuedSupplierLots))) !== []
+                ? implode(', ', $supplierLots)
+                : null,
         ];
     }
 

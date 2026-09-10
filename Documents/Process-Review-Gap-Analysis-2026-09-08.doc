@@ -1,0 +1,197 @@
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="UTF-8">
+<title>DBMTS Process Review Gap Analysis</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+<style>
+  body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; margin: 2cm; }
+  h1 { font-size: 20pt; color: #1f3864; border-bottom: 2px solid #1f3864; padding-bottom: 6px; }
+  h2 { font-size: 15pt; color: #1f3864; margin-top: 28px; }
+  h3 { font-size: 12.5pt; color: #2e5395; margin-top: 20px; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 18px 0; font-size: 10.5pt; }
+  th { background: #1f3864; color: #fff; text-align: left; padding: 6px 8px; border: 1px solid #1f3864; }
+  td { border: 1px solid #b0b7c3; padding: 6px 8px; vertical-align: top; }
+  tr.alt td { background: #eef1f7; }
+  code, .code { font-family: Consolas, 'Courier New', monospace; font-size: 10pt; background: #f2f2f2; padding: 1px 4px; }
+  .codeblock { font-family: Consolas, 'Courier New', monospace; font-size: 9.5pt; background: #f2f2f2; border: 1px solid #d0d0d0; padding: 10px; margin: 8px 0; white-space: pre; }
+  .ok { color: #1e7d32; font-weight: bold; }
+  .warn { color: #b26a00; font-weight: bold; }
+  .crit { color: #b91c1c; font-weight: bold; }
+  .meta { color: #666; font-size: 10pt; }
+  blockquote { border-left: 4px solid #2e5395; margin: 10px 0; padding: 6px 14px; background: #eef1f7; }
+  li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<h1>Wet Mustard DBMTS &mdash; Process Review Gap Analysis</h1>
+<p class="meta">Date: 8 September 2026 &nbsp;|&nbsp; Source: hands-on production review session &nbsp;|&nbsp; System: Digital Batch Manufacturing &amp; Traceability System (DBMTS)</p>
+
+<h2>Executive Summary</h2>
+<p>Eight findings from the production floor review were analysed against the current DBMTS codebase. Two are already fully supported, one is largely supported, and five require development. One finding &mdash; the <b>pallecon traceability model (#4)</b> &mdash; is a structural defect: the database schema itself encodes an assumption (one production batch = one pallecon) that the review confirms is incorrect. This defect blocks correct implementation of lab hold management (#8) and degrades recall traceability today. It should be addressed before further production data accumulates in the wrong shape.</p>
+
+<table>
+  <tr><th>#</th><th>Area</th><th>Current State</th><th>Effort</th><th>Urgency</th></tr>
+  <tr><td>4</td><td>Pallecon many-to-many traceability</td><td class="crit">Schema contradiction</td><td>High</td><td><b>Do first &mdash; blocks #8, worsens with live data</b></td></tr>
+  <tr class="alt"><td>8</td><td>Lab testing &amp; hold propagation</td><td class="warn">Data captured, zero enforcement</td><td>Medium</td><td>High (depends on #4)</td></tr>
+  <tr><td>7</td><td>Ingredient expiry hard-stop</td><td class="warn">Silent gap (FEFO ordering only)</td><td>Low</td><td>High (food safety)</td></tr>
+  <tr class="alt"><td>3</td><td>Scrap / waste management</td><td class="crit">Absent</td><td>Medium</td><td>Medium</td></tr>
+  <tr><td>2</td><td>Consumption variance reporting</td><td class="ok">~80% supported</td><td>Low</td><td>Medium</td></tr>
+  <tr class="alt"><td>1</td><td>Powder room inventory</td><td class="crit">Absent (net-new domain)</td><td>Medium&ndash;High</td><td>Lower (future operating model)</td></tr>
+  <tr><td>5</td><td>Seal number capture</td><td class="ok">Done (optional fields exist)</td><td>&mdash;</td><td>&mdash;</td></tr>
+  <tr class="alt"><td>6</td><td>Production parameters exclusion</td><td class="ok">Done (already optional)</td><td>&mdash;</td><td>&mdash;</td></tr>
+</table>
+
+<p><b>Cross-cutting note:</b> QA approve/reject and any future supervisor-override actions currently have <b>no role enforcement</b> &mdash; any authenticated user can perform them. Proper role gating (qa_technical / production_supervisor) becomes a prerequisite once hold management and expiry overrides are introduced.</p>
+
+<h2>Findings by Review Point</h2>
+
+<h3>1. Powder Room Management &mdash; Not supported (greenfield)</h3>
+<ul>
+  <li>DBMTS has no inventory or stock-location concept at all. Stock is entirely WinMan&rsquo;s domain, and the WinMan connection is deliberately read-only / stored-procedure-only.</li>
+  <li>Opened-bag stock would be invisible to both systems: WinMan considers the full bag issued/consumed, and DBMTS has nowhere to record the remainder.</li>
+  <li><b>Required:</b> a new Powder Room domain &mdash; opened-bag records, weekly count sessions, adjustments &mdash; new tables, jobs, and a screen. No conflict with existing architecture; purely net-new work.</li>
+</ul>
+
+<h3>2. Raw Material Consumption Control &mdash; Largely supported; variance not surfaced</h3>
+<ul>
+  <li>The ingredient lot record already stores both <span class="code">required_quantity</span> (from the WinMan BOM snapshot) and <span class="code">actual_quantity</span> (operator-entered), each protected by weighed/tipped electronic signatures.</li>
+  <li>The WinMan issue log records the quantity actually issued via the inventory-issue stored procedure, and issues are capped to WinMan&rsquo;s live outstanding quantity &mdash; which already includes WinMan&rsquo;s wastage factors, so compatibility is preserved.</li>
+  <li><b>Gap (a):</b> no variance reporting &mdash; nothing compares required vs actual vs issued. The existing reporting framework makes a Material Variance report a cheap addition.</li>
+  <li><b>Gap (b):</b> the scan-QR flow shows the BOM snapshot but does not prominently present &ldquo;WinMan wants X, you actually used Y&rdquo;. This is a UI/report gap, not a schema gap.</li>
+</ul>
+
+<h3>3. Scrap / Waste Management &mdash; Not supported</h3>
+<ul>
+  <li>No waste/scrap concept exists anywhere in the application.</li>
+  <li>The WinMan finished-goods booking procedure accepts scrap quantity and scrap reason parameters, but DBMTS currently hardcodes scrap to zero.</li>
+  <li><b>Required:</b> a Waste domain &mdash; waste records with material, lot, quantity, category (Spillage / Damaged Packaging / Disposal / Process Loss / QA Rejection), reason, and electronic signature. Fits the established pattern (Job + Feature + signature + audit) exactly. Optional later phase: feed recorded scrap into the WinMan booking procedure.</li>
+</ul>
+
+<h3>4. Pallecon Traceability Model &mdash; CRITICAL structural defect</h3>
+<p>See the dedicated detailed section below. In brief: the schema hard-codes one-batch-per-pallecon via a required, cascade-deleting foreign key; the pallecon is not an entity, only a &ldquo;fill event inside one batch&rdquo;. Traceability search, label printing, packing consumption, and the batch export all inherit the assumption. Hold propagation (#8) cannot be modelled until this is fixed.</p>
+
+<h3>5. Seal Number Capture &mdash; Already compliant</h3>
+<ul>
+  <li>Top and bottom seal numbers are optional (nullable) fields on the pallecon record and optional in the UI. No change needed; the fields simply move with the schema restructure in #4.</li>
+</ul>
+
+<h3>6. Production Parameters &mdash; Already compliant</h3>
+<ul>
+  <li>Process parameters (mill guide, pump speeds, etc.) are a free-form optional capture; nothing enforces them. Excluding them from Phase 1 requires no code change &mdash; simply do not enter them. The Parameters tab can optionally be hidden via a feature setting.</li>
+</ul>
+
+<h3>7. Ingredient Expiry Controls &mdash; Not enforced (silent gap)</h3>
+<ul>
+  <li>Expiry is currently used only for <b>ordering</b>: when issuing stock, WinMan inventory rows are consumed oldest-expiry-first (FEFO).</li>
+  <li>There is <b>no warning and no hard stop</b> on expired stock &mdash; an expired lot would be issued first, silently.</li>
+  <li>The lot picker query does not even select the expiry date, so operators cannot see it.</li>
+  <li><b>Fix is cheap:</b> add expiry date to the lot list, show an approaching-expiry warning in the allocation UI, hard-stop expired lots in the allocation operation, and provide a supervisor override (requires the role-gating noted above).</li>
+</ul>
+
+<h3>8. Laboratory Testing &amp; Hold Management &mdash; Data captured, zero enforcement</h3>
+<ul>
+  <li>Lab test entries (WM005) record results against a <b>free-text batch number</b> &mdash; no foreign key to the batch record &mdash; and have <b>no pass/fail field</b>. They are a transcription of the paper sheet, not a QA decision record.</li>
+  <li>No hold/quarantine status exists anywhere: batch statuses are in_progress / completed / qa_review / closed / cancelled &mdash; no on_hold.</li>
+  <li>No propagation mechanism exists, and none is possible until #4&rsquo;s many-to-many relationship exists (&ldquo;Batch 2 fails &rarr; quarantine Pallecon A, which also holds Batch 1&rdquo; cannot even be expressed).</li>
+  <li>QA approve/reject features exist but are disconnected from lab entries; reject merely reopens the batch rather than quarantining output.</li>
+  <li><b>Required:</b> FK lab entries to batches, add a pass/fail result, add on_hold status to batch and pallecon, and a propagation job (failed batch &rarr; all linked pallecons &rarr; any packing/drum runs that consumed them). The existing notification framework can alert QA on holds with no extra infrastructure.</li>
+</ul>
+
+<h2>Detailed Analysis: The Pallecon One-Batch Assumption (#4)</h2>
+
+<h3>What the system believes today</h3>
+<p>The schema encodes &ldquo;one pallecon = one batch&rdquo; as a hard constraint:</p>
+<div class="codeblock">// pallecon_records migration
+$table-&gt;foreignId('batch_record_id')
+      -&gt;constrained('batch_records')
+      -&gt;cascadeOnDelete();</div>
+<ul>
+  <li><span class="code">batch_record_id</span> is <b>NOT NULL</b> &mdash; a pallecon row cannot exist without a parent batch.</li>
+  <li><b>Cascade delete</b> &mdash; deleting a batch destroys its pallecon records, including seals, liner codes, and fill weights. Under the real process this would silently destroy traceability data belonging to <i>other batches</i> sharing the same physical container.</li>
+  <li>The pallecon is not an entity. The record is really a <i>&ldquo;fill event within one batch&rdquo;</i> masquerading as the container itself. The serial number is a nullable string with no uniqueness, no lifecycle, no status.</li>
+</ul>
+<p>There is no way to express &ldquo;Pallecon A contains Batch 1 and Batch 2&rdquo;. The closest an operator can get is creating two separate rows with the same serial number under two different batches &mdash; each carrying its own fill weight and seal numbers, with no rule about which is authoritative.</p>
+
+<h3>Reality vs schema</h3>
+<table>
+  <tr><th>Production Batch</th><th>Pallecon</th></tr>
+  <tr><td>Batch 1</td><td>Partially fills Pallecon A</td></tr>
+  <tr class="alt"><td>Batch 2</td><td>Completes Pallecon A</td></tr>
+  <tr><td>Batch 2</td><td>Starts Pallecon B</td></tr>
+  <tr class="alt"><td>Batch 3</td><td>Completes Pallecon B</td></tr>
+</table>
+<p>Two temporal facts the schema cannot hold: fills <b>span multiple production days</b> (but the record lives inside a single batch session), and the <b>true weight exists only once</b> &mdash; when the pallecon comes off the scales &mdash; not once per contributing batch.</p>
+
+<h3>Where each downstream consumer inherits the assumption</h3>
+
+<p><b>(a) Backward traceability &mdash; silently incomplete recalls.</b> The backward trace resolves a pallecon serial to <span class="code">batch_record_id</span> &mdash; the single owning batch. It would only return multiple batches if operators happened to duplicate the serial across batches, which nothing enforces (the UI frames entry as &ldquo;add a pallecon to this batch&rdquo;). If Batch 2&rsquo;s operator does not re-key Pallecon A&rsquo;s serial, a QA trace on that serial returns <b>only Batch 1</b>. In a recall scenario this is the worst kind of failure: a confident, plausible, wrong answer with no visible gap.</p>
+
+<p><b>(b) Forward traceability &mdash; the second hop is broken.</b> Forward trace answers &ldquo;supplier lot X went into which batches &rarr; which output containers &rarr; which packing runs?&rdquo;. Genealogy loads pallecons via the batch relationship, so forward-tracing a contaminated ingredient in Batch 2 finds Batch 2&rsquo;s pallecon row &mdash; but not that the physical container also holds Batch 1 product, and not the packing runs that consumed that shared container under Batch 1&rsquo;s identity.</p>
+
+<p><b>(c) Labels print a weight that doesn&rsquo;t exist.</b> Label printing takes a single pallecon record and prints its fill weight. Batch 1&rsquo;s row for a shared pallecon holds a partial weight; the real net weight is only known when Batch 2 finishes the container at the scales. Whichever row triggers the label wins &mdash; so a label can carry a partial weight. The review explicitly requires the opposite: labels generated from the actual recorded weight. The submission audit (booking + label preview payload) hangs off the same single record, anchoring the &ldquo;what we printed/booked&rdquo; audit trail to one batch&rsquo;s view of a multi-batch container.</p>
+
+<p><b>(d) Packing consumption &mdash; hardcoded single provenance.</b> The packing-run consumption record links to one batch&rsquo;s fill row (not the container) and stores a <b>single scalar</b> source batch number. For a three-batch pallecon the operator can record at most one source batch; the other two batches&rsquo; product exits into finished goods with <b>no packing-side trace at all</b>. This is the multiplier: the pallecon error propagates a one-batch assumption into every downstream packing run, pallet, and finished-goods label that touched a shared container.</p>
+
+<p><b>(e) Batch export &mdash; the audit-ready document is structurally partial.</b> The batch record export collects pallecon records per batch. An auditor reading Batch 1&rsquo;s export sees Pallecon A with Batch 1&rsquo;s partial data and no indication that Batch 2 completed it. The document is presented as the complete batch record; for shared pallecons it cannot be.</p>
+
+<p><b>(f) Hold propagation (#8) &mdash; cannot be modelled, not just &ldquo;not built yet&rdquo;.</b> The required behaviour:</p>
+<blockquote>Batch 2 fails lab &rarr; find every container holding any Batch 2 product &rarr; quarantine those containers &rarr; quarantine everything downstream that consumed them (including Batch 1&rsquo;s good product now commingled in Pallecon A).</blockquote>
+<p>Every hop needs the many-to-many: (1) batch &rarr; containers needs pivot rows, not a one-to-many; (2) container &rarr; co-resident batches is impossible today because there is no container entity to hold a hold status; (3) container &rarr; downstream consumption cannot be resolved through a single scalar source-batch column. A string-matching approximation over duplicated serials would inherit every data-entry inconsistency (&ldquo;PAL-00123&rdquo; vs &ldquo;PAL00123&rdquo;) inside a <b>quarantine decision path</b> &mdash; not an acceptable foundation for a food-safety control.</p>
+
+<h3>Why timing matters</h3>
+<ul>
+  <li>Every shared pallecon recorded today lands as either (a) one row under one batch &mdash; the other contributions are unrecorded and unrecoverable &mdash; or (b) duplicated serial rows with conflicting weights/seals and no authoritative record.</li>
+  <li>Migrating case (a) requires human memory (&ldquo;which batches actually went into PAL-00123 in September?&rdquo;); case (b) requires per-row adjudication. Neither is scriptable, and both grow linearly with production volume.</li>
+  <li>Once a shared pallecon flows through packing under a single source batch number, that finished-goods trace gap is <b>permanent</b> &mdash; no migration can reconstruct what was never captured.</li>
+  <li>Fixing the schema now means historical one-to-one rows migrate mechanically (each existing record &rarr; one container + one fill event &mdash; exactly true under the old assumption); only genuinely shared containers from the transition window need manual review.</li>
+</ul>
+
+<h3>Target model</h3>
+<table>
+  <tr><th>Entity</th><th>Key fields</th><th>Purpose</th></tr>
+  <tr><td><b>pallecons</b> (new, first-class container)</td><td>serial_number (unique), status (open / filling / sealed / on_hold / consumed), final_weight, sealed_at, top/bottom seal numbers (optional), liner details</td><td>The physical container, with its own lifecycle independent of any batch session; final weight recorded once at scale-off drives the label</td></tr>
+  <tr class="alt"><td><b>pallecon_fills</b> (new pivot)</td><td>pallecon_id, batch_record_id, fill_weight_contribution (optional), sequence, filled_at, signed_by</td><td>One row per batch contribution; many-to-many in both directions; &ldquo;up to three batches&rdquo; is simply &le;3 pivot rows (soft validation)</td></tr>
+  <tr><td><b>packing_run_ibcs</b> (amended)</td><td>pallecon_id points at the container; source batch numbers become derived via fills, not operator-keyed</td><td>Closes the finished-goods trace gap</td></tr>
+</table>
+
+<table>
+  <tr><th>Design element</th><th>Review requirement satisfied</th></tr>
+  <tr><td>First-class container with unique serial and independent lifecycle</td><td>Fills spanning days / multiple batches</td></tr>
+  <tr class="alt"><td>Fills pivot with sequence</td><td>Many-to-many both directions; up-to-3-batches rule</td></tr>
+  <tr><td>final_weight + sealed_at on the container, recorded at scale-off</td><td>&ldquo;Capture actual fill weight&hellip; labels from actual recorded weight&rdquo;</td></tr>
+  <tr class="alt"><td>on_hold container status</td><td>#8 hold propagation gets a real anchor</td></tr>
+  <tr><td>Seals remain nullable on the container</td><td>#5 stays optional, unchanged</td></tr>
+  <tr class="alt"><td>Packing consumption points at the container; provenance derived</td><td>Closes downstream trace gap (d)</td></tr>
+</table>
+
+<p><b>Workflow change operators will notice:</b> pallecon filling stops being a form inside the batch screen. New flow: scan/select a container (open a new one if needed) &rarr; attach the current batch as a fill &rarr; at scale-off, seal &amp; record final weight, which closes the container and triggers the label.</p>
+
+<h3>Refactor blast radius</h3>
+<table>
+  <tr><th>Layer</th><th>Change</th><th>Size</th></tr>
+  <tr><td>Schema</td><td>New pallecons + pallecon_fills tables; mechanical backfill of existing rows; retire old table after backfill (mind the established SQL Server multiple-cascade-path constraint pattern)</td><td>Medium</td></tr>
+  <tr class="alt"><td>Pallecon jobs/features</td><td>Split into Open Pallecon, Attach Batch Fill, Seal Pallecon (weight + label trigger)</td><td>Medium</td></tr>
+  <tr><td>Backward trace</td><td>Serial &rarr; container &rarr; all fills&rsquo; batches</td><td>Small</td></tr>
+  <tr class="alt"><td>Genealogy / forward trace</td><td>Batch &rarr; fills &rarr; containers &rarr; co-resident batches &rarr; packing runs (hold propagation plugs in here later)</td><td>Medium</td></tr>
+  <tr><td>Label printing + submission audit</td><td>Accept the container; refuse or warn when printing before final weight is recorded</td><td>Small&ndash;Medium</td></tr>
+  <tr class="alt"><td>Packing consumption</td><td>Point at container; derive source batches</td><td>Small</td></tr>
+  <tr><td>Batch export</td><td>Pallecon section shows container + all contributing batches (&ldquo;shared with WM&hellip;-02&rdquo;)</td><td>Small</td></tr>
+  <tr class="alt"><td>Pallecons screen (UI)</td><td>Batch-scoped form &rarr; container lifecycle UI</td><td>Largest single piece</td></tr>
+  <tr><td>Tests</td><td>Traceability, pallecon-add, export tests updated + new fill/seal coverage</td><td>Medium</td></tr>
+</table>
+
+<p>Everything else in the batch workflow (ingredients, process steps, metal detector, drum processing, WinMan booking) is untouched &mdash; the pallecon is a leaf of the batch graph today, which is why the fix is contained despite the assumption being schema-level.</p>
+
+<h2>Recommended Sequence</h2>
+<ol>
+  <li><b>#4 Pallecon restructure</b> &mdash; schema + jobs + trace + labels + UI (two chunks: backend first, UI second).</li>
+  <li><b>#8 Lab hold management</b> &mdash; FK lab entries to batches, pass/fail, on_hold statuses, propagation job, QA notifications (depends on #4).</li>
+  <li><b>#7 Expiry controls</b> &mdash; small, high food-safety value; includes role-gated supervisor override.</li>
+  <li><b>#3 Waste domain</b> &mdash; standalone, medium effort.</li>
+  <li><b>#2 Variance report</b> &mdash; small addition to existing reporting framework.</li>
+  <li><b>#1 Powder room</b> &mdash; scope alongside the future operating model decision.</li>
+</ol>
+
+</body>
+</html>

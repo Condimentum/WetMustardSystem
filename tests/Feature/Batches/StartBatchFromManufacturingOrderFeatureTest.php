@@ -62,9 +62,25 @@ class StartBatchFromManufacturingOrderFeatureTest extends TestCase
         $batch = app(StartBatchFromManufacturingOrderFeature::class)(999001);
 
         $this->assertInstanceOf(BatchRecord::class, $batch);
-        $this->assertMatchesRegularExpression('/^WM\d{6}-\d{2}$/', $batch->batch_number);
+        $this->assertSame('MO00000001-50010007-01', $batch->batch_number);
         $this->assertSame('620.000', (string) $batch->planned_quantity);
         $this->assertSame(BatchRecord::STATUS_IN_PROGRESS, $batch->status);
+    }
+
+    public function test_batch_reference_sequence_increments_per_manufacturing_order(): void
+    {
+        $order = $this->makeOrder('R-NO-VARIANTS', 800);
+        RecipeCard::create([
+            'recipe_code' => 'R-NO-VARIANTS',
+            'batch_size_kg' => 620,
+        ]);
+        $this->fakeSelection($order);
+
+        $first = app(StartBatchFromManufacturingOrderFeature::class)(999001);
+        $second = app(StartBatchFromManufacturingOrderFeature::class)(999001);
+
+        $this->assertSame('MO00000001-50010007-01', $first->batch_number);
+        $this->assertSame('MO00000001-50010007-02', $second->batch_number);
     }
 
     public function test_it_fails_when_recipe_batch_size_is_not_stored(): void

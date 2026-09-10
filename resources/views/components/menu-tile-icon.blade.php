@@ -9,6 +9,8 @@
         'trolley' => '<rect x="5" y="7" width="12" height="9" rx="1.2" stroke-linecap="round" stroke-linejoin="round" /><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><circle cx="8" cy="19" r="1.4" /><circle cx="14" cy="19" r="1.4" />',
         'bucket' => '<path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14l-1.5 10.2a2 2 0 0 1-2 1.8H8.5a2 2 0 0 1-2-1.8L5 8z" /><path stroke-linecap="round" stroke-linejoin="round" d="M8 8V6.2A1.2 1.2 0 0 1 9.2 5h5.6A1.2 1.2 0 0 1 16 6.2V8" /><path stroke-linecap="round" d="M4 8h16" />',
         'bell' => '<path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9" />',
+        'container' => '<path stroke-linecap="round" stroke-linejoin="round" d="M5 7h14v12H5z" /><path stroke-linecap="round" stroke-linejoin="round" d="M5 7l1.5-3h11L19 7M9 4v3M15 4v3M5 12h14M9 12v7M15 12v7" />',
+        'waste' => '<path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 12a2 2 0 0 0 2 1.8h6a2 2 0 0 0 2-1.8L18 7M10 11v6M14 11v6" />',
         default => '',
     };
 @endphp

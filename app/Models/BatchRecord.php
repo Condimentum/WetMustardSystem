@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
@@ -33,6 +34,8 @@ class BatchRecord extends Model
         'created_by',
         'completed_by',
         'completed_at',
+        'held_at',
+        'hold_reason',
     ];
 
     protected function casts(): array
@@ -41,6 +44,7 @@ class BatchRecord extends Model
             'production_date' => 'date',
             'planned_quantity' => 'decimal:3',
             'completed_at' => 'datetime',
+            'held_at' => 'datetime',
         ];
     }
 
@@ -87,6 +91,28 @@ class BatchRecord extends Model
     public function pallecons(): HasMany
     {
         return $this->hasMany(PalleconRecord::class);
+    }
+
+    public function palleconFills(): HasMany
+    {
+        return $this->hasMany(PalleconFill::class);
+    }
+
+    public function palleconContainers(): BelongsToMany
+    {
+        return $this->belongsToMany(Pallecon::class, 'pallecon_fills')
+            ->withPivot(['fill_weight', 'sequence', 'filled_at', 'signed_by'])
+            ->withTimestamps();
+    }
+
+    public function labResults(): HasMany
+    {
+        return $this->hasMany(BatchLabResult::class);
+    }
+
+    public function isOnHold(): bool
+    {
+        return $this->held_at !== null;
     }
 
     public function palleconSubmissionAudits(): HasMany

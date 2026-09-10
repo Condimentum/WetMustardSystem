@@ -17,6 +17,7 @@ class AddPackingRunIbcJob
     {
         return $run->ibcs()->create([
             'pallecon_record_id' => $attributes['pallecon_record_id'] ?? null,
+            'pallecon_id' => $attributes['pallecon_id'] ?? null,
             'source_batch_number' => $attributes['source_batch_number'] ?? null,
             'source_mo_number' => $attributes['source_mo_number'] ?? null,
             'time_on' => $attributes['time_on'] ?? null,

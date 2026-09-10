@@ -9,8 +9,6 @@ use App\Features\Batches\SignIngredientLotFeature;
 use App\Features\Batches\RejectBatchQaFeature;
 use App\Features\Batches\GetAvailableIngredientLotsFeature;
 use App\Features\Booking\BookFinishedGoodsFeature;
-use App\Features\Pallecon\AddPalleconRecordFeature;
-use App\Features\Pallecon\PrintPalleconLabelFeature;
 use App\Domains\WinMan\Exceptions\WinManException;
 use App\Domains\WinMan\Jobs\FetchManufacturingOrderJob;
 use App\Domains\WinMan\Jobs\ListIssuedLotsForWorkInProgressJob;
@@ -19,10 +17,7 @@ use App\Operations\AllocateBomIngredientOperation;
 use App\Support\FeatureSettings;
 use App\Models\BatchRecord;
 use App\Models\PaperworkRow;
-use App\Models\PalleconRecord;
-use App\Models\PalleconSubmissionAudit;
 use App\Models\User;
-use App\Models\WinManBookingLog;
 use App\Models\WinManIssueLog;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -85,20 +80,11 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
     public ?string $bookFlash = null;
 
-    /** @var array<int, string> */
-    public array $signoffOperatorByLot = [];
-
     public string $powdersWeighedOperatorId = '';
 
     public string $liquidsWeighedOperatorId = '';
 
     public string $tippingBatchOperatorId = '';
-
-    public string $millGapSizeUsed = '';
-
-    public string $p1SpeedUsed = '';
-
-    public string $p2SpeedUsed = '';
 
     public ?string $moUnitOfMeasureDescription = null;
 
@@ -121,30 +107,6 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
     public string $startOverQuantity = '';
 
-    /** @var array<string, mixed> */
-    public array $palleconForm = [
-        'ticket_number' => '',
-        'serial_number' => '',
-        'top_seal_number' => '',
-        'bottom_seal_number' => '',
-        'liner_number' => '',
-        'liner_batch_code' => '',
-        'fill_weight' => '1',
-        'start_time' => '',
-        'finish_time' => '',
-    ];
-
-    public bool $bartender_enabled = false;
-
-    public string $label_production_date = '';
-
-    public ?string $print_message = null;
-
-    public bool $print_failed = false;
-
-    /** @var array<string, mixed>|null */
-    public ?array $winman_booking_preview = null;
-
     public function mount(BatchRecord $batch): void
     {
         $this->batch = $batch;
@@ -166,8 +128,6 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
             $this->activeBomAllocationMode = 'manual';
         }
 
-        $this->bartender_enabled = (bool) config('services.bartender.enabled', false);
-        $this->label_production_date = now()->toDateString();
         $this->reload();
     }
 
@@ -456,15 +416,13 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
             return true;
         }
 
-        $lots = $this->batch->ingredientLots
-            ->filter(fn ($lot): bool => ! blank($lot->lot_number) && $lot->actual_quantity !== null)
-            ->values();
+        // Sign-off is a batch-level confirmation of actions performed outside
+        // the app, recorded once per batch (not per ingredient lot).
+        $confirmations = $this->paperworkIngredientSignoff;
 
-        if ($lots->isEmpty()) {
-            return false;
-        }
-
-        return $lots->every(fn ($lot): bool => $lot->weighed_at !== null && $lot->tipped_at !== null);
+        return $confirmations['powders'] !== ''
+            && $confirmations['liquids'] !== ''
+            && $confirmations['tipping'] !== '';
     }
 
     public function getIngredientSignoffReadyLotCountProperty(): int
@@ -514,57 +472,9 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         ];
     }
 
-    public function signIngredientLot(int $lotId, string $purpose): void
-    {
-        $this->authorizeEditable();
-
-        $lot = $this->batch->ingredientLots->firstWhere('id', $lotId);
-        if ($lot === null) {
-            session()->flash('status', 'Ingredient lot was not found. Refresh and try again.');
-
-            return;
-        }
-
-        $operatorId = (int) ($this->signoffOperatorByLot[$lotId] ?? auth()->id());
-        $operator = User::query()->find($operatorId);
-        if ($operator === null) {
-            session()->flash('status', 'Select a valid operator before signing this lot.');
-
-            return;
-        }
-
-        try {
-            app(SignIngredientLotFeature::class)($lot, $purpose, $operator);
-        } catch (BatchException $e) {
-            app(RecordErrorLogJob::class)($e, 'batches.show.sign-lot');
-            session()->flash('status', $e->getMessage());
-
-            return;
-        }
-
-        $this->reload();
-        session()->flash('status', $purpose === 'weighed'
-            ? 'Ingredient lot marked as weighed.'
-            : 'Ingredient lot marked as tipped.');
-    }
-
     public function applyBulkIngredientSignoff(): void
     {
         $this->authorizeEditable();
-
-        $validated = $this->validate([
-            'millGapSizeUsed' => ['nullable', 'string', 'max:120'],
-            'p1SpeedUsed' => ['nullable', 'string', 'max:120'],
-            'p2SpeedUsed' => ['nullable', 'string', 'max:120'],
-        ]);
-
-        $millGap = trim((string) ($validated['millGapSizeUsed'] ?? ''));
-        $p1Speed = trim((string) ($validated['p1SpeedUsed'] ?? ''));
-        $p2Speed = trim((string) ($validated['p2SpeedUsed'] ?? ''));
-
-        $this->upsertTextPaperworkRow('process_settings.mill_gap_size_used', 'Mill Gap Size Used', 880, $millGap);
-        $this->upsertTextPaperworkRow('process_settings.p1_speed_used', 'P1 Speed Used', 881, $p1Speed);
-        $this->upsertTextPaperworkRow('process_settings.p2_speed_used', 'P2 Speed Used', 882, $p2Speed);
 
         $powdersOperatorId = (int) trim($this->powdersWeighedOperatorId);
         $liquidsOperatorId = (int) trim($this->liquidsWeighedOperatorId);
@@ -572,6 +482,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
         if ($powdersOperatorId <= 0 || $liquidsOperatorId <= 0 || $tippedOperatorId <= 0) {
             session()->flash('status', 'Select Powders Weighed, Liquids Weighed, and Tipping Batch before applying Ingredients Sign Off.');
+            $this->dispatch('ingredient-signoff-failed');
 
             return;
         }
@@ -579,6 +490,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         $powdersOperator = User::query()->find($powdersOperatorId);
         if ($powdersOperator === null) {
             session()->flash('status', 'Selected Powders Weighed operator is invalid.');
+            $this->dispatch('ingredient-signoff-failed');
 
             return;
         }
@@ -586,6 +498,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         $liquidsOperator = User::query()->find($liquidsOperatorId);
         if ($liquidsOperator === null) {
             session()->flash('status', 'Selected Liquids Weighed operator is invalid.');
+            $this->dispatch('ingredient-signoff-failed');
 
             return;
         }
@@ -593,6 +506,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         $tippedOperator = User::query()->find($tippedOperatorId);
         if ($tippedOperator === null) {
             session()->flash('status', 'Selected Tipped By operator is invalid.');
+            $this->dispatch('ingredient-signoff-failed');
 
             return;
         }
@@ -603,71 +517,120 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
         if ($lots->isEmpty()) {
             session()->flash('status', 'No allocated ingredient lots are ready for sign-off yet.');
+            $this->dispatch('ingredient-signoff-failed');
 
             return;
         }
 
-        $weighedCount = 0;
-        $tippedCount = 0;
-        $skippedTippedNotWeighed = 0;
+        $wasReplacement = $this->ingredientSignoffComplete;
 
-        foreach ($lots as $lot) {
-            if ($lot->weighed_at === null) {
-                app(SignIngredientLotFeature::class)($lot, 'weighed', $powdersOperator);
-                $weighedCount++;
+        // Batch-level confirmation of actions performed outside the app - one
+        // record per batch, not per ingredient lot. No WinMan round trip here.
+        try {
+            $this->upsertIngredientSignoffPaperworkRow(
+                'ingredients_signoff.powders_weighed_by',
+                'Powders Weighed By',
+                900,
+                $powdersOperator,
+            );
+            $this->upsertIngredientSignoffPaperworkRow(
+                'ingredients_signoff.liquids_weighed_by',
+                'Liquids Weighed By',
+                901,
+                $liquidsOperator,
+            );
+            $this->upsertIngredientSignoffPaperworkRow(
+                'ingredients_signoff.tipping_batch_by',
+                'Tipping Batch By',
+                902,
+                $tippedOperator,
+            );
+
+            foreach ([
+                ['ingredients_signoff_powders', 'Powders weighed confirmed (action performed outside DBMTS)', $powdersOperator],
+                ['ingredients_signoff_liquids', 'Liquids weighed confirmed (action performed outside DBMTS)', $liquidsOperator],
+                ['ingredients_signoff_tipping', 'Batch tipping confirmed (action performed outside DBMTS)', $tippedOperator],
+            ] as [$purpose, $meaning, $operator]) {
+                app(\App\Domains\Signature\Jobs\RecordElectronicSignatureJob::class)($this->batch, $purpose, $operator, $meaning);
             }
+
+            app(\App\Domains\Audit\Jobs\RecordAuditEntryJob::class)(
+                $this->batch,
+                $wasReplacement ? 'ingredients_signoff_override' : 'ingredients_signoff',
+                auth()->user(),
+                'ingredients_signoff',
+                null,
+                "Powders: {$powdersOperator->name}; Liquids: {$liquidsOperator->name}; Tipping: {$tippedOperator->name}",
+            );
+        } catch (\Throwable $e) {
+            app(RecordErrorLogJob::class)($e, 'batches.show.bulk-signoff');
+            session()->flash('status', 'Ingredients Sign Off failed: '.$e->getMessage());
+            $this->dispatch('ingredient-signoff-failed');
+
+            return;
         }
 
-        foreach ($lots as $lot) {
-            if ($lot->tipped_at !== null) {
-                continue;
-            }
+        // $wasReplacement above primed the per-request computed cache with the
+        // pre-write state; bust it so this same render reflects the rows we just
+        // wrote (Submitted state + Reset button, no need to submit twice).
+        unset($this->paperworkIngredientSignoff, $this->ingredientSignoffComplete);
 
-            if ($lot->weighed_at === null) {
-                $skippedTippedNotWeighed++;
-                continue;
-            }
+        $this->completionIssues = app(ValidateBatchCompletionJob::class)($this->batch);
 
-            app(SignIngredientLotFeature::class)($lot, 'tipped', $tippedOperator);
-            $tippedCount++;
-        }
-
-        $this->upsertIngredientSignoffPaperworkRow(
-            'ingredients_signoff.powders_weighed_by',
-            'Powders Weighed By',
-            900,
-            $powdersOperator,
-        );
-        $this->upsertIngredientSignoffPaperworkRow(
-            'ingredients_signoff.liquids_weighed_by',
-            'Liquids Weighed By',
-            901,
-            $liquidsOperator,
-        );
-        $this->upsertIngredientSignoffPaperworkRow(
-            'ingredients_signoff.tipping_batch_by',
-            'Tipping Batch By',
-            902,
-            $tippedOperator,
-        );
-
-        $this->reload();
-
-        $parts = [];
-        $parts[] = "weighed {$weighedCount} lot(s)";
-        $parts[] = "tipped {$tippedCount} lot(s)";
-        if ($skippedTippedNotWeighed > 0) {
-            $parts[] = "skipped {$skippedTippedNotWeighed} tipped lot(s) not yet weighed";
-        }
-
-        $message = 'Ingredients Sign Off applied: '.implode(', ', $parts).'.';
+        $message = $wasReplacement
+            ? 'Ingredients Sign Off replaced.'
+            : 'Ingredients Sign Off recorded.';
 
         if ($this->ingredientSignoffComplete) {
-            $message .= ' All ingredient lots are now fully signed off. Continue to Pallecon Packing.';
-            $this->dispatch('switch-batch-tab', tab: 'packing');
+            $message .= ' You can now complete the batch, then record fills in the Pallecon Workspace.';
         }
 
         session()->flash('status', $message);
+        $this->dispatch('ingredient-signoff-submitted');
+    }
+
+    public function resetIngredientSignoff(): void
+    {
+        $this->authorizeEditable();
+
+        // Persistent reset: blank the saved confirmations so the operator must
+        // reselect and resubmit. Audited; previous signatures remain on record.
+        PaperworkRow::query()
+            ->where('batch_record_id', $this->batch->id)
+            ->whereIn('row_key', [
+                'ingredients_signoff.powders_weighed_by',
+                'ingredients_signoff.liquids_weighed_by',
+                'ingredients_signoff.tipping_batch_by',
+            ])
+            ->update([
+                'value_text' => null,
+                'status' => 'pending',
+                'completed_at' => null,
+                'completed_by' => null,
+                'updated_by' => auth()->id(),
+            ]);
+
+        app(\App\Domains\Audit\Jobs\RecordAuditEntryJob::class)(
+            $this->batch,
+            'ingredients_signoff_reset',
+            auth()->user(),
+            'ingredients_signoff',
+            'submitted',
+            'reset for reselection',
+        );
+
+        $this->reset([
+            'powdersWeighedOperatorId',
+            'liquidsWeighedOperatorId',
+            'tippingBatchOperatorId',
+        ]);
+
+        // Drop any cached computed state so this render shows the empty
+        // dropdowns again immediately.
+        unset($this->paperworkIngredientSignoff, $this->ingredientSignoffComplete);
+
+        $this->completionIssues = app(ValidateBatchCompletionJob::class)($this->batch);
+        session()->flash('status', 'Ingredients Sign Off reset. Select all operators again and resubmit.');
     }
 
     private function upsertIngredientSignoffPaperworkRow(string $rowKey, string $rowLabel, int $rowOrder, User $operator): void
@@ -745,7 +708,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
     public function getPackingLabelProperty(): string
     {
         return match ($this->packingMode) {
-            'pallecon' => 'Pallecon Packing',
+            'pallecon' => 'Pallecon Workspace',
             'ibc' => 'IBC Packing',
             default => 'Bucketing',
         };
@@ -900,16 +863,8 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
     public function getDisplayBatchReferenceProperty(): string
     {
-        if ($this->packingMode !== 'pallecon') {
-            return (string) ($this->batch->batch_number ?? '');
-        }
-
-        $bookingLog = $this->batch->bookingLogs
-            ->where('booking_status', WinManBookingLog::STATUS_SUCCESS)
-            ->sortByDesc('id')
-            ->first();
-
-        return trim((string) ($bookingLog?->lot_number ?? ''));
+        // Batch Reference is app-only; WinMan references belong to pallecons.
+        return (string) ($this->batch->batch_number ?? '');
     }
 
     public function getDisplayBatchReferenceStyleProperty(): string
@@ -939,8 +894,17 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
             return;
         }
 
+        session()->flash('status', 'Batch '.$this->batch->batch_number.' completed. Record pallecon fills in the Pallecon Workspace.');
+
+        $winmanMo = (int) ($this->batch->manufacturingOrder?->winman_manufacturing_order ?? 0);
+
+        if ($winmanMo > 0) {
+            $this->redirectRoute('manufacturing-orders.workspace', ['winmanMo' => $winmanMo], navigate: true);
+
+            return;
+        }
+
         $this->reload();
-        session()->flash('status', 'Batch completed.');
     }
 
     public function getHasIssuedIngredientsProperty(): bool
@@ -1093,6 +1057,8 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
         $this->batch->packagingLots()->delete();
         $this->batch->pallecons()->delete();
+        // Detach this batch's fills only; shared containers may hold other batches.
+        $this->batch->palleconFills()->delete();
     }
 
     public function approve(): void
@@ -1158,334 +1124,6 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         $this->reload();
     }
 
-    public function addPallecon(): void
-    {
-        if ((string) ($this->palleconForm['fill_weight'] ?? '') === '') {
-            $this->syncPalleconDefaults();
-        }
-
-        $submittedToWinmanSuccessfully = false;
-        $labelPreviewSnapshot = $this->labelPreview;
-
-        $validated = $this->validate([
-            'palleconForm.ticket_number' => ['required', 'string', 'max:255'],
-            'palleconForm.serial_number' => ['nullable', 'string', 'max:255'],
-            'palleconForm.top_seal_number' => ['nullable', 'string', 'max:255'],
-            'palleconForm.bottom_seal_number' => ['nullable', 'string', 'max:255'],
-            'palleconForm.liner_number' => ['nullable', 'string', 'max:255'],
-            'palleconForm.liner_batch_code' => ['nullable', 'string', 'max:255'],
-            'palleconForm.fill_weight' => ['required', 'numeric', 'min:0'],
-            'palleconForm.start_time' => ['nullable', 'date'],
-            'palleconForm.finish_time' => ['nullable', 'date'],
-        ])['palleconForm'];
-
-        $validated['start_time'] = $validated['start_time'] ? Carbon::parse($validated['start_time']) : null;
-        $validated['finish_time'] = $validated['finish_time'] ? Carbon::parse($validated['finish_time']) : null;
-        $validated['fill_weight'] = $validated['fill_weight'] !== '' ? $validated['fill_weight'] : null;
-
-        $pallecon = app(AddPalleconRecordFeature::class)($this->batch, $validated, auth()->user());
-
-        $messages = [];
-        $this->print_message = null;
-        $this->print_failed = false;
-
-        if ((bool) config('winman.booking.enabled', false)) {
-            try {
-                $bookedQuantity = (float) ($pallecon->fill_weight ?? 0);
-
-                if ($bookedQuantity > 0) {
-                    $finished = now();
-                    $expiry = $this->resolveBookingExpiryDate($pallecon, $finished);
-                    $lotNumber = $this->resolveWinManLotNumber($pallecon);
-                    $requestPreview = [
-                        'manufacturing_order_id' => (string) ($this->batch->manufacturingOrder?->winman_manufacturing_order_id ?? $pallecon->mo_number ?? ''),
-                        'manufacturing_order_internal' => (int) ($this->batch->manufacturingOrder?->winman_manufacturing_order ?? 0),
-                        'product_id' => (string) ($this->batch->manufacturingOrder?->winman_product_id ?? ''),
-                        'quantity_kg' => $bookedQuantity,
-                        'lot_number' => $lotNumber,
-                        'finished_date' => $finished->format('Y-m-d H:i:s'),
-                        'expiry_date' => $expiry->format('Y-m-d H:i:s'),
-                        'pallecon_number' => (string) ($pallecon->ticket_number ?? ''),
-                    ];
-
-                    $log = app(BookFinishedGoodsFeature::class)(
-                        $this->batch,
-                        $bookedQuantity,
-                        $lotNumber,
-                        [$lotNumber],
-                        $finished,
-                        $expiry,
-                        auth()->user(),
-                        true,
-                    );
-
-                    $this->winman_booking_preview = $requestPreview + [
-                        'booking_status' => (string) $log->booking_status,
-                        'winman_inventory_id' => $log->winman_inventory_id !== null ? (string) $log->winman_inventory_id : null,
-                        'error_message' => $log->error_message,
-                        'booked_at' => $log->booking_date?->format('Y-m-d H:i:s') ?? now()->format('Y-m-d H:i:s'),
-                        'booked_quantity_kg_logged' => $log->quantity_booked_kg !== null ? (string) $log->quantity_booked_kg : null,
-                        'booked_quantity_traded_units' => $log->quantity_booked_traded_units !== null ? (string) $log->quantity_booked_traded_units : null,
-                        'logged_lot_number' => $log->lot_number,
-                    ];
-
-                    if ($log->booking_status === 'success') {
-                        $submittedToWinmanSuccessfully = true;
-                        $messages[] = 'WinMan inventory created (Inventory '.($log->winman_inventory_id ?? '—').').';
-                    } else {
-                        $this->print_failed = true;
-                        $messages[] = 'WinMan booking '.$log->booking_status.': '.($log->error_message ?: 'unknown error').'.';
-                    }
-                } else {
-                    $this->winman_booking_preview = [
-                        'booking_status' => 'skipped',
-                        'error_message' => 'Fill weight is zero.',
-                    ];
-                    $messages[] = 'WinMan booking skipped because fill weight is zero.';
-                }
-            } catch (\Throwable $e) {
-                $this->print_failed = true;
-                $this->winman_booking_preview = [
-                    'booking_status' => 'failed',
-                    'error_message' => $e->getMessage(),
-                ];
-                $messages[] = 'Pallecon saved, but WinMan booking failed: '.$e->getMessage();
-            }
-        }
-
-        if ($this->bartender_enabled) {
-            try {
-                $result = app(PrintPalleconLabelFeature::class)($pallecon, 1, [
-                    'production_date' => $this->label_production_date,
-                ]);
-                $messages[] = $this->formatPrintMessage($result);
-            } catch (\Throwable $e) {
-                $this->print_failed = true;
-                $messages[] = 'Pallecon saved, but label print failed: '.$e->getMessage();
-            }
-        }
-
-        if ($messages !== []) {
-            $this->print_message = implode(' ', $messages);
-        }
-
-        PalleconSubmissionAudit::create([
-            'batch_record_id' => $this->batch->id,
-            'pallecon_record_id' => $pallecon->id,
-            'submitted_by' => auth()->id(),
-            'submitted_at' => now(),
-            'booking_status' => (string) ($this->winman_booking_preview['booking_status'] ?? 'not_attempted'),
-            'print_status' => $this->bartender_enabled
-                ? ($this->print_failed ? 'failed' : 'success')
-                : 'disabled',
-            'winman_preview' => $this->winman_booking_preview,
-            'label_preview' => is_array($labelPreviewSnapshot) ? $labelPreviewSnapshot : null,
-        ]);
-
-        if ($submittedToWinmanSuccessfully && $this->batch->status === BatchRecord::STATUS_IN_PROGRESS) {
-            app(\App\Domains\Batch\Jobs\CompleteBatchJob::class)($this->batch, auth()->user());
-            $messages[] = 'Batch status changed to Completed.';
-
-            if ($messages !== []) {
-                $this->print_message = implode(' ', $messages);
-            }
-        }
-
-        $this->reset('palleconForm');
-        $this->syncPalleconDefaults();
-        $this->reload();
-        $this->dispatch('switch-batch-tab', tab: 'packing');
-    }
-
-    private function resolveWinManLotNumber(PalleconRecord $pallecon): string
-    {
-        $moId = trim((string) ($this->batch->manufacturingOrder?->winman_manufacturing_order_id
-            ?? $pallecon->mo_number
-            ?? 'MO'));
-        $palleconNumber = trim((string) ($pallecon->ticket_number ?? ''));
-        $labelStyleLot = $this->resolveLabelStyleLotNumber();
-
-        $moId = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $moId));
-        $palleconNumber = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $palleconNumber));
-
-        if ($moId === '') {
-            $moId = 'MO';
-        }
-
-        if ($palleconNumber === '') {
-            $palleconNumber = 'P'.$pallecon->id;
-        }
-
-        $fullLot = trim($moId.' '.$palleconNumber.' '.$labelStyleLot);
-
-        return substr($fullLot, 0, 100);
-    }
-
-    private function resolveLabelStyleLotNumber(): string
-    {
-        $productionDate = $this->label_production_date !== ''
-            ? Carbon::parse($this->label_production_date)
-            : now();
-
-        $yjjj = $productionDate->format('y');
-        $yjjj = substr($yjjj, -1).str_pad((string) $productionDate->dayOfYear, 3, '0', STR_PAD_LEFT);
-
-        return $yjjj.'00M96';
-    }
-
-    private function resolveBookingExpiryDate(PalleconRecord $pallecon, Carbon $fallbackBase): Carbon
-    {
-        $productionDate = $this->label_production_date !== ''
-            ? Carbon::parse($this->label_production_date)
-            : now();
-
-        $previewPallecon = new PalleconRecord([
-            'mo_number' => $this->batch->manufacturingOrder?->mo_number,
-            'fill_weight' => (float) ($pallecon->fill_weight ?? 0),
-        ]);
-        $previewPallecon->setRelation('batchRecord', $this->batch);
-
-        try {
-            $payload = app(PrintPalleconLabelFeature::class)->buildPrintPayload($previewPallecon, 1, [
-                'production_date' => $productionDate->toDateString(),
-            ]);
-
-            $sources = is_array($payload['options']['named_data_sources'] ?? null)
-                ? $payload['options']['named_data_sources']
-                : [];
-
-            $bbeFormat = strtoupper(trim((string) ($sources['BBEformat'] ?? '')));
-            $bbeValue = isset($sources['BBE']) && is_numeric((string) $sources['BBE'])
-                ? max(1, (int) $sources['BBE'])
-                : null;
-
-            if ($bbeValue !== null && $bbeFormat === 'DDMMYYYY') {
-                return $productionDate->copy()->addDays($bbeValue)->endOfDay();
-            }
-
-            if ($bbeValue !== null && $bbeFormat === 'MMYYYY') {
-                return $productionDate->copy()->addMonthsNoOverflow($bbeValue)->endOfMonth();
-            }
-
-            $bestBeforeRaw = trim((string) ($sources['BestBeforeEnd'] ?? ''));
-
-            if ($bestBeforeRaw !== '') {
-                if (preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $bestBeforeRaw) === 1) {
-                    return Carbon::createFromFormat('d/m/Y', $bestBeforeRaw)->endOfDay();
-                }
-
-                if (preg_match('/^\d{2}\/\d{4}$/', $bestBeforeRaw) === 1) {
-                    return Carbon::createFromFormat('m/Y', $bestBeforeRaw)->endOfMonth();
-                }
-
-                return Carbon::parse($bestBeforeRaw)->endOfDay();
-            }
-        } catch (\Throwable) {
-        }
-
-        $shelfDays = (int) ($this->batch->product?->shelf_life_days ?? 180);
-
-        return $fallbackBase->copy()->addDays($shelfDays)->endOfMonth();
-    }
-
-    /** @param array<string, mixed> $result */
-    private function formatPrintMessage(array $result): string
-    {
-        $requestId = isset($result['printRequestID']) ? (string) $result['printRequestID'] : null;
-        $messages = isset($result['messages']) && is_array($result['messages']) ? $result['messages'] : [];
-        $printer = null;
-
-        foreach ($messages as $message) {
-            if (! is_string($message)) {
-                continue;
-            }
-
-            if (preg_match('/Printer:\s*(.+)$/m', $message, $matches) === 1) {
-                $printer = trim($matches[1]);
-                break;
-            }
-        }
-
-        $parts = ['Pallecon saved and BarTender sent the job to the spooler.'];
-
-        if ($requestId) {
-            $parts[] = 'Request ID: '.$requestId.'.';
-        }
-
-        if ($printer) {
-            $parts[] = 'Printer: '.$printer.'.';
-        }
-
-        return implode(' ', $parts);
-    }
-
-    /** @return array<string, mixed> */
-    public function getLabelPreviewProperty(): array
-    {
-        $fillWeightInput = (string) ($this->palleconForm['fill_weight'] ?? '1');
-        $fillWeight = is_numeric($fillWeightInput) ? (float) $fillWeightInput : 1.0;
-        $productionDate = $this->label_production_date !== '' ? $this->label_production_date : now()->toDateString();
-
-        $previewPallecon = new PalleconRecord([
-            'mo_number' => $this->batch->manufacturingOrder?->mo_number,
-            'fill_weight' => $fillWeight,
-        ]);
-        $previewPallecon->setRelation('batchRecord', $this->batch);
-
-        try {
-            $payload = app(PrintPalleconLabelFeature::class)->buildPrintPayload($previewPallecon, 1, [
-                'production_date' => $productionDate,
-            ]);
-        } catch (\Throwable $e) {
-            return ['error' => $e->getMessage()];
-        }
-
-        $sources = is_array($payload['options']['named_data_sources'] ?? null)
-            ? $payload['options']['named_data_sources']
-            : [];
-
-        $lotNumberLabelStyle = null;
-        $datePacked = isset($sources['DatePacked']) ? trim((string) $sources['DatePacked']) : '';
-
-        if ($datePacked !== '') {
-            try {
-                $datePackedCarbon = Carbon::parse($datePacked);
-                $yjjj = $datePackedCarbon->format('y');
-                $yjjj = substr($yjjj, -1).str_pad((string) $datePackedCarbon->dayOfYear, 3, '0', STR_PAD_LEFT);
-                $lotNumberLabelStyle = $yjjj.'00M96';
-            } catch (\Throwable) {
-                $lotNumberLabelStyle = null;
-            }
-        }
-
-        return [
-            'fill_weight' => $sources['FillWeight'] ?? null,
-            'date_of_production' => $sources['DateOfProduction'] ?? null,
-            'best_before_end' => $sources['BestBeforeEnd'] ?? null,
-            'manufacturing_order' => $sources['ManufacturingOrder'] ?? null,
-            'product_id' => $sources['ProductId'] ?? ($sources['ProductID'] ?? null),
-            'product_description' => $sources['ProductDescription'] ?? null,
-            'lot_number' => $sources['LotNumber'] ?? ($sources['BatchCode'] ?? null),
-            'lot_number_label_style' => $lotNumberLabelStyle,
-            'winman_lot_number' => trim((string) (($sources['ManufacturingOrder'] ?? 'MO').' '.trim((string) ($this->palleconForm['ticket_number'] ?? '')).' '.($lotNumberLabelStyle ?? ''))),
-            'batch_code' => $sources['BatchCode'] ?? null,
-            'barcode' => $sources['Barcode'] ?? null,
-            'ingredients' => $sources['Ingredients'] ?? null,
-            'storage' => $sources['HandInstruct'] ?? null,
-            'origin' => $sources['CountryId'] ?? null,
-            'weight' => $sources['Weight'] ?? null,
-            'energy_kj' => $sources['EnergyKJ'] ?? null,
-            'energy_kcal' => $sources['EnergyKcal'] ?? null,
-            'fat' => $sources['Fat'] ?? null,
-            'saturates' => $sources['Saturates'] ?? ($sources['Saturatess'] ?? null),
-            'carbohydrates' => $sources['TotalCarbohydrates'] ?? null,
-            'sugars' => $sources['OfWhichSugar'] ?? null,
-            'fibre' => $sources['Fibre'] ?? null,
-            'protein' => $sources['Protein'] ?? null,
-            'salt' => $sources['Salt'] ?? null,
-        ];
-    }
-
     private function authorizeEditable(): void
     {
         abort_unless($this->editable, 403, 'This batch is no longer editable.');
@@ -1505,44 +1143,6 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
             'issueLogs',
         ]);
 
-        $defaultOperatorId = auth()->id();
-        $signoffOperatorByLot = [];
-        foreach ($this->batch->ingredientLots as $lot) {
-            $selected = $this->signoffOperatorByLot[$lot->id] ?? null;
-            $signoffOperatorByLot[$lot->id] = (string) ($selected ?: $lot->tipped_by ?: $lot->weighed_by ?: $defaultOperatorId ?: '');
-        }
-        $this->signoffOperatorByLot = $signoffOperatorByLot;
-
-        $paperworkSignoff = $this->paperworkIngredientSignoff;
-        $existingWeighedBy = (int) ($this->batch->ingredientLots->first(fn ($lot) => $lot->weighed_by !== null)?->weighed_by ?? 0);
-        $existingTippedBy = (int) ($this->batch->ingredientLots->first(fn ($lot) => $lot->tipped_by !== null)?->tipped_by ?? 0);
-        $savedPowders = User::query()->where('name', $paperworkSignoff['powders'])->value('id');
-        $savedLiquids = User::query()->where('name', $paperworkSignoff['liquids'])->value('id');
-        $savedTipping = User::query()->where('name', $paperworkSignoff['tipping'])->value('id');
-
-        if (trim($this->powdersWeighedOperatorId) === '') {
-            $this->powdersWeighedOperatorId = (string) ($savedPowders ?: ($existingWeighedBy > 0 ? $existingWeighedBy : ($defaultOperatorId ?: '')));
-        }
-
-        if (trim($this->liquidsWeighedOperatorId) === '') {
-            $this->liquidsWeighedOperatorId = (string) ($savedLiquids ?: ($existingWeighedBy > 0 ? $existingWeighedBy : ($defaultOperatorId ?: '')));
-        }
-
-        if (trim($this->tippingBatchOperatorId) === '') {
-            $this->tippingBatchOperatorId = (string) ($savedTipping ?: ($existingTippedBy > 0 ? $existingTippedBy : ($defaultOperatorId ?: '')));
-        }
-
-        $paperworkProcessSettings = $this->paperworkProcessSettings;
-        if (trim($this->millGapSizeUsed) === '') {
-            $this->millGapSizeUsed = (string) ($paperworkProcessSettings['mill_gap'] ?? '');
-        }
-        if (trim($this->p1SpeedUsed) === '') {
-            $this->p1SpeedUsed = (string) ($paperworkProcessSettings['p1_speed'] ?? '');
-        }
-        if (trim($this->p2SpeedUsed) === '') {
-            $this->p2SpeedUsed = (string) ($paperworkProcessSettings['p2_speed'] ?? '');
-        }
-
         $this->loadMoUnitOfMeasureDescription();
         $this->loadMoHeaderDates();
 
@@ -1561,16 +1161,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
             'planned_quantity' => $this->formatQty((float) ($this->batch->planned_quantity ?? 0)),
         ];
 
-        $this->syncPalleconDefaults();
-
         $this->completionIssues = app(ValidateBatchCompletionJob::class)($this->batch);
-    }
-
-    private function syncPalleconDefaults(): void
-    {
-        $defaultFillWeight = $this->formatQty((float) ($this->batch->planned_quantity ?? 0));
-
-        $this->palleconForm['fill_weight'] = $defaultFillWeight !== '' ? $defaultFillWeight : '0';
     }
 
     private function loadMoUnitOfMeasureDescription(): void
@@ -1743,17 +1334,89 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 }; ?>
 
 <div class="py-8">
+<style>
+    @keyframes ingredient-signoff-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.22); }
+    }
+
+    @keyframes ingredient-signoff-submitted {
+        from { opacity: 0; transform: translateY(4px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .ingredient-signoff-submit {
+        transition: min-width 220ms ease, background-color 260ms ease, transform 160ms ease, box-shadow 260ms ease;
+    }
+
+    .ingredient-signoff-submit--idle {
+        background: #1e293b;
+    }
+
+    .ingredient-signoff-submit--idle:hover {
+        background: #334155;
+        transform: translateY(-1px);
+    }
+
+    .ingredient-signoff-submit--loading {
+        min-width: 132px;
+        background: #1e293b;
+        transform: scaleX(0.82);
+    }
+
+    .ingredient-signoff-submit--success {
+        min-width: 158px;
+        background: #059669;
+        box-shadow: 0 0 0 5px rgba(5, 150, 105, 0.12);
+        animation: ingredient-signoff-success-settle 350ms ease-out;
+    }
+
+    .ingredient-signoff-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: ingredient-signoff-spin 700ms linear infinite;
+    }
+
+    .ingredient-signoff-check {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        font-size: 13px;
+        line-height: 1;
+        animation: ingredient-signoff-check-pop 280ms ease-out;
+    }
+
+    @keyframes ingredient-signoff-spin {
+        to { transform: rotate(360deg); }
+    }
+
+    @keyframes ingredient-signoff-success-settle {
+        0% { transform: scaleX(0.82); }
+        65% { transform: scaleX(1.04); }
+        100% { transform: scaleX(1); }
+    }
+
+    @keyframes ingredient-signoff-check-pop {
+        from { opacity: 0; transform: scale(0.35) rotate(-45deg); }
+        to { opacity: 1; transform: scale(1) rotate(0); }
+    }
+</style>
+
     @php
         $requestedTab = (string) request()->query('tab', 'allocation');
-        $allowedTabs = ['batch', 'allocation', 'packing'];
+        $allowedTabs = ['batch', 'allocation'];
         if ($this->packingMode === 'pallecon') {
             $allowedTabs[] = 'signoff';
         }
 
         $initialTab = in_array($requestedTab, $allowedTabs, true) ? $requestedTab : 'allocation';
-        if ($this->packingMode === 'pallecon' && $initialTab === 'packing' && ! $this->ingredientSignoffComplete) {
-            $initialTab = 'signoff';
-        }
     @endphp
 
     <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6" x-data="{ tab: @js($initialTab) }" x-on:switch-batch-tab.window="tab = $event.detail.tab">
@@ -1928,35 +1591,24 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                         $batchTabs = ['allocation' => 'Ingredient Allocation'];
                         if ($this->packingMode === 'pallecon') {
                             $batchTabs['signoff'] = 'Ingredients Sign Off';
+                        } else {
+                            $batchTabs['packing'] = $this->packingLabel;
                         }
-                        $batchTabs['packing'] = $this->packingLabel;
                     @endphp
 
                     @foreach ($batchTabs as $key => $label)
-                        @if ($key === 'packing' && $this->packingMode !== 'pallecon')
-                            <a href="{{ route($this->packingRoute, $batch) }}" wire:navigate
-                                :style="tab === '{{ $key }}'
-                                    ? 'display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #4f46e5;background:#4f46e5;color:#fff;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;text-decoration:none;box-shadow:0 4px 12px rgba(79,70,229,.24);white-space:nowrap;'
-                                    : 'display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #cbd5e1;background:#fff;color:#334155;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;text-decoration:none;white-space:nowrap;'"
-                            >
+                        @if ($key === 'packing')
+                            <a href="{{ route($this->packingRoute, $batch) }}" wire:navigate style="display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #cbd5e1;background:#fff;color:#334155;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;text-decoration:none;white-space:nowrap;">
                                 <span aria-hidden="true" style="font-size:14px;line-height:1;">&#129520;</span>
                                 <span>{{ $label }}</span>
                             </a>
                         @else
-                            @php
-                                $packingLocked = $key === 'packing' && $this->packingMode === 'pallecon' && ! $this->ingredientSignoffComplete;
-                            @endphp
                             <button
-                                @if (! $packingLocked)
-                                    @click="tab = '{{ $key }}'"
-                                @endif
+                                @click="tab = '{{ $key }}'"
                                 :style="tab === '{{ $key }}'
                                     ? 'display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #4f46e5;background:#4f46e5;color:#fff;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;box-shadow:0 4px 12px rgba(79,70,229,.24);white-space:nowrap;'
                                     : 'display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #cbd5e1;background:#fff;color:#334155;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;white-space:nowrap;'"
                                 type="button"
-                                @disabled($packingLocked)
-                                title="{{ $packingLocked ? 'Complete Ingredients Sign Off first.' : '' }}"
-                                class="{{ $packingLocked ? 'opacity-50 cursor-not-allowed' : '' }}"
                             >
                                 <span>{{ $label }}</span>
                             </button>
@@ -1981,7 +1633,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                         <div style="padding:14px 22px;">
                             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0;align-items:stretch;">
                                 <div style="padding:0 26px 0 0;min-width:220px;border-right:1px solid #dbe1ea;">
-                                    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Batch Number</div>
+                                    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Batch Reference</div>
                                     <div style="{{ $this->displayBatchReferenceStyle }}" title="{{ $this->displayBatchReference }}">{{ $this->displayBatchReference }}</div>
                                 </div>
 
@@ -2183,6 +1835,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                 return [
                                                     'lot_id' => $lot?->id,
                                                     'lot_number' => (string) ($log->lot_number ?? ($lot?->lot_number ?? '—')),
+                                                    'supplier_lot_number' => (string) ($lot?->supplier_lot_number ?? '—'),
                                                     'quantity' => (float) ($log->quantity_issued ?? ($lot?->actual_quantity ?? 0)),
                                                     'uom' => (string) ($lot?->uom ?? 'kg'),
                                                     'issue_status' => (string) ($log->issue_status ?? ''),
@@ -2204,6 +1857,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                     return [
                                                         'lot_id' => $lot->id,
                                                         'lot_number' => (string) ($lot->lot_number ?? '—'),
+                                                        'supplier_lot_number' => (string) ($lot->supplier_lot_number ?? '—'),
                                                         'quantity' => (float) ($lot->actual_quantity ?? 0),
                                                         'uom' => (string) ($lot->uom ?? 'kg'),
                                                         'issue_status' => (string) ($issueLog?->issue_status ?? ''),
@@ -2275,6 +1929,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                             $expandedRows = collect($activeBomHistoricalLots)->map(static fn (array $history): array => [
                                                                 'lot_id' => null,
                                                                 'lot_number' => (string) $history['lot_number'],
+                                                                'supplier_lot_number' => '—',
                                                                 'quantity' => abs((float) $history['quantity']),
                                                                 'uom' => 'kg',
                                                                 'issue_status' => 'success',
@@ -2293,18 +1948,17 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                             <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
                                                                 <tr>
                                                                     <th class="px-3 py-2">Allocated Lot</th>
+                                                                    <th class="px-3 py-2">Supplier Lot</th>
                                                                     <th class="px-3 py-2 text-right">Qty</th>
                                                                     <th class="px-3 py-2">UOM</th>
                                                                     <th class="px-3 py-2">WinMan</th>
-                                                                    <th class="px-3 py-2">Operator</th>
-                                                                    <th class="px-3 py-2">Weighed</th>
-                                                                    <th class="px-3 py-2">Tipped</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody class="divide-y divide-gray-100">
                                                                 @forelse ($expandedRows as $row)
                                                                     <tr>
                                                                         <td class="px-3 py-2">{{ $row['lot_number'] }}</td>
+                                                                        <td class="px-3 py-2">{{ $row['supplier_lot_number'] }}</td>
                                                                         <td class="px-3 py-2 text-right">{{ rtrim(rtrim((string) $row['quantity'], '0'), '.') }}</td>
                                                                         <td class="px-3 py-2">{{ $row['uom'] }}</td>
                                                                         <td class="px-3 py-2">
@@ -2318,44 +1972,10 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                                                 <span class="text-gray-500">-</span>
                                                                             @endif
                                                                         </td>
-                                                                        <td class="px-3 py-2">
-                                                                            @if ($row['lot_id'] && $this->editable)
-                                                                                <select wire:model="signoffOperatorByLot.{{ $row['lot_id'] }}" class="w-full rounded-md border-gray-300 text-xs shadow-sm">
-                                                                                    <option value="">Select</option>
-                                                                                    @foreach ($this->signoffOperators as $operator)
-                                                                                        <option value="{{ $operator->id }}">{{ $operator->name }}</option>
-                                                                                    @endforeach
-                                                                                </select>
-                                                                            @elseif ($row['weighed_by'] || $row['tipped_by'])
-                                                                                <span class="text-xs text-slate-600">{{ $row['tipped_by'] ?: $row['weighed_by'] }}</span>
-                                                                            @else
-                                                                                <span class="text-gray-400">—</span>
-                                                                            @endif
-                                                                        </td>
-                                                                        <td class="px-3 py-2 align-top">
-                                                                            @if ($row['weighed_by'])
-                                                                                <div class="text-sm font-medium text-slate-800">{{ $row['weighed_by'] }}</div>
-                                                                                <div class="text-xs text-slate-500">{{ $row['weighed_at'] ?: 'Signed' }}</div>
-                                                                            @elseif ($row['lot_id'] && $this->editable)
-                                                                                <button type="button" wire:click="signIngredientLot({{ $row['lot_id'] }}, 'weighed')" class="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100">Confirm weighed</button>
-                                                                            @else
-                                                                                <span class="text-gray-400">—</span>
-                                                                            @endif
-                                                                        </td>
-                                                                        <td class="px-3 py-2 align-top">
-                                                                            @if ($row['tipped_by'])
-                                                                                <div class="text-sm font-medium text-slate-800">{{ $row['tipped_by'] }}</div>
-                                                                                <div class="text-xs text-slate-500">{{ $row['tipped_at'] ?: 'Signed' }}</div>
-                                                                            @elseif ($row['lot_id'] && $this->editable)
-                                                                                <button type="button" wire:click="signIngredientLot({{ $row['lot_id'] }}, 'tipped')" class="inline-flex items-center rounded-md border border-indigo-300 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100">Confirm tipped</button>
-                                                                            @else
-                                                                                <span class="text-gray-400">—</span>
-                                                                            @endif
-                                                                        </td>
                                                                     </tr>
                                                                 @empty
                                                                     <tr>
-                                                                        <td colspan="7" class="px-3 py-4 text-center text-gray-500">No allocations recorded yet for this BOM line.</td>
+                                                                        <td colspan="5" class="px-3 py-4 text-center text-gray-500">No allocations recorded yet for this BOM line.</td>
                                                                     </tr>
                                                                 @endforelse
                                                             </tbody>
@@ -2404,201 +2024,104 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                 @else
                                     @if ($this->editable)
                                         <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 mb-4">
-                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <div>
-                                                    <label class="block text-xs text-slate-600 mb-1">Mill Gap Size Used</label>
-                                                    <input type="text" wire:model="millGapSizeUsed" class="w-full rounded-md border-gray-300 text-sm shadow-sm" placeholder="Enter mill gap size" />
-                                                </div>
-
-                                                <div>
-                                                    <label class="block text-xs text-slate-600 mb-1">P1 Speed Used</label>
-                                                    <input type="text" wire:model="p1SpeedUsed" class="w-full rounded-md border-gray-300 text-sm shadow-sm" placeholder="Enter P1 speed" />
-                                                </div>
-
-                                                <div class="md:col-span-2">
-                                                    <label class="block text-xs text-slate-600 mb-1">P2 Speed Used</label>
-                                                    <input type="text" wire:model="p2SpeedUsed" class="w-full rounded-md border-gray-300 text-sm shadow-sm" placeholder="Enter P2 speed" />
-                                                </div>
-
-                                                <div>
-                                                    <label class="block text-xs text-slate-600 mb-1">Powders Weighed</label>
-                                                    <select wire:model="powdersWeighedOperatorId" class="w-full rounded-md border-gray-300 text-sm shadow-sm">
-                                                        <option value="">Select operator</option>
-                                                        @foreach ($this->signoffOperators as $operator)
-                                                            <option value="{{ $operator->id }}">{{ $operator->name }}</option>
-                                                        @endforeach
-                                                    </select>
-                                                </div>
-
-                                                <div>
-                                                    <label class="block text-xs text-slate-600 mb-1">Liquids Weighed</label>
-                                                    <select wire:model="liquidsWeighedOperatorId" class="w-full rounded-md border-gray-300 text-sm shadow-sm">
-                                                        <option value="">Select operator</option>
-                                                        @foreach ($this->signoffOperators as $operator)
-                                                            <option value="{{ $operator->id }}">{{ $operator->name }}</option>
-                                                        @endforeach
-                                                    </select>
-                                                </div>
-
-                                                <div class="md:col-span-2">
-                                                    <label class="block text-xs text-slate-600 mb-1">Tipping Batch</label>
-                                                    <select wire:model="tippingBatchOperatorId" class="w-full rounded-md border-gray-300 text-sm shadow-sm">
-                                                        <option value="">Select operator</option>
-                                                        @foreach ($this->signoffOperators as $operator)
-                                                            <option value="{{ $operator->id }}">{{ $operator->name }}</option>
-                                                        @endforeach
-                                                    </select>
-                                                </div>
+                                            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;">
+                                                @php
+                                                    $submittedSignoff = $this->paperworkIngredientSignoff;
+                                                    // Badges must reflect the ACTUAL lot signatures, not stale paperwork names.
+                                                    $signoffTruthComplete = $this->ingredientSignoffComplete;
+                                                    $fallbackWeigher = $batch->ingredientLots->first(fn ($lot) => $lot->weighed_by !== null)?->weighedBy?->name;
+                                                    $fallbackTipper = $batch->ingredientLots->first(fn ($lot) => $lot->tipped_by !== null)?->tippedBy?->name;
+                                                @endphp
+                                                @foreach ([
+                                                    'powdersWeighedOperatorId' => ['label' => 'Powders Weighed', 'class' => '', 'submitted_key' => 'powders'],
+                                                    'liquidsWeighedOperatorId' => ['label' => 'Liquids Weighed', 'class' => '', 'submitted_key' => 'liquids'],
+                                                    'tippingBatchOperatorId' => ['label' => 'Tipping Batch', 'class' => '', 'submitted_key' => 'tipping'],
+                                                ] as $field => $signoff)
+                                                    @php
+                                                        $submittedName = trim((string) ($submittedSignoff[$signoff['submitted_key']] ?? ''));
+                                                        if ($submittedName === '') {
+                                                            $submittedName = (string) ($signoff['submitted_key'] === 'tipping' ? $fallbackTipper : $fallbackWeigher);
+                                                        }
+                                                    @endphp
+                                                    <div class="{{ $signoff['class'] }}">
+                                                        <label class="block text-xs text-slate-600 mb-1">{{ $signoff['label'] }}</label>
+                                                        @if ($signoffTruthComplete)
+                                                            <div class="flex min-h-[38px] items-center rounded-md border border-emerald-300 bg-emerald-50 px-3 text-sm text-emerald-800 shadow-sm">
+                                                                <span class="flex items-center gap-2 font-semibold">
+                                                                    <span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-xs text-white" aria-hidden="true">✓</span>
+                                                                    Submitted <span class="font-normal text-emerald-700">{{ $submittedName }}</span>
+                                                                </span>
+                                                            </div>
+                                                        @else
+                                                            {{-- Keep the dropdowns editable right up to Submit - no intermediate "Selected" step. --}}
+                                                            <select wire:model="{{ $field }}" class="w-full rounded-md border-gray-300 text-sm shadow-sm">
+                                                                <option value="">Select operator</option>
+                                                                @foreach ($this->signoffOperators as $operator)
+                                                                    <option value="{{ $operator->id }}" @selected((string) $this->{$field} === (string) $operator->id)>{{ $operator->name }}</option>
+                                                                @endforeach
+                                                            </select>
+                                                        @endif
+                                                    </div>
+                                                @endforeach
                                             </div>
 
-                                            <div class="mt-4 flex justify-end">
-                                                <x-primary-button type="button" wire:click="applyBulkIngredientSignoff">Apply Ingredients Sign Off</x-primary-button>
+                                            <div class="mt-3 flex items-center justify-end gap-3" x-data="{
+                                                state: 'idle',
+                                                successTimer: null,
+                                                submit() { this.state = 'loading'; },
+                                                failed() { this.state = 'idle'; },
+                                                submitted() {
+                                                    this.state = 'success';
+                                                    clearTimeout(this.successTimer);
+                                                    this.successTimer = setTimeout(() => { this.state = 'idle'; }, 1700);
+                                                },
+                                            }" x-on:ingredient-signoff-submitted.window="submitted()" x-on:ingredient-signoff-failed.window="failed()">
+                                                @if ($signoffTruthComplete)
+                                                    <button type="button" wire:click="resetIngredientSignoff" wire:loading.attr="disabled" class="inline-flex h-10 items-center rounded-md border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-800 hover:bg-amber-100" title="Reset clears the saved sign-off so operators can be reselected; the reset and resubmission are both audited.">Reset sign-off</button>
+                                                @else
+                                                    <button type="button" wire:click="applyBulkIngredientSignoff" @click="submit()" wire:loading.attr="disabled" wire:target="applyBulkIngredientSignoff" class="ingredient-signoff-submit inline-flex h-10 min-w-[220px] items-center justify-center overflow-hidden rounded-md px-4 text-sm font-semibold text-white" x-bind:class="state === 'success' ? 'ingredient-signoff-submit--success' : (state === 'loading' ? 'ingredient-signoff-submit--loading' : 'ingredient-signoff-submit--idle')">
+                                                        <span x-show="state === 'idle'" x-transition.opacity.duration.150ms>Submit Ingredients Sign Off</span>
+                                                        <span x-cloak x-show="state === 'loading'" x-transition.opacity.duration.150ms class="flex items-center gap-2">
+                                                            <span class="ingredient-signoff-spinner"></span>
+                                                            Submitting
+                                                        </span>
+                                                        <span x-cloak x-show="state === 'success'" x-transition.opacity.duration.150ms class="flex items-center gap-2">
+                                                            <span class="ingredient-signoff-check" aria-hidden="true">✓</span>
+                                                            Submitted
+                                                        </span>
+                                                    </button>
+                                                @endif
                                             </div>
                                         </div>
                                     @endif
 
-                                    <div class="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">
-                                        @if ($this->ingredientSignoffComplete)
-                                            All {{ $this->ingredientSignoffReadyLotCount }} allocated ingredient lot(s) are weighed and tipped.
-                                        @else
-                                            Sign-off pending. Complete weighed and tipped for all {{ $this->ingredientSignoffReadyLotCount }} allocated ingredient lot(s).
-                                        @endif
-                                    </div>
-
-                                    <div class="mt-4 flex justify-end">
-                                        <button
-                                            @click="tab = 'packing'"
-                                            type="button"
-                                            @disabled(! $this->ingredientSignoffComplete)
-                                            class="inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold {{ $this->ingredientSignoffComplete ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-200 text-slate-500 cursor-not-allowed' }}"
-                                        >
-                                            Continue to Pallecon Packing →
-                                        </button>
-                                    </div>
-                                @endif
-                            </div>
-                        </div>
-                    </div>
-
-                    <div x-show="tab === 'packing'" class="space-y-6 p-6">
-                        @if (! $this->ingredientSignoffComplete)
-                            <div class="rounded-md p-3 text-sm bg-amber-50 text-amber-800 border border-amber-200">
-                                Complete <strong>Ingredients Sign Off</strong> (both weighed and tipped for all allocated lots) before Pallecon completion.
-                            </div>
-                        @endif
-
-                        @if ($print_message)
-                            <div class="rounded-md p-3 text-sm {{ $print_failed ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200' }}">
-                                {{ $print_message }}
-                            </div>
-                        @endif
-
-                        @if ($winman_booking_preview)
-                            <div class="border border-emerald-200 rounded-lg p-4 bg-emerald-50 shadow-sm">
-                                <h3 class="text-sm font-semibold text-emerald-800 mb-3">WinMan Inventory Insert Preview (Last Add)</h3>
-
-                                <div class="w-full rounded-lg border border-emerald-200 bg-white p-4">
-                                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
-                                        <div><span class="text-slate-500">Status:</span> <span class="font-semibold text-slate-900">{{ $winman_booking_preview['booking_status'] ?? '—' }}</span></div>
-                                        <div><span class="text-slate-500">Inventory ID:</span> <span class="font-semibold text-slate-900">{{ $winman_booking_preview['winman_inventory_id'] ?? '—' }}</span></div>
-                                        <div><span class="text-slate-500">Booked At:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['booked_at'] ?? '—' }}</span></div>
-                                        <div><span class="text-slate-500">MO ID:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['manufacturing_order_id'] ?? '—' }}</span></div>
-                                        <div><span class="text-slate-500">MO Internal:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['manufacturing_order_internal'] ?? '—' }}</span></div>
-                                        <div><span class="text-slate-500">Product ID:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['product_id'] ?? '—' }}</span></div>
-                                        <div><span class="text-slate-500">Pallecon Number:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['pallecon_number'] ?? '—' }}</span></div>
-                                        <div><span class="text-slate-500">Quantity (kg):</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['quantity_kg'] ?? '—' }}</span></div>
-                                        <div class="md:col-span-2"><span class="text-slate-500">Lot Number Sent:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['lot_number'] ?? '—' }}</span></div>
-                                        <div class="md:col-span-2"><span class="text-slate-500">Lot Number Logged:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['logged_lot_number'] ?? '—' }}</span></div>
-                                        <div><span class="text-slate-500">Finished Date:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['finished_date'] ?? '—' }}</span></div>
-                                        <div><span class="text-slate-500">Expiry Date:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['expiry_date'] ?? '—' }}</span></div>
-                                        <div><span class="text-slate-500">Logged Qty (kg):</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['booked_quantity_kg_logged'] ?? '—' }}</span></div>
-                                        <div><span class="text-slate-500">Logged Qty (TU):</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['booked_quantity_traded_units'] ?? '—' }}</span></div>
-                                        @if (! empty($winman_booking_preview['error_message']))
-                                            <div class="md:col-span-2 xl:col-span-4 text-red-700">
-                                                <span class="text-slate-500">Error:</span> {{ $winman_booking_preview['error_message'] }}
+                                    <div class="mt-4 flex flex-col items-end gap-2">
+                                        @if (! $this->ingredientSignoffComplete)
+                                            <div class="w-full rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900" style="animation:ingredient-signoff-pulse 1.7s ease-in-out infinite;">
+                                                <div class="flex items-center gap-3">
+                                                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-base font-black text-white" aria-hidden="true">!</span>
+                                                    <span class="text-sm font-bold">Make sure you signed off all ingredients before completing batch.</span>
+                                                </div>
                                             </div>
                                         @endif
-                                    </div>
-                                </div>
-                            </div>
-                        @endif
 
-                        @if ($batch->status === \App\Models\BatchRecord::STATUS_IN_PROGRESS && $this->ingredientSignoffComplete)
-                            <form wire:submit="addPallecon" class="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden">
-                                <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#eef2ff 0%,#f8fafc 100%);">
-                                    <div class="text-xs font-semibold uppercase tracking-wide text-indigo-700">Pallecon Entry</div>
-                                    <div class="text-sm text-slate-600 mt-1">Capture packing identifiers, fill weight, and label/booking parameters.</div>
-                                </div>
-                                <div class="p-6 space-y-4">
-                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div>
-                                            <label class="block text-xs text-gray-600 mb-1">Pallecon Number</label>
-                                            <input type="text" wire:model.live.debounce.300ms="palleconForm.ticket_number" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
-                                            @error('palleconForm.ticket_number') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
-                                        </div>
-
-                                        <div>
-                                            <label class="block text-xs text-gray-600 mb-1">Fill weight (kg)</label>
-                                            <input type="number" step="0.001" min="0" wire:model="palleconForm.fill_weight" readonly class="w-full border-gray-300 rounded-md shadow-sm text-sm bg-slate-50 text-slate-700 cursor-not-allowed" />
-                                            <p class="mt-1 text-xs text-slate-500">Derived from the batch planned quantity and locked for this output size.</p>
-                                            @error('palleconForm.fill_weight') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
-                                        </div>
-
-                                        <div>
-                                            <label class="block text-xs text-gray-600 mb-1">Label production date</label>
-                                            <input type="date" wire:model.live="label_production_date" class="border-gray-300 rounded-md shadow-sm text-sm" />
-                                            @if (! $bartender_enabled)
-                                                <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                                                    Printing is disabled. Set <strong>BARTENDER_ENABLED=true</strong> in the environment to enable automatic label printing on save.
-                                                </p>
-                                            @else
-                                                <p class="text-xs text-slate-600 bg-slate-100 border border-slate-200 rounded px-2 py-1">
-                                                    Label printing is automatic when you click Add pallecon.
-                                                </p>
-                                            @endif
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <x-primary-button type="submit" class="w-full justify-center">Add Pallecon</x-primary-button>
-                                    </div>
-                                </div>
-                            </form>
-                        @elseif ($batch->status === \App\Models\BatchRecord::STATUS_IN_PROGRESS)
-                            <div class="rounded-md p-3 text-sm bg-slate-50 text-slate-700 border border-slate-200">
-                                Pallecon entry is locked until Ingredients Sign Off is complete.
-                            </div>
-                        @endif
-
-                        <div class="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 shadow-sm">
-                            <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);">
-                                <h3 class="text-sm font-semibold text-slate-700">Label Preview (Before Print)</h3>
-                            </div>
-                            <div class="p-4">
-                                @if (isset($this->labelPreview['error']))
-                                    <p class="text-xs text-red-700">Preview unavailable: {{ $this->labelPreview['error'] }}</p>
-                                @else
-                                    <div class="w-full rounded-lg border border-slate-200 bg-white p-4 space-y-4">
-                                        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
-                                            <div><span class="text-slate-500">Fill Weight:</span> <span class="font-medium text-slate-900">{{ $this->labelPreview['fill_weight'] ?? '—' }}</span></div>
-                                            <div><span class="text-slate-500">Production Date:</span> <span class="font-medium text-slate-900">{{ $this->labelPreview['date_of_production'] ?? '—' }}</span></div>
-                                            <div><span class="text-slate-500">Best Before End:</span> <span class="font-medium text-slate-900">{{ $this->labelPreview['best_before_end'] ?? '—' }}</span></div>
-                                            <div><span class="text-slate-500">MO:</span> <span class="font-medium text-slate-900">{{ $this->labelPreview['manufacturing_order'] ?? '—' }}</span></div>
-                                            <div><span class="text-slate-500">Product ID:</span> <span class="font-medium text-slate-900">{{ $this->labelPreview['product_id'] ?? '—' }}</span></div>
-                                            <div><span class="text-slate-500">Lot Number (Label Style):</span> <span class="font-medium text-slate-900">{{ $this->labelPreview['lot_number_label_style'] ?? '—' }}</span></div>
-                                            <div class="md:col-span-2 xl:col-span-2"><span class="text-slate-500">WinMan Lot Number:</span> <span class="font-medium text-slate-900">{{ $this->labelPreview['winman_lot_number'] ?? '—' }}</span></div>
-                                            <div class="md:col-span-2 xl:col-span-2"><span class="text-slate-500">Product Description:</span> <span class="font-medium text-slate-900">{{ $this->labelPreview['product_description'] ?? '—' }}</span></div>
-                                            <div><span class="text-slate-500">Barcode:</span> <span class="font-medium text-slate-900">{{ $this->labelPreview['barcode'] ?? '—' }}</span></div>
-                                        </div>
-
-                                        <div class="text-sm">
-                                            <div class="text-slate-500">Additional product text fields are sent to the label payload.</div>
-                                        </div>
+                                        @if ($this->editable)
+                                            <button
+                                                type="button"
+                                                wire:click="complete"
+                                                @disabled(! $this->ingredientSignoffComplete)
+                                                class="inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold {{ $this->ingredientSignoffComplete ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-slate-200 text-slate-500 cursor-not-allowed' }}"
+                                            >
+                                                Complete Batch &amp; Return to MO →
+                                            </button>
+                                            <p class="text-xs text-slate-500">Pallecon filling, WinMan booking and labels happen in the Pallecon Workspace on the MO screen.</p>
+                                        @endif
                                     </div>
                                 @endif
                             </div>
                         </div>
                     </div>
+
                 @endif
 
                 @if ($showAllocateModal)

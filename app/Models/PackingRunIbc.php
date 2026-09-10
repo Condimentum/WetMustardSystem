@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PackingRunIbc extends Model
 {
     protected $fillable = [
-        'packing_run_id', 'pallecon_record_id', 'source_batch_number', 'source_mo_number', 'time_on', 'time_off',
+        'packing_run_id', 'pallecon_record_id', 'pallecon_id', 'source_batch_number', 'source_mo_number', 'time_on', 'time_off',
     ];
 
     protected function casts(): array
@@ -27,5 +27,10 @@ class PackingRunIbc extends Model
     public function palleconRecord(): BelongsTo
     {
         return $this->belongsTo(PalleconRecord::class);
+    }
+
+    public function pallecon(): BelongsTo
+    {
+        return $this->belongsTo(Pallecon::class);
     }
 }

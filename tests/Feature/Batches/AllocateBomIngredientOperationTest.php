@@ -80,6 +80,7 @@ class AllocateBomIngredientOperationTest extends TestCase
             ->andReturn([
                 'issued_quantity' => 114.35314,
                 'issued_inventory_ids' => [12345],
+                'supplier_lot_number' => 'SUP-VIN-001',
             ]);
         $this->instance(IssueWorkInProgressFromLotJob::class, $issueJob);
 
@@ -103,6 +104,7 @@ class AllocateBomIngredientOperationTest extends TestCase
 
         $this->assertInstanceOf(BatchIngredientLot::class, $lot);
         $this->assertSame('114.353', (string) $lot->actual_quantity);
+        $this->assertSame('SUP-VIN-001', $lot->supplier_lot_number);
 
         $this->assertDatabaseHas('winman_issue_logs', [
             'batch_record_id' => $batch->id,

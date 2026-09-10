@@ -66,6 +66,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('manufacturing-orders/{winmanMo}/workspace', 'pages.manufacturing-orders.workspace')
         ->name('manufacturing-orders.workspace');
 
+    Volt::route('manufacturing-orders/{winmanMo}/pallecons', 'pages.manufacturing-orders.pallecon-workspace')
+        ->name('manufacturing-orders.pallecons');
+
     Route::get('production/packed', \App\Http\Controllers\PackedProductionController::class)
         ->name('production.packed');
 
@@ -101,6 +104,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Volt::route('batches/{batch}/packing', 'pages.batches.packing')
         ->name('batches.packing');
+
+    Volt::route('waste', 'pages.waste.index')
+        ->name('waste.index');
 
 
     Volt::route('traceability', 'pages.traceability.search')

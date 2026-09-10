@@ -12,7 +12,6 @@ use App\Models\ProductMapping;
 use App\Models\Product;
 use App\Models\RecipeCard;
 use App\Models\RecipeVariant;
-use App\Models\WinManBookingLog;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
@@ -177,26 +176,15 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
             return [];
         }
 
-        $uomCode = (int) ($localOrder->winman_unit_of_measure ?? 0);
-        $uomDescription = strtoupper(trim((string) ($localOrder->winman_unit_of_measure_description ?? '')));
-        $isPalleconMode = $uomCode === 2 || str_contains($uomDescription, 'PALLECON');
-
         return BatchRecord::query()
             ->where('manufacturing_order_id', $localOrder->id)
             ->orderBy('id')
-            ->with(['bookingLogs' => fn ($query) => $query
-                ->where('booking_status', WinManBookingLog::STATUS_SUCCESS)
-                ->orderByDesc('id')])
             ->get(['id', 'batch_number', 'planned_quantity', 'production_date', 'status'])
-            ->map(function (BatchRecord $batch) use ($isPalleconMode): array {
-                $bookingLog = $batch->bookingLogs->first();
-                $reference = $isPalleconMode
-                    ? trim((string) ($bookingLog?->lot_number ?? ''))
-                    : (string) $batch->batch_number;
-
+            ->map(function (BatchRecord $batch): array {
                 return [
                     'id' => $batch->id,
-                    'reference' => $reference,
+                    // Batch Reference is app-only; WinMan references belong to pallecons.
+                    'reference' => (string) $batch->batch_number,
                     'application_batch_number' => (string) $batch->batch_number,
                     'planned_quantity' => (float) ($batch->planned_quantity ?? 0),
                     'production_date' => $batch->production_date?->format('Y-m-d'),
@@ -433,7 +421,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
             </div>
 
             <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-                <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);">
+                <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
                     <div class="text-base font-semibold text-gray-800">Batch Workspace</div>
                 </div>
                 <div class="p-6 space-y-6">
@@ -524,13 +512,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                     </div>
                 @endif
 
-                @php
-                    $hasInProgressBatch = collect($existingBatches)->contains(
-                        fn (array $batch): bool => (string) ($batch['status'] ?? '') === \App\Models\BatchRecord::STATUS_IN_PROGRESS
-                    );
-                @endphp
-
-                @if (! $hasInProgressBatch)
+                @if (count($existingBatches) === 0)
                     <div class="flex flex-wrap items-end gap-3">
                         @if (count($variantOptions) > 0)
                             <div>
@@ -567,11 +549,37 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                             Add batch
                         </x-primary-button>
                     </div>
-                @else
-                    <div class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                        Add batch is locked while a batch is issued. Complete the current batch to enable it.
-                    </div>
                 @endif
+            </div>
+
+            <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+                <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                    <div>
+                        <div class="text-base font-semibold text-gray-800">Pallecon Workspace</div>
+                        <div class="text-sm text-slate-500 mt-1">Open pallecons and record each batch contribution by quantity.</div>
+                    </div>
+                    <a href="{{ route('manufacturing-orders.pallecons', ['winmanMo' => $winmanMo]) }}" wire:navigate style="display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;border:2px solid #4f46e5;background:#fff;color:#4f46e5;font-size:13px;font-weight:800;text-decoration:none;white-space:nowrap;">
+                        Open Pallecon Workspace &rarr;
+                    </a>
+                </div>
+                <div class="p-5">
+                    <div style="background:#fff;border:1px solid #dbe1ea;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.05);">
+                        <div style="padding:14px 22px;display:flex;align-items:center;gap:22px;flex-wrap:wrap;">
+                            <div style="min-width:180px;">
+                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Workflow</div>
+                                <div style="margin-top:7px;font-size:17px;line-height:1.2;font-weight:800;color:#0f172a;">New Pallecon +</div>
+                            </div>
+                            <div style="min-width:210px;border-left:1px solid #dbe1ea;padding-left:22px;">
+                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Traceability</div>
+                                <div style="margin-top:7px;font-size:14px;line-height:1.35;font-weight:600;color:#334155;">Select batch + record fill quantity</div>
+                            </div>
+                            <div style="min-width:210px;border-left:1px solid #dbe1ea;padding-left:22px;">
+                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Next Step</div>
+                                <div style="margin-top:7px;font-size:14px;line-height:1.35;font-weight:600;color:#334155;">Complete pallecon → label + WinMan inventory</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         @endif
     </div>

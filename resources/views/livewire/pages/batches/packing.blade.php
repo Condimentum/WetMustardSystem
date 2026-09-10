@@ -7,6 +7,8 @@ use App\Features\Packing\RecordPackingWeightCheckFeature;
 use App\Features\Pallet\AddPalletRecordFeature;
 use App\Models\BatchRecord;
 use App\Models\PackingRun;
+use App\Models\Pallecon;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Volt\Component;
@@ -32,8 +34,20 @@ new #[Layout('layouts.app')] #[Title('Packing Run')] class extends Component {
 
     public function mount(BatchRecord $batch): void
     {
-        $this->batch = $batch->load('pallecons');
+        $this->batch = $batch;
         $this->loadRun();
+    }
+
+    /** Sealed containers available to consume (a container may hold several batches). */
+    #[Computed]
+    public function sealedPallecons()
+    {
+        return Pallecon::query()
+            ->where('status', Pallecon::STATUS_SEALED)
+            ->whereNull('held_at')
+            ->with('fills.batchRecord:id,batch_number')
+            ->orderByDesc('sealed_at')
+            ->get();
     }
 
     public function startRun(): void
@@ -45,16 +59,15 @@ new #[Layout('layouts.app')] #[Title('Packing Run')] class extends Component {
     public function addIbc(): void
     {
         $this->run || abort(400);
-        $pallecon = $this->batch->pallecons->firstWhere('id', $this->ibc_pallecon_id);
 
         app(ConsumePalleconFeature::class)($this->run, [
-            'pallecon_record_id' => $this->ibc_pallecon_id,
-            'source_batch_number' => $this->batch->batch_number,
+            'pallecon_id' => $this->ibc_pallecon_id,
             'source_mo_number' => $this->batch->manufacturingOrder?->mo_number,
             'time_on' => now(),
         ], auth()->user());
 
         $this->ibc_pallecon_id = null;
+        unset($this->sealedPallecons);
         $this->loadRun();
     }
 
@@ -92,7 +105,7 @@ new #[Layout('layouts.app')] #[Title('Packing Run')] class extends Component {
     private function loadRun(): void
     {
         $this->run = $this->batch->packingRuns()
-            ->with(['ibcs.palleconRecord', 'hourlyChecks.signedBy', 'weightChecks', 'pallets'])
+            ->with(['ibcs.palleconRecord', 'ibcs.pallecon', 'hourlyChecks.signedBy', 'weightChecks', 'pallets'])
             ->latest('id')->first();
     }
 }; ?>
@@ -130,11 +143,11 @@ new #[Layout('layouts.app')] #[Title('Packing Run')] class extends Component {
                     <div x-show="tab === 'ibc'" class="space-y-4">
                         <div class="flex flex-wrap items-end gap-3 bg-gray-50 rounded-lg p-4">
                             <div>
-                                <label class="block text-xs text-gray-600 mb-1">Source pallecon</label>
+                                <label class="block text-xs text-gray-600 mb-1">Source pallecon (sealed)</label>
                                 <select wire:model="ibc_pallecon_id" class="border-gray-300 rounded-md shadow-sm text-sm">
                                     <option value="">— select —</option>
-                                    @foreach ($batch->pallecons as $p)
-                                        <option value="{{ $p->id }}">#{{ $p->serial_number }} ({{ $p->fill_weight }}kg)</option>
+                                    @foreach ($this->sealedPallecons as $p)
+                                        <option value="{{ $p->id }}">{{ $p->serial_number ?? 'Pallecon #'.$p->id }} ({{ number_format((float) $p->final_weight, 1) }}kg · {{ $p->fills->count() }} batch(es))</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -142,11 +155,13 @@ new #[Layout('layouts.app')] #[Title('Packing Run')] class extends Component {
                         </div>
                         <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200 text-sm">
-                            <thead class="text-left text-xs text-gray-500 uppercase"><tr><th class="py-2">Pallecon</th><th class="py-2">Source batch</th><th class="py-2">Time on</th></tr></thead>
+                            <thead class="text-left text-xs text-gray-500 uppercase"><tr><th class="py-2">Pallecon</th><th class="py-2">Source batch(es)</th><th class="py-2">Time on</th></tr></thead>
                             <tbody class="divide-y divide-gray-100">
                                 @forelse ($run->ibcs as $ibc)
-                                    <tr><td class="py-2">#{{ $ibc->palleconRecord?->serial_number ?? '—' }}</td><td class="py-2">{{ $ibc->source_batch_number }}</td><td class="py-2">{{ $ibc->time_on?->format('d M H:i') }}</td></tr>
+                                    <tr><td class="py-2">{{ $ibc->pallecon?->serial_number ?? $ibc->palleconRecord?->serial_number ?? '—' }}</td><td class="py-2">{{ $ibc->source_batch_number }}</td><td class="py-2">{{ $ibc->time_on?->format('d M H:i') }}</td></tr>
                                 @empty
+                                    <tr><td colspan="3" class="py-6 text-center text-gray-500">No IBCs consumed.</td></tr>
+                                @endforelse
                                     <tr><td colspan="3" class="py-6 text-center text-gray-500">No IBCs consumed.</td></tr>
                                 @endforelse
                             </tbody>

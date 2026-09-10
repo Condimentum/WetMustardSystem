@@ -43,6 +43,12 @@ class ShowDashboardFeature
                 'route' => 'production.packed',
             ],
             [
+                'title' => 'Waste / Scrap',
+                'subtitle' => 'Log spillage, damage & process loss',
+                'icon' => 'waste',
+                'route' => 'waste.index',
+            ],
+            [
                 'title' => 'Notifications',
                 'subtitle' => 'Alerts raised across checks & production',
                 'icon' => 'bell',

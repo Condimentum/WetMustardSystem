@@ -6,6 +6,7 @@ use App\Models\BatchRecord;
 use App\Models\DrumProcessingPallet;
 use App\Models\DrumRecord;
 use App\Models\ManufacturingOrder;
+use App\Models\Pallecon;
 use App\Models\PalleconRecord;
 use App\Models\PalletRecord;
 
@@ -49,6 +50,18 @@ class FindBatchesByIdentifierJob
             ->orWhere('ticket_number', 'like', $like)
             ->get(['batch_record_id', 'serial_number'])
             ->each(fn (PalleconRecord $p) => $register($p->batch_record_id, 'Pallecon serial', $p->serial_number));
+
+        // First-class pallecon containers: one container may hold several batches,
+        // so a serial match must register every contributing batch.
+        Pallecon::query()
+            ->where('serial_number', 'like', $like)
+            ->with('fills:id,pallecon_id,batch_record_id')
+            ->get(['id', 'serial_number'])
+            ->each(function (Pallecon $pallecon) use ($register): void {
+                foreach ($pallecon->fills as $fill) {
+                    $register($fill->batch_record_id, 'Pallecon serial', $pallecon->serial_number);
+                }
+            });
 
         PalletRecord::query()
             ->with(['packingRun:id,batch_record_id', 'drumProcessingRun:id,batch_record_id'])

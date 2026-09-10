@@ -16,6 +16,8 @@
         @livewireStyles
     </head>
     <body class="font-sans antialiased">
+        <x-loading-indicator />
+
         <div class="min-h-screen bg-gray-100">
             <livewire:layout.navigation />
 
@@ -46,8 +48,6 @@
                 {{ $slot }}
             </main>
         </div>
-
-        <x-loading-indicator />
 
         @livewireScripts
     </body>

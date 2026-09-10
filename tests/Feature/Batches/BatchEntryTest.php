@@ -11,9 +11,11 @@ use App\Models\BatchIngredientLot;
 use App\Models\BatchRecord;
 use App\Models\ElectronicSignature;
 use App\Models\ManufacturingOrder;
+use App\Models\PaperworkRow;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Volt\Volt;
 use Tests\TestCase;
 
 class BatchEntryTest extends TestCase
@@ -49,6 +51,27 @@ class BatchEntryTest extends TestCase
         ]);
     }
 
+    private function confirmIngredientsSignoff(BatchRecord $batch, User $operator): void
+    {
+        foreach ([
+            'ingredients_signoff.powders_weighed_by' => ['Powders Weighed By', 900],
+            'ingredients_signoff.liquids_weighed_by' => ['Liquids Weighed By', 901],
+            'ingredients_signoff.tipping_batch_by' => ['Tipping Batch By', 902],
+        ] as $rowKey => [$label, $order]) {
+            PaperworkRow::create([
+                'manufacturing_order_id' => $batch->manufacturing_order_id,
+                'batch_record_id' => $batch->id,
+                'batch_number' => (string) $batch->batch_number,
+                'batch_column_index' => 1,
+                'row_key' => $rowKey,
+                'row_label' => $label,
+                'row_order' => $order,
+                'value_text' => $operator->name,
+                'status' => 'completed',
+            ]);
+        }
+    }
+
     public function test_completion_is_blocked_until_lots_are_added_and_signed(): void
     {
         $user = User::factory()->create();
@@ -62,7 +85,7 @@ class BatchEntryTest extends TestCase
             $this->assertContains('At least one ingredient lot must be recorded.', $e->issues);
         }
 
-        // Add a lot; still missing sign-offs.
+        // Add a lot; still missing the batch-level sign-off confirmations.
         app(AddIngredientLotFeature::class)($batch, [
             'material_description' => 'Spirit Vinegar 14%',
             'lot_number' => 'LOT-001',
@@ -71,12 +94,10 @@ class BatchEntryTest extends TestCase
         ], $user);
 
         $issues = app(ValidateBatchCompletionJob::class)($batch->fresh());
-        $this->assertContains("Ingredient 'Spirit Vinegar 14%' is missing a weighed sign-off.", $issues);
-        $this->assertContains("Ingredient 'Spirit Vinegar 14%' is missing a tipped sign-off.", $issues);
+        $this->assertContains("Ingredients sign-off confirmation 'Powders Weighed' is missing.", $issues);
+        $this->assertContains("Ingredients sign-off confirmation 'Tipping Batch' is missing.", $issues);
 
-        $lot = $batch->ingredientLots()->first();
-        app(SignIngredientLotFeature::class)($lot, 'weighed', $user);
-        app(SignIngredientLotFeature::class)($lot->fresh(), 'tipped', $user);
+        $this->confirmIngredientsSignoff($batch, $user);
 
         $this->assertSame([], app(ValidateBatchCompletionJob::class)($batch->fresh()));
     }
@@ -86,14 +107,13 @@ class BatchEntryTest extends TestCase
         $user = User::factory()->create();
         $batch = $this->makeBatch();
 
-        $lot = app(AddIngredientLotFeature::class)($batch, [
+        app(AddIngredientLotFeature::class)($batch, [
             'material_description' => 'Water',
             'lot_number' => 'LOT-W',
             'actual_quantity' => 100,
             'uom' => 'kg',
         ], $user);
-        app(SignIngredientLotFeature::class)($lot, 'weighed', $user);
-        app(SignIngredientLotFeature::class)($lot->fresh(), 'tipped', $user);
+        $this->confirmIngredientsSignoff($batch, $user);
 
         $completed = app(CompleteBatchFeature::class)($batch->fresh(), $user);
 
@@ -106,7 +126,7 @@ class BatchEntryTest extends TestCase
             'entity_id' => $batch->id,
             'signature_purpose' => 'batch_complete',
         ]);
-        $this->assertSame(3, ElectronicSignature::count()); // weighed + tipped + batch_complete
+        $this->assertSame(1, ElectronicSignature::count()); // batch_complete
         $this->assertDatabaseHas('audit_trails', [
             'entity_name' => 'batch_records',
             'action' => 'complete',
@@ -157,5 +177,70 @@ class BatchEntryTest extends TestCase
         $this->assertSame($tippedBy->id, $signed->tipped_by);
         $this->assertNotNull($signed->weighed_at);
         $this->assertNotNull($signed->tipped_at);
+    }
+
+    public function test_ingredients_signoff_can_be_reset_and_resubmitted_on_batch_screen(): void
+    {
+        $user = User::factory()->create(['name' => 'Reset Tester']);
+        $batch = $this->makeBatch();
+        // Pallecon packing mode so the sign-off confirmations apply.
+        $batch->manufacturingOrder->update(['winman_unit_of_measure_description' => 'PALLECON']);
+
+        app(AddIngredientLotFeature::class)($batch, [
+            'material_description' => 'Water',
+            'lot_number' => 'LOT-W',
+            'actual_quantity' => 100,
+            'uom' => 'kg',
+        ], $user);
+        $this->confirmIngredientsSignoff($batch, $user);
+        $this->assertSame([], app(ValidateBatchCompletionJob::class)($batch->fresh()));
+
+        $this->actingAs($user);
+        $component = Volt::test('pages.batches.show', ['batch' => $batch->fresh()]);
+
+        $component->call('resetIngredientSignoff');
+
+        // A single reset request must already render the empty dropdowns back.
+        $component->assertSee('Select operator');
+        $component->assertDontSee('Reset sign-off');
+
+        $blankRows = PaperworkRow::query()
+            ->where('batch_record_id', $batch->id)
+            ->where('row_key', 'like', 'ingredients_signoff.%')
+            ->get();
+        $this->assertCount(3, $blankRows);
+        foreach ($blankRows as $row) {
+            $this->assertNull($row->value_text);
+            $this->assertSame('pending', $row->status);
+        }
+
+        $issues = app(ValidateBatchCompletionJob::class)($batch->fresh());
+        $this->assertContains("Ingredients sign-off confirmation 'Powders Weighed' is missing.", $issues);
+
+        $this->assertDatabaseHas('audit_trails', [
+            'entity_name' => 'batch_records',
+            'entity_id' => $batch->id,
+            'action' => 'ingredients_signoff_reset',
+        ]);
+
+        $component
+            ->set('powdersWeighedOperatorId', (string) $user->id)
+            ->set('liquidsWeighedOperatorId', (string) $user->id)
+            ->set('tippingBatchOperatorId', (string) $user->id)
+            ->call('applyBulkIngredientSignoff');
+
+        $this->assertSame([], app(ValidateBatchCompletionJob::class)($batch->fresh()));
+        $this->assertDatabaseHas('paperwork_rows', [
+            'batch_record_id' => $batch->id,
+            'row_key' => 'ingredients_signoff.powders_weighed_by',
+            'value_text' => 'Reset Tester',
+            'status' => 'completed',
+        ]);
+
+        // A single submit request must flip the UI to the signed-off state -
+        // no "submit twice" (stale computed-property cache) regression.
+        $component->assertSee('Reset sign-off');
+        $component->assertSee('Submitted');
+        $component->assertDontSee('Submit Ingredients Sign Off');
     }
 }

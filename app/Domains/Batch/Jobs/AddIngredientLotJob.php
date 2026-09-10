@@ -23,6 +23,7 @@ class AddIngredientLotJob
             'uom' => $attributes['uom'] ?? null,
             'sequence' => $attributes['sequence'] ?? null,
             'lot_number' => $attributes['lot_number'] ?? null,
+            'supplier_lot_number' => $attributes['supplier_lot_number'] ?? null,
             'actual_quantity' => $attributes['actual_quantity'] ?? null,
             'notes' => $attributes['notes'] ?? null,
         ]);

@@ -35,7 +35,15 @@ new #[Layout('layouts.app')] #[Title('Pallecon Filling')] class extends Componen
 
     public function mount(BatchRecord $batch): void
     {
-        $this->redirectRoute('batches.show', ['batch' => $batch, 'tab' => 'packing'], navigate: true);
+        $winmanMo = (int) ($batch->manufacturingOrder?->winman_manufacturing_order ?? 0);
+
+        if ($winmanMo > 0) {
+            $this->redirectRoute('manufacturing-orders.pallecons', ['winmanMo' => $winmanMo], navigate: true);
+
+            return;
+        }
+
+        $this->redirectRoute('batches.show', ['batch' => $batch, 'tab' => 'allocation'], navigate: true);
     }
 
     public function addPallecon(): void
