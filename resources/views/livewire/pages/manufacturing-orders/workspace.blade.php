@@ -613,11 +613,11 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                         <div style="padding:14px 22px;display:flex;align-items:center;gap:22px;flex-wrap:wrap;">
                             <div style="min-width:180px;">
                                 <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Workflow</div>
-                                <div style="margin-top:7px;font-size:17px;line-height:1.2;font-weight:800;color:#0f172a;">New Pallecon +</div>
+                                <div style="margin-top:7px;font-size:17px;line-height:1.2;font-weight:800;color:#0f172a;">Create pallecon + fill</div>
                             </div>
                             <div style="min-width:210px;border-left:1px solid #dbe1ea;padding-left:22px;">
                                 <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Traceability</div>
-                                <div style="margin-top:7px;font-size:14px;line-height:1.35;font-weight:600;color:#334155;">Select batch + record fill quantity</div>
+                                <div style="margin-top:7px;font-size:14px;line-height:1.35;font-weight:600;color:#334155;">Select batch, state fill weight, create</div>
                             </div>
                             <div style="min-width:210px;border-left:1px solid #dbe1ea;padding-left:22px;">
                                 <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Next Step</div>
