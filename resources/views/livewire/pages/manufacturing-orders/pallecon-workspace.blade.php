@@ -73,22 +73,44 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
         return (bool) config('services.bartender.enabled', false);
     }
 
-    /** @return \Illuminate\Support\Collection<int, Pallecon> */
+    /**
+     * Sealed/consumed pallecons whose every fill comes from a batch of THIS MO.
+     * Shared containers (with a fill from another MO) are intentionally hidden.
+     *
+     * @return \Illuminate\Support\Collection<int, Pallecon>
+     */
     #[Computed]
     public function completedContainers()
     {
+        $moId = (int) ($this->localOrder?->id ?? 0);
+
+        if ($moId <= 0) {
+            return collect();
+        }
+
         return Pallecon::query()
             ->whereIn('status', [Pallecon::STATUS_SEALED, Pallecon::STATUS_CONSUMED])
-            ->with(['fills.batchRecord:id,batch_number'])
+            ->with(['fills.batchRecord:id,batch_number,manufacturing_order_id'])
             ->orderByDesc('sealed_at')
-            ->limit(15)
-            ->get();
+            ->get()
+            ->filter(function (Pallecon $pallecon) use ($moId): bool {
+                if ($pallecon->fills->isEmpty()) {
+                    return false;
+                }
+
+                return $pallecon->fills->every(
+                    fn ($fill): bool => (int) ($fill->batchRecord?->manufacturing_order_id ?? 0) === $moId
+                );
+            })
+            ->take(15)
+            ->values();
     }
 
     /**
-     * Batches of this MO eligible as fill sources (ingredient sign-off complete).
+     * Batches of this MO as fill sources, with per-batch planned/filled/remaining
+     * quantities. "remaining" is the hard cap for further fills from that batch.
      *
-     * @return array<int, array{id:int, batch_number:string, status:string, signoff_complete:bool}>
+     * @return array<int, array{id:int, batch_number:string, status:string, signoff_complete:bool, planned_kg:float, filled_kg:float, remaining_kg:float}>
      */
     #[Computed]
     public function moBatches(): array
@@ -118,13 +140,27 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             ->groupBy('batch_record_id')
             ->pluck('confirmations', 'batch_record_id');
 
+        $filledByBatch = \App\Models\PalleconFill::query()
+            ->whereIn('batch_record_id', $batches->pluck('id'))
+            ->selectRaw('batch_record_id, COALESCE(SUM(fill_weight), 0) as filled')
+            ->groupBy('batch_record_id')
+            ->pluck('filled', 'batch_record_id');
+
         return $batches
-            ->map(fn (BatchRecord $batch): array => [
-                'id' => $batch->id,
-                'batch_number' => (string) $batch->batch_number,
-                'status' => (string) $batch->status,
-                'signoff_complete' => (int) ($confirmationCounts[$batch->id] ?? 0) >= 3,
-            ])
+            ->map(function (BatchRecord $batch) use ($confirmationCounts, $filledByBatch): array {
+                $planned = (float) ($batch->planned_quantity ?? 0);
+                $filled = (float) ($filledByBatch[$batch->id] ?? 0);
+
+                return [
+                    'id' => $batch->id,
+                    'batch_number' => (string) $batch->batch_number,
+                    'status' => (string) $batch->status,
+                    'signoff_complete' => (int) ($confirmationCounts[$batch->id] ?? 0) >= 3,
+                    'planned_kg' => $planned,
+                    'filled_kg' => $filled,
+                    'remaining_kg' => max($planned - $filled, 0.0),
+                ];
+            })
             ->all();
     }
 
@@ -194,6 +230,20 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
 
         if (! $batchMeta['signoff_complete']) {
             $this->flash = 'Batch '.$batchMeta['batch_number'].' has not completed Ingredients Sign Off yet.';
+            $this->flashError = true;
+
+            return;
+        }
+
+        // The batch planned quantity is a hard cap - total fills from a batch
+        // can never exceed it. Only enforced when a planned quantity is on record.
+        $batchRemaining = (float) ($batchMeta['remaining_kg'] ?? 0);
+        if ((float) ($batchMeta['planned_kg'] ?? 0) > 0 && (float) $this->fillWeight > $batchRemaining + 0.0001) {
+            $this->flash = sprintf(
+                'Only %s kg remaining on batch %s - the fill weight cannot exceed it.',
+                rtrim(rtrim(number_format($batchRemaining, 3, '.', ''), '0'), '.') ?: '0',
+                $batchMeta['batch_number'],
+            );
             $this->flashError = true;
 
             return;
@@ -289,7 +339,7 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
 
         $this->flash = implode(' ', $messages);
         $this->fillWeight = '';
-        unset($this->openContainers);
+        unset($this->openContainers, $this->moBatches);
     }
 
     public function startSeal(int $palleconId): void
@@ -551,6 +601,58 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             </div>
         @endif
 
+        @php
+            $fmtKg = static fn ($v): string => rtrim(rtrim(number_format((float) $v, 3, '.', ''), '0'), '.') ?: '0';
+            $selectedBatch = collect($this->moBatches)->firstWhere('id', (int) $fillBatchId);
+        @endphp
+
+        {{-- Batches available from this MO --}}
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
+            <h2 class="text-sm font-semibold text-slate-800 mb-3">Batches &mdash; {{ $localOrder?->mo_number ?? $winmanMo }}</h2>
+
+            @if (count($this->moBatches) === 0)
+                <p class="text-sm text-slate-400">No batches created for this manufacturing order yet.</p>
+            @else
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="text-left text-xs uppercase text-slate-400">
+                            <tr>
+                                <th class="py-2 pr-3 w-8"></th>
+                                <th class="py-2 pr-3">Batch</th>
+                                <th class="py-2 pr-3">Status</th>
+                                <th class="py-2 pr-3 text-right">Planned</th>
+                                <th class="py-2 pr-3 text-right">Filled</th>
+                                <th class="py-2 pr-3 text-right">Remaining</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @foreach ($this->moBatches as $batchOption)
+                                <tr class="{{ $batchOption['signoff_complete'] ? 'cursor-pointer hover:bg-indigo-50/40' : 'opacity-50' }}"
+                                    @if ($batchOption['signoff_complete']) wire:click="$set('fillBatchId', '{{ $batchOption['id'] }}')" @endif>
+                                    <td class="py-2 pr-3">
+                                        <input type="radio" wire:model.live="fillBatchId" value="{{ $batchOption['id'] }}" @disabled(! $batchOption['signoff_complete'])
+                                            class="text-indigo-600 focus:ring-indigo-500" />
+                                    </td>
+                                    <td class="py-2 pr-3 font-medium text-slate-800">{{ $batchOption['batch_number'] }}</td>
+                                    <td class="py-2 pr-3">
+                                        <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{{ \Illuminate\Support\Str::headline($batchOption['status']) }}</span>
+                                        @unless ($batchOption['signoff_complete'])
+                                            <span class="ml-1 text-xs text-amber-700">sign-off pending</span>
+                                        @endunless
+                                    </td>
+                                    <td class="py-2 pr-3 text-right">{{ $fmtKg($batchOption['planned_kg']) }}</td>
+                                    <td class="py-2 pr-3 text-right">{{ $fmtKg($batchOption['filled_kg']) }}</td>
+                                    <td class="py-2 pr-3 text-right font-semibold {{ $batchOption['remaining_kg'] <= 0.0001 ? 'text-emerald-600' : 'text-slate-800' }}">
+                                        {{ $fmtKg($batchOption['remaining_kg']) }}
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        </div>
+
         {{-- New pallecon --}}
         <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
             <div class="flex items-center justify-between">
@@ -586,21 +688,26 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             @endif
         </div>
 
-        {{-- Fill entry --}}
+        {{-- Fill pallecon --}}
         <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
-            <h2 class="text-sm font-semibold text-slate-800 mb-3">Add batch fill</h2>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <h2 class="text-sm font-semibold text-slate-800 mb-1">Fill pallecon</h2>
+            @if ($selectedBatch)
+                <p class="text-sm text-slate-600 mb-3">
+                    From batch <strong>{{ $selectedBatch['batch_number'] }}</strong> &mdash;
+                    <span class="font-semibold {{ $selectedBatch['remaining_kg'] <= 0.0001 ? 'text-emerald-600' : 'text-slate-900' }}">{{ $fmtKg($selectedBatch['remaining_kg']) }} kg</span> remaining
+                    (the fill weight cannot exceed this).
+                </p>
+            @else
+                <p class="text-sm text-amber-700 mb-3">Select a batch above to fill from.</p>
+            @endif
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                    <label class="block text-xs font-medium text-slate-500 mb-1">Source batch *</label>
-                    <select wire:model="fillBatchId" class="w-full rounded-lg border-slate-300 text-sm">
-                        <option value="">— select batch —</option>
-                        @foreach ($this->moBatches as $batchOption)
-                            <option value="{{ $batchOption['id'] }}" @disabled(! $batchOption['signoff_complete'])>
-                                {{ $batchOption['batch_number'] }}{{ $batchOption['signoff_complete'] ? '' : ' (sign-off pending)' }}
-                            </option>
-                        @endforeach
-                    </select>
-                    @error('fillBatchId') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                    <label class="block text-xs font-medium text-slate-500 mb-1">Fill weight (kg) *</label>
+                    <input type="number" step="0.001" min="0.001"
+                        @if ($selectedBatch) max="{{ $fmtKg($selectedBatch['remaining_kg']) }}" @endif
+                        wire:model="fillWeight" class="w-full rounded-lg border-slate-300 text-sm" placeholder="e.g. 400" />
+                    @error('fillWeight') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </div>
                 <div>
                     <label class="block text-xs font-medium text-slate-500 mb-1">Pallecon *</label>
@@ -613,17 +720,14 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
                     @error('fillPalleconId') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-slate-500 mb-1">Fill weight (kg) *</label>
-                    <input type="number" step="0.001" min="0.001" wire:model="fillWeight" class="w-full rounded-lg border-slate-300 text-sm" placeholder="e.g. 400" />
-                    @error('fillWeight') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
-                </div>
-                <div>
                     <label class="block text-xs font-medium text-slate-500 mb-1">Production date (booking expiry)</label>
                     <input type="date" wire:model="production_date" class="w-full rounded-lg border-slate-300 text-sm" />
                 </div>
             </div>
             <div class="mt-4">
-                <button type="button" wire:click="addFill" wire:loading.attr="disabled" class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500">Add fill</button>
+                <button type="button" wire:click="addFill" wire:loading.attr="disabled" @disabled(! $selectedBatch)
+                    class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed">Add to Pallecon</button>
+                @error('fillBatchId') <span class="ml-2 text-xs text-red-600">{{ $message }}</span> @enderror
             </div>
         </div>
 
@@ -692,9 +796,9 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             </div>
         </div>
 
-        {{-- Completed containers --}}
+        {{-- Completed containers (this MO only) --}}
         <div>
-            <h2 class="text-sm font-semibold text-slate-800 mb-3">Completed</h2>
+            <h2 class="text-sm font-semibold text-slate-800 mb-3">Completed &mdash; {{ $localOrder?->mo_number ?? $winmanMo }}</h2>
             <div class="space-y-3">
                 @forelse ($this->completedContainers as $container)
                     <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 flex flex-wrap items-center justify-between gap-3">

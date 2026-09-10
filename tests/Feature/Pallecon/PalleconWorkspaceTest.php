@@ -6,6 +6,7 @@ use App\Models\BatchIngredientLot;
 use App\Models\BatchRecord;
 use App\Models\ManufacturingOrder;
 use App\Models\Pallecon;
+use App\Models\PalleconFill;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -33,7 +34,7 @@ class PalleconWorkspaceTest extends TestCase
 
         $batch = BatchRecord::create([
             'manufacturing_order_id' => $order->id, 'product_id' => $product->id, 'batch_number' => $batchNumber,
-            'production_date' => now()->toDateString(), 'status' => BatchRecord::STATUS_IN_PROGRESS,
+            'production_date' => now()->toDateString(), 'planned_quantity' => 800, 'status' => BatchRecord::STATUS_IN_PROGRESS,
         ]);
 
         $user = User::factory()->create();
@@ -220,5 +221,61 @@ class PalleconWorkspaceTest extends TestCase
 
         $this->assertSame(Pallecon::STATUS_OPEN, $pallecon->fresh()->status);
         $this->assertStringContainsString('no batch fills', (string) $component->get('flash'));
+    }
+
+    public function test_fill_weight_cannot_exceed_the_batch_planned_quantity(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $batch = $this->makeBatch(6100, 'WM-PW-CAP');   // planned 800
+
+        $component = Volt::test('pages.manufacturing-orders.pallecon-workspace', ['winmanMo' => 6100])
+            ->set('showNewForm', true)
+            ->set('newForm.ticket_number', 'PAL-PW-CAP')
+            ->call('openPallecon');
+        $pallecon = Pallecon::where('serial_number', 'PAL-PW-CAP')->first();
+
+        // Over the batch's 800 kg planned quantity -> blocked.
+        $component
+            ->set('fillBatchId', (string) $batch->id)
+            ->set('fillPalleconId', (string) $pallecon->id)
+            ->set('fillWeight', '900')
+            ->call('addFill');
+
+        $this->assertDatabaseCount('pallecon_fills', 0);
+        $this->assertStringContainsString('remaining on batch', (string) $component->get('flash'));
+
+        // A partial 500 kg fill is accepted and leaves 300 kg remaining.
+        $component->set('fillWeight', '500')->call('addFill');
+        $this->assertDatabaseHas('pallecon_fills', ['batch_record_id' => $batch->id, 'fill_weight' => 500]);
+
+        $remaining = collect($component->instance()->moBatches)->firstWhere('id', $batch->id)['remaining_kg'];
+        $this->assertEqualsWithDelta(300.0, $remaining, 0.001);
+
+        // A further fill above the now-300 kg remaining is blocked.
+        $component->set('fillWeight', '350')->call('addFill');
+        $this->assertDatabaseCount('pallecon_fills', 1);
+    }
+
+    public function test_completed_list_shows_only_pallecons_entirely_from_this_mo(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $mineA = $this->makeBatch(6200, 'WM-PW-MINE-A');
+        $mineB = $this->makeBatch(6200, 'WM-PW-MINE-B');
+        $other = $this->makeBatch(6201, 'WM-PW-OTHER');
+
+        // Sealed pallecon filled only from this MO -> listed.
+        $ownContainer = Pallecon::create(['serial_number' => 'PAL-OWN', 'status' => Pallecon::STATUS_SEALED, 'sealed_at' => now(), 'final_weight' => 700]);
+        PalleconFill::create(['pallecon_id' => $ownContainer->id, 'batch_record_id' => $mineA->id, 'fill_weight' => 400, 'sequence' => 1]);
+        PalleconFill::create(['pallecon_id' => $ownContainer->id, 'batch_record_id' => $mineB->id, 'fill_weight' => 300, 'sequence' => 2]);
+
+        // Sealed pallecon shared with another MO -> hidden here.
+        $sharedContainer = Pallecon::create(['serial_number' => 'PAL-SHARED', 'status' => Pallecon::STATUS_SEALED, 'sealed_at' => now(), 'final_weight' => 700]);
+        PalleconFill::create(['pallecon_id' => $sharedContainer->id, 'batch_record_id' => $mineA->id, 'fill_weight' => 400, 'sequence' => 1]);
+        PalleconFill::create(['pallecon_id' => $sharedContainer->id, 'batch_record_id' => $other->id, 'fill_weight' => 300, 'sequence' => 2]);
+
+        Volt::test('pages.manufacturing-orders.pallecon-workspace', ['winmanMo' => 6200])
+            ->assertOk()
+            ->assertSee('PAL-OWN')
+            ->assertDontSee('PAL-SHARED');
     }
 }
