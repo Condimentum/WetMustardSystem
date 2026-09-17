@@ -10,10 +10,14 @@ use App\Features\Batches\SignIngredientLotFeature;
 use App\Models\BatchIngredientLot;
 use App\Models\BatchRecord;
 use App\Models\ElectronicSignature;
+use App\Models\LabelPrintLog;
 use App\Models\ManufacturingOrder;
+use App\Models\Pallecon;
+use App\Models\PalleconFill;
 use App\Models\PaperworkRow;
 use App\Models\Product;
 use App\Models\User;
+use App\Models\WinManBookingLog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Volt\Volt;
 use Tests\TestCase;
@@ -242,5 +246,102 @@ class BatchEntryTest extends TestCase
         $component->assertSee('Reset sign-off');
         $component->assertSee('Submitted');
         $component->assertDontSee('Submit Ingredients Sign Off');
+    }
+
+    public function test_completed_batch_still_shows_who_signed_ingredients_but_hides_editable_controls(): void
+    {
+        $user = User::factory()->create(['name' => 'Read Only Tester']);
+        $batch = $this->makeBatch();
+        $batch->manufacturingOrder->update(['winman_unit_of_measure_description' => 'PALLECON']);
+
+        app(AddIngredientLotFeature::class)($batch, [
+            'material_description' => 'Water',
+            'lot_number' => 'LOT-W',
+            'actual_quantity' => 100,
+            'uom' => 'kg',
+        ], $user);
+        $this->confirmIngredientsSignoff($batch, $user);
+        app(CompleteBatchFeature::class)($batch->fresh(), $user);
+
+        $this->actingAs($user);
+        $component = Volt::test('pages.batches.show', ['batch' => $batch->fresh()]);
+
+        // Read-only batches must still show who signed off the ingredients...
+        $component->assertSee('Submitted');
+        $component->assertSee('Read Only Tester');
+
+        // ...but no controls to resubmit or reset it.
+        $component->assertDontSee('Select operator');
+        $component->assertDontSee('Submit Ingredients Sign Off');
+        $component->assertDontSee('Reset sign-off');
+    }
+
+    public function test_view_on_a_completed_batch_expands_the_row_instead_of_opening_the_allocate_modal(): void
+    {
+        $user = User::factory()->create();
+        $batch = $this->makeBatch();
+
+        app(AddIngredientLotFeature::class)($batch, [
+            'material_description' => 'Water',
+            'lot_number' => 'LOT-W',
+            'actual_quantity' => 100,
+            'uom' => 'kg',
+        ], $user);
+        $this->confirmIngredientsSignoff($batch, $user);
+        app(CompleteBatchFeature::class)($batch->fresh(), $user);
+
+        $this->actingAs($user);
+        Volt::test('pages.batches.show', ['batch' => $batch->fresh()])
+            ->call('openAllocateModal', 1, 'MAT1', 'Material One', '10')
+            ->assertSet('activeBomComponentSnapshotId', 1)
+            ->assertSet('showAllocateModal', false);
+    }
+
+    public function test_batch_screen_shows_label_and_winman_history_view_only(): void
+    {
+        $user = User::factory()->create(['name' => 'History Viewer']);
+        $batch = $this->makeBatch();
+
+        $pallecon = Pallecon::create([
+            'manufacturing_order_id' => $batch->manufacturing_order_id, 'serial_number' => 'PAL-HIST-1',
+            'status' => Pallecon::STATUS_SEALED, 'target_weight_kg' => 400, 'final_weight' => 400,
+            'production_date' => now()->toDateString(), 'sealed_at' => now(),
+        ]);
+        $fill = PalleconFill::create([
+            'pallecon_id' => $pallecon->id, 'batch_record_id' => $batch->id, 'fill_weight' => 400, 'sequence' => 1,
+        ]);
+
+        LabelPrintLog::create([
+            'pallecon_id' => $pallecon->id, 'batch_record_id' => $batch->id, 'printed_by' => $user->id,
+            'label_type' => 'pallecon', 'serial_number' => 'PAL-HIST-1', 'fill_weight' => 400,
+            'production_date' => now()->toDateString(), 'status' => LabelPrintLog::STATUS_SUCCESS,
+            'label_data' => ['BatchNumber' => $batch->batch_number, 'ProductId' => '50010007'],
+            'printed_at' => now(),
+        ]);
+        LabelPrintLog::create([
+            'pallecon_id' => $pallecon->id, 'batch_record_id' => $batch->id, 'printed_by' => $user->id,
+            'label_type' => 'pallecon', 'serial_number' => 'PAL-HIST-1', 'fill_weight' => 400,
+            'production_date' => now()->toDateString(), 'status' => LabelPrintLog::STATUS_FAILED,
+            'error_message' => 'BarTender integration is disabled.', 'printed_at' => now(),
+        ]);
+
+        WinManBookingLog::create([
+            'batch_record_id' => $batch->id, 'pallecon_id' => $pallecon->id, 'winman_inventory_id' => 555111,
+            'winman_manufacturing_order' => $batch->manufacturingOrder->winman_manufacturing_order,
+            'lot_number' => 'MO1 PAL-HIST-1 25258 00M96', 'quantity_booked_kg' => 400, 'quantity_booked_traded_units' => 400,
+            'booking_user' => 'History Viewer', 'booking_date' => now(), 'booking_status' => WinManBookingLog::STATUS_SUCCESS,
+        ]);
+
+        $this->actingAs($user);
+        $component = Volt::test('pages.batches.show', ['batch' => $batch->fresh()]);
+
+        $component->assertSee('WinMan History');
+        $component->assertSee('PAL-HIST-1');
+        $component->assertSee('Printed');
+        $component->assertSee('Failed');
+        $component->assertSeeText('BarTender integration is disabled.');
+        $component->assertSee('555111');
+        $component->assertSee('MO1 PAL-HIST-1 25258 00M96');
+        $component->assertSee('Success');
     }
 }

@@ -40,13 +40,11 @@ class SealPalleconJob
             throw new PalleconException('Final recorded weight must be greater than zero.');
         }
 
-        if (PalleconCapacity::exceedsLimit($finalWeight)) {
+        if (PalleconCapacity::exceedsPalleconTarget($pallecon, $finalWeight)) {
             throw new PalleconException(sprintf(
-                'Final weight %.3f kg is above the %.3f kg limit (%.0f kg + %.0f%% overfill).',
+                'Final weight %.3f kg is above the pallecon\'s %.3f kg target.',
                 $finalWeight,
-                PalleconCapacity::limitKg(),
-                PalleconCapacity::capacityKg(),
-                PalleconCapacity::overfillTolerance() * 100,
+                (float) $pallecon->target_weight_kg,
             ));
         }
 

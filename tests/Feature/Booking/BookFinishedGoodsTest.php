@@ -95,6 +95,21 @@ class BookFinishedGoodsTest extends TestCase
         $this->assertSame(WinManBookingLog::STATUS_SUCCESS, $log->booking_status);
         $this->assertSame(987654, $log->winman_inventory_id);
         $this->assertSame('1.000', (string) $log->quantity_booked_traded_units); // 1000kg / 1000 packsize
+        $this->assertNull($log->pallecon_id);
+    }
+
+    public function test_pallecon_id_is_stored_when_passed(): void
+    {
+        $this->mockWinMan(['finishingCalls' => 1]);
+
+        $batch = $this->makeBatch();
+        $pallecon = \App\Models\Pallecon::create(['serial_number' => 'PAL-BFG-1', 'status' => \App\Models\Pallecon::STATUS_OPEN]);
+
+        $log = app(BookFinishedGoodsFeature::class)(
+            $batch, 1000.0, 'IBC-001', ['IBC-001'], now(), now()->addMonths(6), User::factory()->create(), false, $pallecon->id,
+        );
+
+        $this->assertSame($pallecon->id, $log->pallecon_id);
     }
 
     public function test_duplicate_inventory_lot_is_rejected(): void

@@ -12,9 +12,9 @@ use App\Models\User;
 /**
  * Attaches a batch contribution (fill) to an open pallecon container.
  *
- * Enforces the capacity/overfill limit against the running total of fills and
- * moves the container to "filling". Weights are always operator-entered; nothing
- * is derived from batch planned quantity.
+ * Enforces the pallecon's own target_weight_kg against the running total of
+ * fills and moves the container to "filling". Weights are always
+ * operator-entered; nothing is derived from batch planned quantity.
  */
 class AttachBatchFillJob
 {
@@ -38,13 +38,11 @@ class AttachBatchFillJob
         if ($fillWeight !== null) {
             $projectedTotal = $pallecon->filledWeight() + $fillWeight;
 
-            if (PalleconCapacity::exceedsLimit($projectedTotal)) {
+            if (PalleconCapacity::exceedsPalleconTarget($pallecon, $projectedTotal)) {
                 throw new PalleconException(sprintf(
-                    'Fill would take the pallecon to %.3f kg, above the %.3f kg limit (%.0f kg + %.0f%% overfill).',
+                    'Fill would take the pallecon to %.3f kg, above its %.3f kg target.',
                     $projectedTotal,
-                    PalleconCapacity::limitKg(),
-                    PalleconCapacity::capacityKg(),
-                    PalleconCapacity::overfillTolerance() * 100,
+                    (float) $pallecon->target_weight_kg,
                 ));
             }
         }

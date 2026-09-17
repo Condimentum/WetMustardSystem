@@ -60,16 +60,16 @@ return [
     |--------------------------------------------------------------------------
     |
     | A pallecon is a physical bulk container filled from one or more production
-    | batches. capacity_kg is the nominal maximum fill; overfill_tolerance is the
-    | fraction of additional headroom permitted (0.10 = 10%). The effective hard
-    | limit for the sum of batch fills and the final recorded weight is therefore
-    | capacity_kg * (1 + overfill_tolerance). There is no minimum fill.
+    | batches. capacity_kg is the physical container's maximum size - it only
+    | bounds the target weight an operator can set when opening a pallecon.
+    | Once opened, the hard cap for the sum of batch fills and the final
+    | recorded weight is the pallecon's own target_weight_kg, with zero
+    | overfill tolerance. There is no minimum fill.
     |
     */
 
     'pallecon' => [
         'capacity_kg' => (float) env('DBMTS_PALLECON_CAPACITY_KG', 1100),
-        'overfill_tolerance' => (float) env('DBMTS_PALLECON_OVERFILL_TOLERANCE', 0.10),
     ],
 
 ];

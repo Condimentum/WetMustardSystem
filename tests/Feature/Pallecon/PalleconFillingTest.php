@@ -82,31 +82,52 @@ class PalleconFillingTest extends TestCase
         $this->assertCount(2, $batch->palleconContainers()->get());
     }
 
-    public function test_fill_beyond_capacity_plus_overfill_is_rejected(): void
+    public function test_fill_beyond_the_pallecon_target_is_rejected(): void
     {
-        config(['dbmts.pallecon.capacity_kg' => 1100, 'dbmts.pallecon.overfill_tolerance' => 0.10]);
         $user = User::factory()->create();
         $batch = $this->makeBatch('WM260908-04');
 
-        $pallecon = app(OpenPalleconFeature::class)(['serial_number' => 'PAL-C'], $user);
+        $pallecon = app(OpenPalleconFeature::class)(['serial_number' => 'PAL-C', 'target_weight_kg' => 1100], $user);
         app(AttachBatchFillFeature::class)($pallecon, $batch, ['fill_weight' => 1000], $user);
 
         $this->expectException(PalleconException::class);
-        // 1000 + 250 = 1250 > 1210 (1100 + 10%).
+        // 1000 + 250 = 1250 > the pallecon's own 1100 target - no overfill allowance.
         app(AttachBatchFillFeature::class)($pallecon, $batch, ['fill_weight' => 250], $user);
     }
 
-    public function test_fill_within_overfill_tolerance_is_allowed(): void
+    public function test_fill_up_to_exactly_the_pallecon_target_is_allowed(): void
     {
-        config(['dbmts.pallecon.capacity_kg' => 1100, 'dbmts.pallecon.overfill_tolerance' => 0.10]);
         $user = User::factory()->create();
         $batch = $this->makeBatch('WM260908-05');
 
-        $pallecon = app(OpenPalleconFeature::class)(['serial_number' => 'PAL-D'], $user);
-        // 1200 <= 1210 limit.
-        app(AttachBatchFillFeature::class)($pallecon, $batch, ['fill_weight' => 1200], $user);
+        $pallecon = app(OpenPalleconFeature::class)(['serial_number' => 'PAL-D', 'target_weight_kg' => 1100], $user);
+        app(AttachBatchFillFeature::class)($pallecon, $batch, ['fill_weight' => 1100], $user);
 
-        $this->assertEqualsWithDelta(1200.0, $pallecon->filledWeight(), 0.001);
+        $this->assertEqualsWithDelta(1100.0, $pallecon->filledWeight(), 0.001);
+    }
+
+    public function test_fill_without_a_target_weight_is_unbounded(): void
+    {
+        $user = User::factory()->create();
+        $batch = $this->makeBatch('WM260908-04b');
+
+        $pallecon = app(OpenPalleconFeature::class)(['serial_number' => 'PAL-C2'], $user);
+        app(AttachBatchFillFeature::class)($pallecon, $batch, ['fill_weight' => 1000], $user);
+        app(AttachBatchFillFeature::class)($pallecon, $batch, ['fill_weight' => 250], $user);
+
+        $this->assertEqualsWithDelta(1250.0, $pallecon->filledWeight(), 0.001);
+    }
+
+    public function test_seal_final_weight_cannot_exceed_pallecon_target(): void
+    {
+        $user = User::factory()->create();
+        $batch = $this->makeBatch('WM260908-04c');
+
+        $pallecon = app(OpenPalleconFeature::class)(['serial_number' => 'PAL-C3', 'target_weight_kg' => 500], $user);
+        app(AttachBatchFillFeature::class)($pallecon, $batch, ['fill_weight' => 500], $user);
+
+        $this->expectException(PalleconException::class);
+        app(SealPalleconFeature::class)($pallecon, ['final_weight' => 600], $user);
     }
 
     public function test_low_weight_pallecon_is_valid(): void

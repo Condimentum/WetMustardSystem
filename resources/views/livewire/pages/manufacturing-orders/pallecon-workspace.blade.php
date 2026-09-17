@@ -2,13 +2,17 @@
 
 use App\Domains\Pallecon\Support\PalleconCapacity;
 use App\Domains\Pallecon\Support\PalleconFilling;
+use App\Domains\Printing\Support\BarTenderPrintPortalClient;
 use App\Features\Pallecon\AttachBatchFillFeature;
 use App\Features\Pallecon\PrintPalleconLabelFeature;
 use App\Features\Pallecon\SealPalleconFeature;
 use App\Models\BatchRecord;
+use App\Models\LabelPrintLog;
 use App\Models\ManufacturingOrder;
 use App\Models\Pallecon;
+use App\Models\PalleconFill;
 use App\Models\PalleconRecord;
+use App\Models\User;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -22,16 +26,11 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
     /** When set (?pallecon=), the page is scoped to this one pallecon. */
     public ?int $palleconId = null;
 
-    /** Pallecon number / seal / liner details, edited inside the open pallecon. */
+    /** Pallecon number, edited inside the open pallecon - stays editable early and auto-saves. */
     public array $containerForm = [
         'serial_number' => '',
-        'top_seal_number' => '',
-        'bottom_seal_number' => '',
-        'liner_number' => '',
     ];
 
-    public string $fillBatchId = '';
-    public string $fillWeight = '';
     public string $production_date = '';
 
     public ?int $sealingId = null;
@@ -41,13 +40,14 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
         'final_weight' => '',
         'top_seal_number' => '',
         'bottom_seal_number' => '',
+        'liner_number' => '',
     ];
 
     public ?string $flash = null;
     public bool $flashError = false;
 
-    /** @var array<string, mixed>|null */
-    public ?array $winman_booking_preview = null;
+    /** Per-fill WinMan booking results, populated on Complete / Retry. @var array<int, array<string, mixed>> */
+    public array $winman_booking_results = [];
 
     public function mount(int $winmanMo): void
     {
@@ -58,31 +58,50 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
         $this->palleconId = request()->integer('pallecon') ?: null;
         $this->production_date = now()->toDateString();
         $this->syncContainerForm();
+
+        // Carried over from completePallecon()'s redirect, so the confirmation
+        // cards are still visible on the page the user lands on.
+        if (session()->has('status')) {
+            $this->flash = (string) session('status');
+            $this->flashError = false;
+        }
+        if (session()->has('winman_booking_results')) {
+            $this->winman_booking_results = (array) session('winman_booking_results');
+        }
     }
 
-    /** Mirror the pallecon's number/seal/liner values into the editable form. */
+    /** Mirror the pallecon's number into the editable form. */
     private function syncContainerForm(): void
     {
         $container = $this->activeContainer;
 
         $this->containerForm = [
             'serial_number' => (string) ($container?->serial_number ?? ''),
-            'top_seal_number' => (string) ($container?->top_seal_number ?? ''),
-            'bottom_seal_number' => (string) ($container?->bottom_seal_number ?? ''),
-            'liner_number' => (string) ($container?->liner_number ?? ''),
         ];
     }
 
-    #[Computed]
-    public function limitKg(): float
+    /** Auto-saves the pallecon number as soon as it changes - no explicit save step. */
+    public function updatedContainerFormSerialNumber(): void
     {
-        return PalleconCapacity::limitKg();
+        $this->updateSerialNumber();
+    }
+
+    #[Computed]
+    public function capacityKg(): float
+    {
+        return PalleconCapacity::capacityKg();
     }
 
     #[Computed]
     public function bartenderEnabled(): bool
     {
         return (bool) config('services.bartender.enabled', false);
+    }
+
+    #[Computed]
+    public function winmanBookingEnabled(): bool
+    {
+        return (bool) config('winman.booking.enabled', false);
     }
 
     /**
@@ -102,7 +121,7 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
 
         return Pallecon::query()
             ->whereIn('status', [Pallecon::STATUS_SEALED, Pallecon::STATUS_CONSUMED])
-            ->with(['fills.batchRecord:id,batch_number,manufacturing_order_id'])
+            ->with(['fills.batchRecord:id,batch_number,manufacturing_order_id', 'winmanBookingLogs'])
             ->orderByDesc('sealed_at')
             ->get()
             ->filter(function (Pallecon $pallecon) use ($moId): bool {
@@ -153,7 +172,7 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
 
         if ($this->palleconId !== null) {
             $pallecon = Pallecon::query()
-                ->with(['fills.batchRecord:id,batch_number,manufacturing_order_id'])
+                ->with(['fills.batchRecord:id,batch_number,manufacturing_order_id', 'winmanBookingLogs', 'labelPrintLogs.printedBy', 'sealedBy'])
                 ->find($this->palleconId);
 
             return ($pallecon !== null && $belongsToMo($pallecon)) ? $pallecon : null;
@@ -170,51 +189,62 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
     }
 
     /**
-     * Resolves and guards the selected source batch for a fill of $weight kg.
-     *
-     * @return BatchRecord|null  null on failure (flash set)
+     * Issues a batch's entire remaining planned quantity into the active pallecon,
+     * auto-capped to whatever room is left in the container. Local bookkeeping
+     * only - WinMan is never touched here, only at completePallecon().
      */
-    private function resolveFillBatch(float $weight): ?BatchRecord
+    public function issueBatchToPallecon(int $batchId): void
     {
-        $batchMeta = collect($this->moBatches)->firstWhere('id', (int) $this->fillBatchId);
-
-        $error = app(PalleconFilling::class)->guardFill($batchMeta, $weight);
-        if ($error !== null) {
-            $this->flash = $error;
-            $this->flashError = true;
-
-            return null;
-        }
-
-        return BatchRecord::with('manufacturingOrder', 'product')->findOrFail((int) $this->fillBatchId);
-    }
-
-    public function addFill(): void
-    {
-        $this->validate([
-            'fillBatchId' => ['required', 'integer'],
-            'fillWeight' => ['required', 'numeric', 'min:0.001'],
-        ]);
-
         $this->flash = null;
-        $this->winman_booking_preview = null;
 
         $container = $this->activeContainer;
-        if ($container === null) {
+        if ($container === null || ! $container->isOpenForFilling()) {
             $this->flash = 'No pallecon selected. Create one on the MO Workspace first.';
             $this->flashError = true;
 
             return;
         }
 
-        $batch = $this->resolveFillBatch((float) $this->fillWeight);
-        if ($batch === null) {
+        $batchMeta = collect($this->moBatches)->firstWhere('id', $batchId);
+
+        if (($batchMeta['status'] ?? null) === BatchRecord::STATUS_COMPLETED) {
+            $this->flash = 'Batch '.($batchMeta['batch_number'] ?? $batchId).' is completed and can no longer be issued to a pallecon.';
+            $this->flashError = true;
+
             return;
         }
 
+        $error = app(PalleconFilling::class)->signOffError($batchMeta);
+        if ($error !== null) {
+            $this->flash = $error;
+            $this->flashError = true;
+
+            return;
+        }
+
+        $batchRemaining = (float) ($batchMeta['remaining_kg'] ?? 0);
+        if ($batchRemaining <= 0.0001) {
+            $this->flash = 'Batch '.$batchMeta['batch_number'].' has nothing left to issue.';
+            $this->flashError = true;
+
+            return;
+        }
+
+        $palleconRemaining = PalleconCapacity::remainingKg($container);
+        $issueWeight = $palleconRemaining === null ? $batchRemaining : min($batchRemaining, $palleconRemaining);
+
+        if ($issueWeight <= 0.0001) {
+            $this->flash = 'Pallecon '.($container->serial_number ?? '#'.$container->id).' is already full.';
+            $this->flashError = true;
+
+            return;
+        }
+
+        $batch = BatchRecord::with('manufacturingOrder', 'product')->findOrFail($batchId);
+
         try {
-            $fill = app(AttachBatchFillFeature::class)($container, $batch, [
-                'fill_weight' => $this->fillWeight,
+            app(AttachBatchFillFeature::class)($container, $batch, [
+                'fill_weight' => $issueWeight,
             ], auth()->user());
         } catch (\Throwable $e) {
             $this->flash = $e->getMessage();
@@ -223,16 +253,35 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             return;
         }
 
-        $messages = ['Fill of '.$this->fillWeight.' kg from batch '.$batch->batch_number.' recorded against pallecon '.($container->serial_number ?? '#'.$container->id).'.'];
         $this->flashError = false;
-        $messages = $this->bookFillToWinMan($batch, $container, $fill, $messages);
 
-        $this->flash = implode(' ', $messages);
-        $this->fillWeight = '';
+        if ($issueWeight < $batchRemaining - 0.0001) {
+            $outstanding = $batchRemaining - $issueWeight;
+            $this->flash = sprintf(
+                'Issued %s kg from batch %s - pallecon %s is now full. %s kg still outstanding on this batch.',
+                $this->fmtKg($issueWeight),
+                $batch->batch_number,
+                $container->serial_number ?? '#'.$container->id,
+                $this->fmtKg($outstanding),
+            );
+        } else {
+            $this->flash = sprintf(
+                'Issued %s kg from batch %s to pallecon %s.',
+                $this->fmtKg($issueWeight),
+                $batch->batch_number,
+                $container->serial_number ?? '#'.$container->id,
+            );
+        }
+
         unset($this->activeContainer, $this->moBatches);
     }
 
-    public function saveContainerDetails(): void
+    private function fmtKg(float $value): string
+    {
+        return rtrim(rtrim(number_format($value, 3, '.', ''), '0'), '.') ?: '0';
+    }
+
+    public function updateSerialNumber(): void
     {
         $container = $this->activeContainer;
         if ($container === null) {
@@ -241,9 +290,6 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
 
         $data = $this->validate([
             'containerForm.serial_number' => ['nullable', 'string', 'max:255'],
-            'containerForm.top_seal_number' => ['nullable', 'string', 'max:255'],
-            'containerForm.bottom_seal_number' => ['nullable', 'string', 'max:255'],
-            'containerForm.liner_number' => ['nullable', 'string', 'max:255'],
         ])['containerForm'];
 
         $serial = trim((string) ($data['serial_number'] ?? ''));
@@ -257,40 +303,32 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
 
         $container->update([
             'serial_number' => $serial !== '' ? $serial : null,
-            'top_seal_number' => ($data['top_seal_number'] ?? '') ?: null,
-            'bottom_seal_number' => ($data['bottom_seal_number'] ?? '') ?: null,
-            'liner_number' => ($data['liner_number'] ?? '') ?: null,
         ]);
 
-        $this->flash = 'Pallecon '.($container->serial_number ?? '#'.$container->id).' details saved.';
+        $this->flash = 'Pallecon number saved.';
         $this->flashError = false;
         unset($this->activeContainer);
         $this->syncContainerForm();
     }
 
     /**
-     * @param  array<int, string>  $messages
-     * @return array<int, string>
+     * Books a sealed pallecon's final weight to WinMan as a single transaction,
+     * returning a labelled result row (used to render one confirmation card).
+     *
+     * @return array<string, mixed>
      */
-    private function bookFillToWinMan(BatchRecord $batch, Pallecon $container, \App\Models\PalleconFill $fill, array $messages): array
+    private function bookContainerToWinMan(Pallecon $container, string $productionDate, ?User $user): array
     {
-        $result = app(PalleconFilling::class)->bookFill(
-            $batch,
-            $container,
-            $fill,
-            $this->production_date !== '' ? $this->production_date : now()->toDateString(),
-            auth()->user(),
-        );
+        $result = app(PalleconFilling::class)->bookContainer($container, $productionDate, $user);
 
-        if ($result['preview'] !== null) {
-            $this->winman_booking_preview = $result['preview'];
-        }
-
-        if ($result['error']) {
-            $this->flashError = true;
-        }
-
-        return array_merge($messages, $result['messages']);
+        return [
+            'pallecon_id' => $container->id,
+            'serial_number' => (string) ($container->serial_number ?? '#'.$container->id),
+            'fill_weight' => (float) $container->final_weight,
+            'preview' => $result['preview'],
+            'messages' => $result['messages'],
+            'error' => $result['error'],
+        ];
     }
 
     public function startSeal(int $palleconId): void
@@ -301,6 +339,7 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             'final_weight' => (string) ($pallecon->filledWeight() ?: ''),
             'top_seal_number' => (string) ($pallecon->top_seal_number ?? ''),
             'bottom_seal_number' => (string) ($pallecon->bottom_seal_number ?? ''),
+            'liner_number' => (string) ($pallecon->liner_number ?? ''),
         ];
     }
 
@@ -320,6 +359,7 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             'sealForm.final_weight' => ['required', 'numeric', 'min:0.001'],
             'sealForm.top_seal_number' => ['nullable', 'string', 'max:255'],
             'sealForm.bottom_seal_number' => ['nullable', 'string', 'max:255'],
+            'sealForm.liner_number' => ['nullable', 'string', 'max:255'],
         ])['sealForm'];
 
         $pallecon = Pallecon::findOrFail($this->sealingId);
@@ -347,14 +387,65 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
         $this->sealingId = null;
         $this->reset('sealForm');
 
+        // WinMan is only ever written to here, once, when the container is
+        // physically sealed - never on an individual "Issue to Pallecon". One
+        // pallecon is one physical unit, so it books as a single transaction
+        // even when several batches contributed fills to it.
+        $productionDate = (string) ($sealed->production_date?->toDateString() ?? $this->production_date);
+        $bookingResult = $this->bookContainerToWinMan($sealed, $productionDate, auth()->user());
+        $this->winman_booking_results = $bookingResult['preview'] !== null ? [$bookingResult] : [];
+
+        if ($this->winman_booking_results !== []) {
+            $messages[] = $bookingResult['error']
+                ? 'WinMan booking failed - see below.'
+                : 'WinMan booking: pallecon booked.';
+        }
+
         if ($this->bartenderEnabled) {
             $printResult = $this->printLabelFor($sealed);
             $messages[] = $printResult;
         }
 
-        $this->flash = implode(' ', $messages);
-        unset($this->activeContainer, $this->completedContainers);
-        $this->syncContainerForm();
+        // The pallecon is now sealed - nothing left to fill, seal or rename on it.
+        // Show the confirmation once more (carried via session across the
+        // redirect) and drop back to the unscoped Pallecon Workspace instead of
+        // leaving the user parked on a now-read-only container.
+        session()->flash('status', implode(' ', $messages));
+        session()->flash('winman_booking_results', $this->winman_booking_results);
+
+        $this->redirectRoute('manufacturing-orders.pallecons', ['winmanMo' => $this->winmanMo], navigate: true);
+    }
+
+    /** Re-attempts the WinMan booking for a completed pallecon that never booked successfully. */
+    public function retryWinManBooking(int $palleconId): void
+    {
+        $pallecon = Pallecon::with(['fills.batchRecord.manufacturingOrder', 'fills.batchRecord.product', 'winmanBookingLogs'])
+            ->findOrFail($palleconId);
+
+        if (! in_array($pallecon->status, [Pallecon::STATUS_SEALED, Pallecon::STATUS_CONSUMED], true)) {
+            $this->flash = 'Only completed pallecons can be retried.';
+            $this->flashError = true;
+
+            return;
+        }
+
+        if ($pallecon->isWinManBooked()) {
+            $this->flash = 'Nothing to retry - this pallecon is already booked.';
+            $this->flashError = false;
+
+            return;
+        }
+
+        $productionDate = (string) ($pallecon->production_date?->toDateString() ?? $this->production_date);
+        $result = $this->bookContainerToWinMan($pallecon, $productionDate, auth()->user());
+        $this->winman_booking_results = $result['preview'] !== null ? [$result] : [];
+
+        $this->flash = $result['error']
+            ? 'Retry failed - see below.'
+            : 'Retried: pallecon booked.';
+        $this->flashError = $result['error'];
+
+        unset($this->completedContainers);
     }
 
     public function printLabel(int $palleconId): void
@@ -399,14 +490,41 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
         ]);
         $labelPallecon->setRelation('batchRecord', $primaryBatch);
 
+        $productionDate = $this->production_date !== '' ? $this->production_date : now()->toDateString();
+        $logAttributes = [
+            'pallecon_id' => $pallecon->id,
+            'batch_record_id' => $primaryBatch->id,
+            'printed_by' => auth()->id(),
+            'label_type' => 'pallecon',
+            'serial_number' => $pallecon->serial_number,
+            'fill_weight' => (float) $pallecon->final_weight,
+            'production_date' => $productionDate,
+            'printed_at' => now(),
+        ];
+
         try {
-            app(PrintPalleconLabelFeature::class)($labelPallecon, 1, [
-                'production_date' => $this->production_date !== '' ? $this->production_date : now()->toDateString(),
+            $payload = app(PrintPalleconLabelFeature::class)->buildPrintPayload($labelPallecon, 1, [
+                'production_date' => $productionDate,
+            ]);
+
+            app(BarTenderPrintPortalClient::class)->printFromLibrary(
+                (string) $payload['label'],
+                is_array($payload['options'] ?? null) ? $payload['options'] : [],
+            );
+
+            LabelPrintLog::create($logAttributes + [
+                'status' => LabelPrintLog::STATUS_SUCCESS,
+                'label_data' => $payload['options']['named_data_sources'] ?? null,
             ]);
 
             return 'Label sent to BarTender for pallecon '.$pallecon->serial_number.'.';
         } catch (\Throwable $e) {
             $this->flashError = true;
+
+            LabelPrintLog::create($logAttributes + [
+                'status' => LabelPrintLog::STATUS_FAILED,
+                'error_message' => $e->getMessage(),
+            ]);
 
             return 'Label print failed: '.$e->getMessage();
         }
@@ -417,23 +535,18 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
 <div class="py-8">
     <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
 
-        {{-- Workspace switcher --}}
+        {{-- Header --}}
         <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-            <div style="padding:10px 14px;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);">
-                <nav style="display:flex;gap:8px;align-items:stretch;overflow:auto hidden;min-height:52px;">
-                    <a href="{{ route('manufacturing-orders.workspace', ['winmanMo' => $winmanMo]) }}" wire:navigate style="display:inline-flex;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #cbd5e1;background:#fff;color:#334155;font-size:14px;font-weight:800;text-decoration:none;white-space:nowrap;">
-                        Batch Workspace
-                    </a>
-                    <span style="display:inline-flex;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #4f46e5;background:#4f46e5;color:#fff;font-size:14px;font-weight:800;box-shadow:0 4px 12px rgba(79,70,229,.24);white-space:nowrap;">
-                        Pallecon Workspace
-                    </span>
-                </nav>
+            <div style="padding:10px 14px;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);display:flex;justify-content:flex-end;">
+                <a href="{{ route('dashboard') }}" wire:navigate style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:12px;font-weight:800;text-decoration:none;">
+                    Back to Main Menu
+                </a>
             </div>
             <div class="px-5 py-3 text-sm text-slate-600 flex flex-wrap gap-x-6 gap-y-1">
                 <span><span class="text-slate-400">MO:</span> <strong>{{ $localOrder?->mo_number ?? $winmanMo }}</strong></span>
                 <span><span class="text-slate-400">Product:</span> <strong>{{ $localOrder?->winman_product_id ?? '—' }}</strong></span>
                 <span><span class="text-slate-400">Batches:</span> <strong>{{ count($this->moBatches) }}</strong></span>
-                <span><span class="text-slate-400">Capacity limit:</span> <strong>{{ number_format($this->limitKg, 0) }} kg</strong></span>
+                <span><span class="text-slate-400">Physical capacity:</span> <strong>{{ number_format($this->capacityKg, 0) }} kg</strong></span>
             </div>
         </div>
 
@@ -443,36 +556,162 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             </div>
         @endif
 
-        @if ($winman_booking_preview)
-            <div class="border border-emerald-200 rounded-lg p-4 bg-emerald-50 shadow-sm">
-                <h3 class="text-sm font-semibold text-emerald-800 mb-3">WinMan Inventory Insert Preview (Last Fill)</h3>
-                <div class="w-full rounded-lg border border-emerald-200 bg-white p-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
-                        <div><span class="text-slate-500">Status:</span> <span class="font-semibold text-slate-900">{{ $winman_booking_preview['booking_status'] ?? '—' }}</span></div>
-                        <div><span class="text-slate-500">Inventory ID:</span> <span class="font-semibold text-slate-900">{{ $winman_booking_preview['winman_inventory_id'] ?? '—' }}</span></div>
-                        <div><span class="text-slate-500">Booked At:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['booked_at'] ?? '—' }}</span></div>
-                        <div><span class="text-slate-500">MO ID:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['manufacturing_order_id'] ?? '—' }}</span></div>
-                        <div><span class="text-slate-500">Quantity (kg):</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['quantity_kg'] ?? '—' }}</span></div>
-                        <div><span class="text-slate-500">Pallecon Number:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['pallecon_number'] ?? '—' }}</span></div>
-                        <div class="md:col-span-2"><span class="text-slate-500">Lot Number Sent:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['lot_number'] ?? '—' }}</span></div>
-                        <div><span class="text-slate-500">Finished Date:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['finished_date'] ?? '—' }}</span></div>
-                        <div><span class="text-slate-500">Expiry Date:</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['expiry_date'] ?? '—' }}</span></div>
-                        <div><span class="text-slate-500">Logged Qty (kg):</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['booked_quantity_kg_logged'] ?? '—' }}</span></div>
-                        <div><span class="text-slate-500">Logged Qty (TU):</span> <span class="font-medium text-slate-900">{{ $winman_booking_preview['booked_quantity_traded_units'] ?? '—' }}</span></div>
-                        @if (! empty($winman_booking_preview['error_message']))
-                            <div class="md:col-span-2 xl:col-span-4 text-red-700">
-                                <span class="text-slate-500">Error:</span> {{ $winman_booking_preview['error_message'] }}
+        @if ($winman_booking_results !== [])
+            <div class="space-y-3">
+                @foreach ($winman_booking_results as $result)
+                    @php $preview = $result['preview']; @endphp
+                    <div class="border rounded-lg p-4 shadow-sm {{ $result['error'] ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50' }}">
+                        <h3 class="text-sm font-semibold mb-3 {{ $result['error'] ? 'text-red-800' : 'text-emerald-800' }}">
+                            WinMan Booking &mdash; pallecon {{ $result['serial_number'] }} ({{ number_format($result['fill_weight'], 1) }} kg)
+                        </h3>
+                        <div class="w-full rounded-lg border {{ $result['error'] ? 'border-red-200' : 'border-emerald-200' }} bg-white p-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
+                                <div><span class="text-slate-500">Status:</span> <span class="font-semibold text-slate-900">{{ $preview['booking_status'] ?? '—' }}</span></div>
+                                <div><span class="text-slate-500">Inventory ID:</span> <span class="font-semibold text-slate-900">{{ $preview['winman_inventory_id'] ?? '—' }}</span></div>
+                                <div><span class="text-slate-500">Booked At:</span> <span class="font-medium text-slate-900">{{ $preview['booked_at'] ?? '—' }}</span></div>
+                                <div><span class="text-slate-500">MO ID:</span> <span class="font-medium text-slate-900">{{ $preview['manufacturing_order_id'] ?? '—' }}</span></div>
+                                <div><span class="text-slate-500">Quantity (kg):</span> <span class="font-medium text-slate-900">{{ $preview['quantity_kg'] ?? '—' }}</span></div>
+                                <div><span class="text-slate-500">Pallecon Number:</span> <span class="font-medium text-slate-900">{{ $preview['pallecon_number'] ?? '—' }}</span></div>
+                                <div class="md:col-span-2"><span class="text-slate-500">Lot Number Sent:</span> <span class="font-medium text-slate-900">{{ $preview['lot_number'] ?? '—' }}</span></div>
+                                <div><span class="text-slate-500">Finished Date:</span> <span class="font-medium text-slate-900">{{ $preview['finished_date'] ?? '—' }}</span></div>
+                                <div><span class="text-slate-500">Expiry Date:</span> <span class="font-medium text-slate-900">{{ $preview['expiry_date'] ?? '—' }}</span></div>
+                                <div><span class="text-slate-500">Logged Qty (kg):</span> <span class="font-medium text-slate-900">{{ $preview['booked_quantity_kg_logged'] ?? '—' }}</span></div>
+                                <div><span class="text-slate-500">Logged Qty (TU):</span> <span class="font-medium text-slate-900">{{ $preview['booked_quantity_traded_units'] ?? '—' }}</span></div>
+                                @if (! empty($preview['error_message']))
+                                    <div class="md:col-span-2 xl:col-span-4 text-red-700">
+                                        <span class="text-slate-500">Error:</span> {{ $preview['error_message'] }}
+                                    </div>
+                                @endif
                             </div>
-                        @endif
+                        </div>
                     </div>
-                </div>
+                @endforeach
             </div>
         @endif
 
         @php
             $fmtKg = static fn ($v): string => rtrim(rtrim(number_format((float) $v, 3, '.', ''), '0'), '.') ?: '0';
-            $selectedBatch = collect($this->moBatches)->firstWhere('id', (int) $fillBatchId);
+            $active = $this->activeContainer;
+            $activeRemaining = $active ? PalleconCapacity::remainingKg($active) : null;
+            // Scoped to a single already-sealed pallecon (?pallecon=): nothing left
+            // to fill, edit or seal on it - show a read-only summary instead of the
+            // full MO-wide workspace.
+            $isCompletedPalleconView = $this->palleconId !== null
+                && $active !== null
+                && in_array($active->status, [Pallecon::STATUS_SEALED, Pallecon::STATUS_CONSUMED], true);
         @endphp
+
+        @if ($isCompletedPalleconView)
+            {{-- Completed pallecon: read-only summary --}}
+            <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <div>
+                        <span class="font-semibold text-slate-900 text-lg">{{ $active->serial_number ?? 'Pallecon #'.$active->id }}</span>
+                        <span class="ml-2 text-xs px-2 py-0.5 rounded-full {{ $active->status === 'consumed' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-100 text-emerald-800' }}">{{ ucfirst($active->status) }}</span>
+                        @if ($active->isOnHold())
+                            <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-800">On hold</span>
+                        @endif
+                    </div>
+                    <div class="text-sm text-slate-500">
+                        {{ $active->final_weight !== null ? number_format((float) $active->final_weight, 1).' kg' : '—' }}
+                        @if ($active->sealed_at)
+                            · sealed {{ $active->sealed_at->format('d/m/Y H:i') }}
+                        @endif
+                        @if ($active->sealedBy)
+                            by {{ $active->sealedBy->name }}
+                        @endif
+                    </div>
+                </div>
+
+                @if ($active->isOnHold())
+                    <p class="text-xs text-red-600 mb-4">{{ $active->hold_reason }}</p>
+                @endif
+
+                <dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-sm mb-5">
+                    <div><dt class="text-xs text-slate-400">MO</dt><dd class="font-medium text-slate-800">{{ $localOrder?->mo_number ?? $winmanMo }}</dd></div>
+                    <div><dt class="text-xs text-slate-400">WinMan reference</dt><dd class="font-mono text-slate-800">{{ $active->winman_reference ?: '—' }}</dd></div>
+                    <div><dt class="text-xs text-slate-400">Top / bottom seal</dt><dd class="text-slate-800">{{ $active->top_seal_number ?: '—' }} / {{ $active->bottom_seal_number ?: '—' }}</dd></div>
+                    <div><dt class="text-xs text-slate-400">Liner number</dt><dd class="text-slate-800">{{ $active->liner_number ?: '—' }}</dd></div>
+                </dl>
+
+                <h3 class="text-xs font-semibold uppercase text-slate-400 mb-2">Batches used</h3>
+                <div class="overflow-x-auto mb-5">
+                    <table class="min-w-full text-sm">
+                        <thead class="text-left text-xs uppercase text-slate-400">
+                            <tr>
+                                <th class="py-2 pr-3">Batch</th>
+                                <th class="py-2 pr-3 text-right">Weight</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @forelse ($active->fills->sortBy('sequence') as $fill)
+                                <tr>
+                                    <td class="py-2 pr-3 font-medium text-slate-800">{{ $fill->batchRecord?->batch_number ?? 'Batch '.$fill->batch_record_id }}</td>
+                                    <td class="py-2 pr-3 text-right">{{ $fill->fill_weight !== null ? number_format((float) $fill->fill_weight, 1).' kg' : '—' }}</td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="2" class="py-2 text-slate-400 italic">No fills recorded.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                @php $lastBooking = $active->winmanBookingLogs->sortByDesc('id')->first(); @endphp
+                <h3 class="text-xs font-semibold uppercase text-slate-400 mb-2">WinMan booking</h3>
+                <div class="mb-5">
+                    @if ($lastBooking === null)
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Not booked</span>
+                    @else
+                        <div class="flex flex-wrap items-center gap-2 mb-1">
+                            @if ($lastBooking->booking_status === 'success')
+                                <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Booked &middot; Inventory {{ $lastBooking->winman_inventory_id ?? '—' }}</span>
+                            @else
+                                <span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-800">{{ \Illuminate\Support\Str::headline($lastBooking->booking_status) }}</span>
+                            @endif
+                            <span class="text-xs text-slate-500">lot {{ $lastBooking->lot_number }} &middot; {{ number_format((float) $lastBooking->quantity_booked_kg, 1) }} kg &middot; {{ $lastBooking->booking_date?->format('d/m/Y H:i') }}</span>
+                        </div>
+                        @if ($lastBooking->error_message)
+                            <p class="text-xs text-red-600">{{ $lastBooking->error_message }}</p>
+                        @endif
+                    @endif
+                </div>
+
+                <h3 class="text-xs font-semibold uppercase text-slate-400 mb-2">Label prints</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="text-left text-xs uppercase text-slate-400">
+                            <tr>
+                                <th class="py-2 pr-3">Printed</th>
+                                <th class="py-2 pr-3">Type</th>
+                                <th class="py-2 pr-3">By</th>
+                                <th class="py-2 pr-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @forelse ($active->labelPrintLogs->sortByDesc('printed_at') as $log)
+                                <tr>
+                                    <td class="py-2 pr-3 text-slate-600">{{ $log->printed_at?->format('d/m/Y H:i') ?? '—' }}</td>
+                                    <td class="py-2 pr-3 text-slate-600">{{ \Illuminate\Support\Str::headline($log->label_type ?? '—') }}</td>
+                                    <td class="py-2 pr-3 text-slate-600">{{ $log->printedBy?->name ?? '—' }}</td>
+                                    <td class="py-2 pr-3">
+                                        @if ($log->status === 'success')
+                                            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Printed</span>
+                                        @else
+                                            <span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-800">Failed</span>
+                                            @if ($log->error_message)
+                                                <span class="block text-xs text-red-600 mt-0.5">{{ $log->error_message }}</span>
+                                            @endif
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="4" class="py-2 text-slate-400 italic">No label prints recorded.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        @else
 
         {{-- Batches available from this MO --}}
         <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
@@ -485,22 +724,24 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
                     <table class="min-w-full text-sm">
                         <thead class="text-left text-xs uppercase text-slate-400">
                             <tr>
-                                <th class="py-2 pr-3 w-8"></th>
                                 <th class="py-2 pr-3">Batch</th>
                                 <th class="py-2 pr-3">Status</th>
                                 <th class="py-2 pr-3 text-right">Planned</th>
                                 <th class="py-2 pr-3 text-right">Filled</th>
                                 <th class="py-2 pr-3 text-right">Remaining</th>
+                                <th class="py-2 pr-3"></th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
                             @foreach ($this->moBatches as $batchOption)
-                                <tr class="{{ $batchOption['signoff_complete'] ? 'cursor-pointer hover:bg-indigo-50/40' : 'opacity-50' }}"
-                                    @if ($batchOption['signoff_complete']) wire:click="$set('fillBatchId', '{{ $batchOption['id'] }}')" @endif>
-                                    <td class="py-2 pr-3">
-                                        <input type="radio" wire:model.live="fillBatchId" value="{{ $batchOption['id'] }}" @disabled(! $batchOption['signoff_complete'])
-                                            class="text-indigo-600 focus:ring-indigo-500" />
-                                    </td>
+                                @php
+                                    $canIssue = $batchOption['signoff_complete']
+                                        && $batchOption['remaining_kg'] > 0.0001
+                                        && $active !== null
+                                        && $active->isOpenForFilling()
+                                        && ($activeRemaining === null || $activeRemaining > 0.0001);
+                                @endphp
+                                <tr class="{{ $batchOption['signoff_complete'] ? '' : 'opacity-50' }}">
                                     <td class="py-2 pr-3 font-medium text-slate-800">{{ $batchOption['batch_number'] }}</td>
                                     <td class="py-2 pr-3">
                                         <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{{ \Illuminate\Support\Str::headline($batchOption['status']) }}</span>
@@ -513,16 +754,24 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
                                     <td class="py-2 pr-3 text-right font-semibold {{ $batchOption['remaining_kg'] <= 0.0001 ? 'text-emerald-600' : 'text-slate-800' }}">
                                         {{ $fmtKg($batchOption['remaining_kg']) }}
                                     </td>
+                                    <td class="py-2 pr-3 text-right">
+                                        @unless ($batchOption['status'] === \App\Models\BatchRecord::STATUS_COMPLETED)
+                                            <button type="button" wire:click="issueBatchToPallecon({{ $batchOption['id'] }})" wire:loading.attr="disabled" @disabled(! $canIssue)
+                                                class="inline-flex items-center px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed">Issue to Pallecon</button>
+                                        @endunless
+                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>
                     </table>
                 </div>
+                @if ($active === null)
+                    <p class="mt-2 text-xs text-amber-700">No pallecon is open. <a href="{{ route('manufacturing-orders.workspace', ['winmanMo' => $winmanMo]) }}" wire:navigate class="font-semibold underline">Open one on the MO Workspace</a> to issue batches.</p>
+                @endif
             @endif
         </div>
 
         {{-- Pallecon Workspace: the one pallecon this page works on --}}
-        @php $active = $this->activeContainer; @endphp
         <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
             <h2 class="text-sm font-semibold text-slate-800 mb-3">Pallecon Workspace</h2>
 
@@ -535,21 +784,31 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             @else
                 @php
                     $filled = $active->filledWeight();
-                    $pct = $this->limitKg > 0 ? min(100, round($filled / $this->limitKg * 100)) : 0;
+                    $target = $active->target_weight_kg !== null ? (float) $active->target_weight_kg : null;
+                    $pct = $target !== null && $target > 0 ? min(100, round($filled / $target * 100)) : null;
+                    $isFull = $pct !== null && $pct >= 100;
                 @endphp
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <span class="font-semibold text-slate-900">{{ $active->serial_number ?? 'Pallecon #'.$active->id }}</span>
                         <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">{{ ucfirst($active->status) }}</span>
+                        @if ($isFull)
+                            <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">Full &mdash; ready to complete</span>
+                        @endif
                         @if ($active->winman_reference)
                             <span class="ml-2 text-xs text-slate-500">Ref: <span class="font-mono text-slate-700">{{ $active->winman_reference }}</span></span>
                         @endif
                     </div>
-                    <div class="text-sm text-slate-500">{{ number_format($filled, 1) }} / {{ number_format($this->limitKg, 0) }} kg
-                        @if ($active->target_weight_kg)· target {{ $fmtKg($active->target_weight_kg) }} kg @endif</div>
+                    <div class="text-sm text-slate-500">
+                        @if ($target !== null)
+                            {{ number_format($filled, 1) }} / {{ $fmtKg($target) }} kg ({{ $pct }}%)
+                        @else
+                            {{ number_format($filled, 1) }} kg (no target set)
+                        @endif
+                    </div>
                 </div>
                 <div class="mt-2 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                    <div class="h-full bg-amber-400" style="width: {{ $pct }}%"></div>
+                    <div class="h-full {{ $isFull ? 'bg-emerald-500' : 'bg-amber-400' }}" style="width: {{ $pct ?? 0 }}%"></div>
                 </div>
 
                 <div class="mt-3 text-sm text-slate-600">
@@ -563,52 +822,11 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
                     @endforelse
                 </div>
 
-                {{-- Add another fill from the selected batch --}}
+                {{-- Pallecon number --}}
                 <div class="mt-4 border-t border-slate-100 pt-4">
-                    <h3 class="text-xs font-semibold uppercase text-slate-400 mb-2">Add fill</h3>
-                    @if ($selectedBatch)
-                        <p class="text-sm text-slate-600 mb-2">From batch <strong>{{ $selectedBatch['batch_number'] }}</strong> &mdash;
-                            <span class="font-semibold {{ $selectedBatch['remaining_kg'] <= 0.0001 ? 'text-emerald-600' : 'text-slate-900' }}">{{ $fmtKg($selectedBatch['remaining_kg']) }} kg</span> remaining</p>
-                    @else
-                        <p class="text-sm text-amber-700 mb-2">Select a batch above to add another fill.</p>
-                    @endif
-                    <div class="flex flex-wrap items-end gap-3">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-500 mb-1">Fill weight (kg) *</label>
-                            <input type="number" step="0.001" min="0.001"
-                                @if ($selectedBatch) max="{{ $fmtKg($selectedBatch['remaining_kg']) }}" @endif
-                                wire:model="fillWeight" class="w-40 rounded-lg border-slate-300 text-sm" placeholder="e.g. 200" />
-                            @error('fillWeight') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
-                        </div>
-                        <button type="button" wire:click="addFill" wire:loading.attr="disabled" @disabled(! $selectedBatch)
-                            class="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed">Add to Pallecon</button>
-                        @error('fillBatchId') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
-                    </div>
-                </div>
-
-                {{-- Pallecon number, seals & liner --}}
-                <div class="mt-4 border-t border-slate-100 pt-4">
-                    <h3 class="text-xs font-semibold uppercase text-slate-400 mb-2">Pallecon number, seals &amp; liner</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-500 mb-1">Pallecon number</label>
-                            <input type="text" wire:model="containerForm.serial_number" class="w-full rounded-lg border-slate-300 text-sm" placeholder="e.g. PAL-00123" />
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-500 mb-1">Top seal</label>
-                            <input type="text" wire:model="containerForm.top_seal_number" class="w-full rounded-lg border-slate-300 text-sm" />
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-500 mb-1">Bottom seal</label>
-                            <input type="text" wire:model="containerForm.bottom_seal_number" class="w-full rounded-lg border-slate-300 text-sm" />
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium text-slate-500 mb-1">Liner number</label>
-                            <input type="text" wire:model="containerForm.liner_number" class="w-full rounded-lg border-slate-300 text-sm" />
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <button type="button" wire:click="saveContainerDetails" class="inline-flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200">Save details</button>
+                    <h3 class="text-xs font-semibold uppercase text-slate-400 mb-2">Pallecon number</h3>
+                    <div class="max-w-xs">
+                        <input type="text" wire:model.live.blur="containerForm.serial_number" class="w-full rounded-lg border-slate-300 text-sm" placeholder="e.g. PAL-00123" />
                     </div>
                 </div>
 
@@ -629,8 +847,12 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
                                 <label class="block text-xs font-medium text-slate-500 mb-1">Bottom seal (optional)</label>
                                 <input type="text" wire:model="sealForm.bottom_seal_number" class="w-full rounded-lg border-slate-300 text-sm" />
                             </div>
-                            <div class="flex items-end gap-2">
-                                <button type="button" wire:click="completePallecon" class="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500">Complete{{ $this->bartenderEnabled ? ' & print label' : '' }}</button>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">Liner number (optional)</label>
+                                <input type="text" wire:model="sealForm.liner_number" class="w-full rounded-lg border-slate-300 text-sm" />
+                            </div>
+                            <div class="flex items-end gap-2 md:col-span-4">
+                                <button type="button" wire:click="completePallecon" class="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500">Submit &amp; complete{{ $this->bartenderEnabled ? ' + print label' : '' }}</button>
                                 <button type="button" wire:click="cancelSeal" class="inline-flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-600 text-sm">Cancel</button>
                             </div>
                         </div>
@@ -645,11 +867,15 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             @endif
         </div>
 
+        @endif
+
+        @unless ($isCompletedPalleconView)
         {{-- Completed containers (this MO only) --}}
         <div>
             <h2 class="text-sm font-semibold text-slate-800 mb-3">Completed &mdash; {{ $localOrder?->mo_number ?? $winmanMo }}</h2>
             <div class="space-y-3">
                 @forelse ($this->completedContainers as $container)
+                    @php $hasUnbooked = ! $container->isWinManBooked(); @endphp
                     <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <span class="font-semibold text-slate-900">{{ $container->serial_number ?? 'Pallecon #'.$container->id }}</span>
@@ -662,8 +888,14 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
                             @if ($container->isOnHold())
                                 <div class="text-xs text-red-600 mt-1">{{ $container->hold_reason }}</div>
                             @endif
+                            @if ($this->winmanBookingEnabled && $hasUnbooked)
+                                <div class="text-xs text-amber-700 mt-1">Not yet booked to WinMan.</div>
+                            @endif
                         </div>
-                        <div>
+                        <div class="flex items-center gap-2">
+                            @if ($this->winmanBookingEnabled && $hasUnbooked)
+                                <button type="button" wire:click="retryWinManBooking({{ $container->id }})" class="inline-flex items-center px-3 py-2 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-400">Retry WinMan booking</button>
+                            @endif
                             @if ($container->isOnHold())
                                 <span class="text-xs text-red-700">Quarantined — labelling blocked</span>
                             @elseif ($this->bartenderEnabled)
@@ -676,6 +908,7 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
                 @endforelse
             </div>
         </div>
+        @endunless
 
     </div>
 </div>

@@ -2,11 +2,15 @@
 
 namespace App\Domains\Pallecon\Support;
 
+use App\Models\Pallecon;
+
 /**
- * Resolves the effective pallecon fill limit from configuration.
+ * Resolves pallecon capacity limits.
  *
- * limit = capacity_kg * (1 + overfill_tolerance). Applies to both the running
- * total of batch fills and the final recorded weight. There is no minimum.
+ * capacity_kg (config) is only the physical container ceiling, checked when a
+ * pallecon is opened. Once opened, the hard cap for fills and the final
+ * recorded weight is that pallecon's own target_weight_kg - zero tolerance
+ * above it. A pallecon with no target_weight_kg is unbounded.
  */
 class PalleconCapacity
 {
@@ -15,18 +19,29 @@ class PalleconCapacity
         return (float) config('dbmts.pallecon.capacity_kg', 1100);
     }
 
-    public static function overfillTolerance(): float
+    /** Only meaningful at creation time: a target above the physical container size. */
+    public static function exceedsPhysicalCapacity(float $targetWeightKg): bool
     {
-        return (float) config('dbmts.pallecon.overfill_tolerance', 0.10);
+        return $targetWeightKg > self::capacityKg() + 0.0001;
     }
 
-    public static function limitKg(): float
+    /** Remaining room in $pallecon before its own target, or null when unbounded (no target set). */
+    public static function remainingKg(Pallecon $pallecon): ?float
     {
-        return round(self::capacityKg() * (1 + self::overfillTolerance()), 3);
+        if ($pallecon->target_weight_kg === null) {
+            return null;
+        }
+
+        return max((float) $pallecon->target_weight_kg - $pallecon->filledWeight(), 0.0);
     }
 
-    public static function exceedsLimit(float $weightKg): bool
+    /** Whether $projectedTotalKg would exceed $pallecon's own target. False when unbounded. */
+    public static function exceedsPalleconTarget(Pallecon $pallecon, float $projectedTotalKg): bool
     {
-        return $weightKg > self::limitKg() + 0.0001;
+        if ($pallecon->target_weight_kg === null) {
+            return false;
+        }
+
+        return $projectedTotalKg > (float) $pallecon->target_weight_kg + 0.0001;
     }
 }

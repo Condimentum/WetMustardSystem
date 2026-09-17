@@ -15,9 +15,9 @@ use Illuminate\Support\Carbon;
 
 /**
  * Shared helpers for filling pallecons from an MO's batches: the fillable-batch
- * list (with per-batch remaining as a hard cap) and the per-fill WinMan booking
- * (unchanged wire protocol). Used by the MO Workspace and the Pallecon detail
- * page so both behave identically.
+ * list (with per-batch remaining as a hard cap) and the one-booking-per-pallecon
+ * WinMan submission. Used by the MO Workspace and the Pallecon detail page so
+ * both behave identically.
  */
 class PalleconFilling
 {
@@ -74,12 +74,12 @@ class PalleconFilling
     }
 
     /**
-     * Guards a fill of $weight kg from $batchMeta (a fillableBatches() row).
-     * Returns an error string, or null when the fill is allowed.
+     * Checks $batchMeta (a fillableBatches() row) is eligible as a fill source at
+     * all: selected and signed off. Returns an error string, or null when okay.
      *
      * @param  array<string, mixed>|null  $batchMeta
      */
-    public function guardFill(?array $batchMeta, float $weight): ?string
+    public function signOffError(?array $batchMeta): ?string
     {
         if ($batchMeta === null) {
             return 'Select a batch from this manufacturing order first.';
@@ -87,6 +87,22 @@ class PalleconFilling
 
         if (! ($batchMeta['signoff_complete'] ?? false)) {
             return 'Batch '.$batchMeta['batch_number'].' has not completed Ingredients Sign Off yet.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Guards a fill of $weight kg from $batchMeta (a fillableBatches() row).
+     * Returns an error string, or null when the fill is allowed.
+     *
+     * @param  array<string, mixed>|null  $batchMeta
+     */
+    public function guardFill(?array $batchMeta, float $weight): ?string
+    {
+        $error = $this->signOffError($batchMeta);
+        if ($error !== null) {
+            return $error;
         }
 
         // The batch planned quantity is a hard cap - total fills from a batch can
@@ -104,21 +120,42 @@ class PalleconFilling
     }
 
     /**
-     * Books a single fill's weight to the source batch's MO in WinMan.
+     * Books a sealed pallecon's final weight to WinMan as a single transaction -
+     * one physical container, one Inventory record, regardless of how many
+     * batches contributed fills to it. The MO/product context and logged
+     * batch_number come from the first (primary) batch added; every
+     * contributing batch stays traceable in DBMTS via the pallecon's own fill
+     * records. The lot number is the same reference already stamped on the
+     * pallecon at seal time (sealReference()) - one pallecon, one reference.
      *
      * @return array{preview: array<string, mixed>|null, messages: array<int, string>, error: bool}
      */
-    public function bookFill(BatchRecord $batch, Pallecon $container, PalleconFill $fill, string $productionDate, ?User $user): array
+    public function bookContainer(Pallecon $container, string $productionDate, ?User $user): array
     {
         if (! (bool) config('winman.booking.enabled', false)) {
             return ['preview' => null, 'messages' => [], 'error' => false];
         }
 
+        $primaryFill = $container->fills()
+            ->with('batchRecord.manufacturingOrder', 'batchRecord.product')
+            ->orderBy('sequence')
+            ->first();
+        $batch = $primaryFill?->batchRecord;
+
+        if ($batch === null) {
+            return ['preview' => null, 'messages' => [], 'error' => false];
+        }
+
         try {
-            $bookedQuantity = (float) ($fill->fill_weight ?? 0);
+            $bookedQuantity = (float) ($container->final_weight ?? 0);
 
             if ($bookedQuantity <= 0) {
                 return ['preview' => null, 'messages' => [], 'error' => false];
+            }
+
+            $lotNumber = trim((string) ($container->winman_reference ?? ''));
+            if ($lotNumber === '') {
+                $lotNumber = $this->sealReference($container, $batch->manufacturingOrder, $productionDate);
             }
 
             $palleconLike = new PalleconRecord([
@@ -132,7 +169,6 @@ class PalleconFilling
 
             $finished = now();
             $expiry = $this->resolveBookingExpiryDate($batch, $palleconLike, $finished, $productionDate);
-            $lotNumber = $this->resolveWinManLotNumber($batch, $palleconLike, $productionDate);
 
             $preview = [
                 'manufacturing_order_id' => (string) ($batch->manufacturingOrder?->winman_manufacturing_order_id ?? $palleconLike->mo_number ?? ''),
@@ -154,6 +190,7 @@ class PalleconFilling
                 $expiry,
                 $user,
                 true,
+                $container->id,
             );
 
             $preview += [
@@ -182,7 +219,7 @@ class PalleconFilling
         } catch (\Throwable $e) {
             return [
                 'preview' => ['booking_status' => 'failed', 'error_message' => $e->getMessage()],
-                'messages' => ['Fill saved, but WinMan booking failed: '.$e->getMessage()],
+                'messages' => ['Pallecon sealed, but WinMan booking failed: '.$e->getMessage()],
                 'error' => true,
             ];
         }
@@ -204,28 +241,6 @@ class PalleconFilling
         }
 
         return substr(trim($moId.' '.$palleconNumber.' '.$this->resolveLabelStyleLotNumber($productionDate)), 0, 100);
-    }
-
-    private function resolveWinManLotNumber(BatchRecord $batch, PalleconRecord $pallecon, string $productionDate): string
-    {
-        $moId = trim((string) ($batch->manufacturingOrder?->winman_manufacturing_order_id
-            ?? $pallecon->mo_number
-            ?? 'MO'));
-        $palleconNumber = trim((string) ($pallecon->ticket_number ?? ''));
-        $labelStyleLot = $this->resolveLabelStyleLotNumber($productionDate);
-
-        $moId = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $moId));
-        $palleconNumber = strtoupper((string) preg_replace('/[^A-Za-z0-9]/', '', $palleconNumber));
-
-        if ($moId === '') {
-            $moId = 'MO';
-        }
-
-        if ($palleconNumber === '') {
-            $palleconNumber = 'P'.$pallecon->id;
-        }
-
-        return substr(trim($moId.' '.$palleconNumber.' '.$labelStyleLot), 0, 100);
     }
 
     private function resolveLabelStyleLotNumber(string $productionDate): string

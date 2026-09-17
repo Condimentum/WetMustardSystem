@@ -74,6 +74,24 @@ class Pallecon extends Model
         return $this->hasMany(PalleconFill::class);
     }
 
+    public function labelPrintLogs(): HasMany
+    {
+        return $this->hasMany(LabelPrintLog::class);
+    }
+
+    public function winmanBookingLogs(): HasMany
+    {
+        return $this->hasMany(WinManBookingLog::class);
+    }
+
+    /** Whether this pallecon has at least one successful WinMan booking on record. */
+    public function isWinManBooked(): bool
+    {
+        return $this->winmanBookingLogs->contains(
+            fn (WinManBookingLog $log): bool => $log->booking_status === WinManBookingLog::STATUS_SUCCESS
+        );
+    }
+
     public function batches(): BelongsToMany
     {
         return $this->belongsToMany(BatchRecord::class, 'pallecon_fills')

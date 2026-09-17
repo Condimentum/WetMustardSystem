@@ -17,7 +17,7 @@ class WinManBookingLog extends Model
     public const STATUS_FAILED = 'failed';
 
     protected $fillable = [
-        'batch_record_id', 'winman_inventory_id', 'winman_manufacturing_order', 'winman_manufacturing_order_id',
+        'batch_record_id', 'pallecon_id', 'winman_inventory_id', 'winman_manufacturing_order', 'winman_manufacturing_order_id',
         'winman_product_internal', 'winman_product_id', 'batch_number', 'lot_number',
         'quantity_booked_kg', 'quantity_booked_traded_units', 'booking_user', 'booking_date',
         'booking_status', 'error_message',
@@ -36,5 +36,10 @@ class WinManBookingLog extends Model
     public function batchRecord(): BelongsTo
     {
         return $this->belongsTo(BatchRecord::class);
+    }
+
+    public function pallecon(): BelongsTo
+    {
+        return $this->belongsTo(Pallecon::class);
     }
 }

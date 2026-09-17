@@ -84,9 +84,9 @@ class WorkspaceAllocationColumnTest extends TestCase
             ->assertOk()
             ->assertSee('Allocation')
             ->assertSeeInOrder([
-                'WM-ALLOC-A', 'Awaiting Allocation',
-                'WM-ALLOC-B', 'Partially Allocated',
-                'WM-ALLOC-C', 'Allocated',
+                'WM-ALLOC-A', '0 / 800 kg',
+                'WM-ALLOC-B', '300 / 800 kg',
+                'WM-ALLOC-C', 'Fully Allocated',
             ])
             ->assertSee(route('manufacturing-orders.pallecons', ['winmanMo' => $winmanMo]), escape: false);
     }

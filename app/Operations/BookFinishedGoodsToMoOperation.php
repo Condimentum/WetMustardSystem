@@ -50,6 +50,7 @@ class BookFinishedGoodsToMoOperation
         CarbonInterface $expiryDate,
         ?User $user = null,
         bool $allowMultiplePerBatch = false,
+        ?int $palleconId = null,
     ): WinManBookingLog {
         if (! config('winman.booking.enabled')) {
             throw new WinManException('WinMan finished-goods booking is disabled.');
@@ -61,7 +62,7 @@ class BookFinishedGoodsToMoOperation
         }
 
         $winmanMo = (int) $mo->winman_manufacturing_order;
-        $base = $this->baseAttributes($batch, $mo, $lotNumber, $user);
+        $base = $this->baseAttributes($batch, $mo, $lotNumber, $user, $palleconId);
 
         if (! $allowMultiplePerBatch && ($this->hasBatchBeenBooked)($batch)) {
             return ($this->recordLog)($base + ['booking_status' => WinManBookingLog::STATUS_REJECTED, 'error_message' => 'Batch has already been booked.']);
@@ -122,10 +123,11 @@ class BookFinishedGoodsToMoOperation
     /**
      * @return array<string, mixed>
      */
-    private function baseAttributes(BatchRecord $batch, \App\Models\ManufacturingOrder $mo, string $lotNumber, ?User $user): array
+    private function baseAttributes(BatchRecord $batch, \App\Models\ManufacturingOrder $mo, string $lotNumber, ?User $user, ?int $palleconId = null): array
     {
         return [
             'batch_record_id' => $batch->id,
+            'pallecon_id' => $palleconId,
             'winman_manufacturing_order' => (int) $mo->winman_manufacturing_order,
             'winman_manufacturing_order_id' => $mo->winman_manufacturing_order_id,
             'winman_product_internal' => $mo->winman_product_internal,

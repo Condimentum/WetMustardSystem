@@ -111,6 +111,27 @@ class WorkspacePalleconTest extends TestCase
         $this->assertStringContainsString('above the', (string) $component->get('palleconError'));
     }
 
+    public function test_target_weight_can_equal_but_not_exceed_the_physical_capacity(): void
+    {
+        $order = $this->setUpMo(7304);
+        $this->actingAs(User::factory()->create());
+
+        Volt::test('pages.manufacturing-orders.workspace', ['winmanMo' => 7304])
+            ->set('palleconWeight', '1100')
+            ->call('createPallecon')
+            ->assertHasNoErrors();
+
+        $this->assertSame(1, Pallecon::where('manufacturing_order_id', $order->id)->count());
+
+        $order2 = $this->setUpMo(7305);
+        $component = Volt::test('pages.manufacturing-orders.workspace', ['winmanMo' => 7305])
+            ->set('palleconWeight', '1101')
+            ->call('createPallecon');
+
+        $this->assertSame(0, Pallecon::where('manufacturing_order_id', $order2->id)->count());
+        $this->assertStringContainsString('above the', (string) $component->get('palleconError'));
+    }
+
     public function test_the_pallecon_row_links_to_its_detail_page(): void
     {
         $order = $this->setUpMo(7303);
@@ -122,5 +143,38 @@ class WorkspacePalleconTest extends TestCase
 
         $pallecon = Pallecon::where('manufacturing_order_id', $order->id)->first();
         $component->assertSee(route('manufacturing-orders.pallecons', ['winmanMo' => 7303, 'pallecon' => $pallecon->id]), escape: false);
+    }
+
+    public function test_add_pallecon_button_opens_a_modal_and_confirming_creates_it_then_closes(): void
+    {
+        $order = $this->setUpMo(7306);
+        $this->actingAs(User::factory()->create());
+
+        $component = Volt::test('pages.manufacturing-orders.workspace', ['winmanMo' => 7306])
+            ->assertSet('showAddPalleconModal', false)
+            ->call('openAddPalleconModal')
+            ->assertSet('showAddPalleconModal', true)
+            ->set('palleconWeight', '650')
+            ->call('createPallecon')
+            ->assertHasNoErrors()
+            ->assertSet('showAddPalleconModal', false);
+
+        $this->assertSame(1, Pallecon::where('manufacturing_order_id', $order->id)->count());
+    }
+
+    public function test_completed_pallecon_shows_view_completed_instead_of_continue(): void
+    {
+        $order = $this->setUpMo(7307);
+        $this->actingAs(User::factory()->create());
+
+        $pallecon = Pallecon::create([
+            'manufacturing_order_id' => $order->id, 'serial_number' => 'PAL-WP-DONE',
+            'winman_reference' => 'REF-WP-DONE', 'status' => Pallecon::STATUS_SEALED,
+            'target_weight_kg' => 500, 'final_weight' => 500,
+            'production_date' => now()->toDateString(), 'sealed_at' => now(),
+        ]);
+
+        Volt::test('pages.manufacturing-orders.workspace', ['winmanMo' => 7307])
+            ->assertSeeInOrder(['REF-WP-DONE', 'View Completed']);
     }
 }

@@ -16,7 +16,9 @@ use App\Domains\WinMan\Support\WinManHealthCheck;
 use App\Operations\AllocateBomIngredientOperation;
 use App\Support\FeatureSettings;
 use App\Models\BatchRecord;
+use App\Models\LabelPrintLog;
 use App\Models\PaperworkRow;
+use App\Models\PalleconFill;
 use App\Models\User;
 use App\Models\WinManIssueLog;
 use Illuminate\Support\Carbon;
@@ -208,7 +210,13 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
     public function openAllocateModal(int $componentSnapshotId, string $materialCode, string $materialDescription, ?string $suggestedQty = null): void
     {
         $this->openBomAllocation($componentSnapshotId, $materialCode, $materialDescription, $suggestedQty);
-        $this->showAllocateModal = true;
+
+        // Read-only batches have nothing left to allocate - the scanner/manual
+        // entry modal would be dead weight, so "View" just expands the inline
+        // row of what was already issued, same as clicking the row itself.
+        if ($this->editable) {
+            $this->showAllocateModal = true;
+        }
     }
 
     public function closeAllocateModal(): void
@@ -408,6 +416,36 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         return User::query()
             ->orderBy('name')
             ->get(['id', 'name']);
+    }
+
+    /**
+     * Every label print attempt for this batch - either printed with this
+     * batch as the pallecon's primary (first-filled) batch, or printed for a
+     * pallecon this batch contributed a fill to. View-only history.
+     */
+    #[Computed]
+    public function labelPrintHistory()
+    {
+        $palleconIds = PalleconFill::query()
+            ->where('batch_record_id', $this->batch->id)
+            ->pluck('pallecon_id');
+
+        return LabelPrintLog::query()
+            ->where('batch_record_id', $this->batch->id)
+            ->when($palleconIds->isNotEmpty(), fn ($query) => $query->orWhereIn('pallecon_id', $palleconIds))
+            ->with('printedBy:id,name', 'pallecon:id,serial_number')
+            ->orderByDesc('printed_at')
+            ->get();
+    }
+
+    /** Every WinMan finished-goods booking attempt recorded for this batch. View-only history. */
+    #[Computed]
+    public function winmanBookingHistory()
+    {
+        return $this->batch->bookingLogs()
+            ->with('pallecon:id,serial_number')
+            ->orderByDesc('booking_date')
+            ->get();
     }
 
     public function getIngredientSignoffCompleteProperty(): bool
@@ -2021,16 +2059,17 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                 @if ($packingSignoffRows->isEmpty())
                                     <p class="text-sm text-slate-500">No ingredient lots allocated yet. Complete Ingredient Allocation first.</p>
                                 @else
-                                    @if ($this->editable)
+                                    @php
+                                        $submittedSignoff = $this->paperworkIngredientSignoff;
+                                        // Badges must reflect the ACTUAL lot signatures, not stale paperwork names.
+                                        $signoffTruthComplete = $this->ingredientSignoffComplete;
+                                        $fallbackWeigher = $batch->ingredientLots->first(fn ($lot) => $lot->weighed_by !== null)?->weighedBy?->name;
+                                        $fallbackTipper = $batch->ingredientLots->first(fn ($lot) => $lot->tipped_by !== null)?->tippedBy?->name;
+                                    @endphp
+
+                                    @if ($this->editable || $signoffTruthComplete)
                                         <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 mb-4">
                                             <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;">
-                                                @php
-                                                    $submittedSignoff = $this->paperworkIngredientSignoff;
-                                                    // Badges must reflect the ACTUAL lot signatures, not stale paperwork names.
-                                                    $signoffTruthComplete = $this->ingredientSignoffComplete;
-                                                    $fallbackWeigher = $batch->ingredientLots->first(fn ($lot) => $lot->weighed_by !== null)?->weighedBy?->name;
-                                                    $fallbackTipper = $batch->ingredientLots->first(fn ($lot) => $lot->tipped_by !== null)?->tippedBy?->name;
-                                                @endphp
                                                 @foreach ([
                                                     'powdersWeighedOperatorId' => ['label' => 'Powders Weighed', 'class' => '', 'submitted_key' => 'powders'],
                                                     'liquidsWeighedOperatorId' => ['label' => 'Liquids Weighed', 'class' => '', 'submitted_key' => 'liquids'],
@@ -2064,33 +2103,35 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                 @endforeach
                                             </div>
 
-                                            <div class="mt-3 flex items-center justify-end gap-3" x-data="{
-                                                state: 'idle',
-                                                successTimer: null,
-                                                submit() { this.state = 'loading'; },
-                                                failed() { this.state = 'idle'; },
-                                                submitted() {
-                                                    this.state = 'success';
-                                                    clearTimeout(this.successTimer);
-                                                    this.successTimer = setTimeout(() => { this.state = 'idle'; }, 1700);
-                                                },
-                                            }" x-on:ingredient-signoff-submitted.window="submitted()" x-on:ingredient-signoff-failed.window="failed()">
-                                                @if ($signoffTruthComplete)
-                                                    <button type="button" wire:click="resetIngredientSignoff" wire:loading.attr="disabled" class="inline-flex h-10 items-center rounded-md border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-800 hover:bg-amber-100" title="Reset clears the saved sign-off so operators can be reselected; the reset and resubmission are both audited.">Reset sign-off</button>
-                                                @else
-                                                    <button type="button" wire:click="applyBulkIngredientSignoff" @click="submit()" wire:loading.attr="disabled" wire:target="applyBulkIngredientSignoff" class="ingredient-signoff-submit inline-flex h-10 min-w-[220px] items-center justify-center overflow-hidden rounded-md px-4 text-sm font-semibold text-white" x-bind:class="state === 'success' ? 'ingredient-signoff-submit--success' : (state === 'loading' ? 'ingredient-signoff-submit--loading' : 'ingredient-signoff-submit--idle')">
-                                                        <span x-show="state === 'idle'" x-transition.opacity.duration.150ms>Submit Ingredients Sign Off</span>
-                                                        <span x-cloak x-show="state === 'loading'" x-transition.opacity.duration.150ms class="flex items-center gap-2">
-                                                            <span class="ingredient-signoff-spinner"></span>
-                                                            Submitting
-                                                        </span>
-                                                        <span x-cloak x-show="state === 'success'" x-transition.opacity.duration.150ms class="flex items-center gap-2">
-                                                            <span class="ingredient-signoff-check" aria-hidden="true">✓</span>
-                                                            Submitted
-                                                        </span>
-                                                    </button>
-                                                @endif
-                                            </div>
+                                            @if ($this->editable)
+                                                <div class="mt-3 flex items-center justify-end gap-3" x-data="{
+                                                    state: 'idle',
+                                                    successTimer: null,
+                                                    submit() { this.state = 'loading'; },
+                                                    failed() { this.state = 'idle'; },
+                                                    submitted() {
+                                                        this.state = 'success';
+                                                        clearTimeout(this.successTimer);
+                                                        this.successTimer = setTimeout(() => { this.state = 'idle'; }, 1700);
+                                                    },
+                                                }" x-on:ingredient-signoff-submitted.window="submitted()" x-on:ingredient-signoff-failed.window="failed()">
+                                                    @if ($signoffTruthComplete)
+                                                        <button type="button" wire:click="resetIngredientSignoff" wire:loading.attr="disabled" class="inline-flex h-10 items-center rounded-md border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-800 hover:bg-amber-100" title="Reset clears the saved sign-off so operators can be reselected; the reset and resubmission are both audited.">Reset sign-off</button>
+                                                    @else
+                                                        <button type="button" wire:click="applyBulkIngredientSignoff" @click="submit()" wire:loading.attr="disabled" wire:target="applyBulkIngredientSignoff" class="ingredient-signoff-submit inline-flex h-10 min-w-[220px] items-center justify-center overflow-hidden rounded-md px-4 text-sm font-semibold text-white" x-bind:class="state === 'success' ? 'ingredient-signoff-submit--success' : (state === 'loading' ? 'ingredient-signoff-submit--loading' : 'ingredient-signoff-submit--idle')">
+                                                            <span x-show="state === 'idle'" x-transition.opacity.duration.150ms>Submit Ingredients Sign Off</span>
+                                                            <span x-cloak x-show="state === 'loading'" x-transition.opacity.duration.150ms class="flex items-center gap-2">
+                                                                <span class="ingredient-signoff-spinner"></span>
+                                                                Submitting
+                                                            </span>
+                                                            <span x-cloak x-show="state === 'success'" x-transition.opacity.duration.150ms class="flex items-center gap-2">
+                                                                <span class="ingredient-signoff-check" aria-hidden="true">✓</span>
+                                                                Submitted
+                                                            </span>
+                                                        </button>
+                                                    @endif
+                                                </div>
+                                            @endif
                                         </div>
                                     @endif
 
@@ -2539,5 +2580,128 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
             </div>
         </div>
+
+        @php
+            $labelPrintHistory = $this->labelPrintHistory;
+            $winmanBookingHistory = $this->winmanBookingHistory;
+        @endphp
+
+        @if ($labelPrintHistory->isNotEmpty() || $winmanBookingHistory->isNotEmpty())
+            <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden" x-data="{ expandedLabel: null }">
+                <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);">
+                    <div class="text-base font-semibold text-gray-800">Label &amp; WinMan History</div>
+                    <p class="text-xs text-slate-500 mt-1">View only - what was printed for this batch's pallecon(s) and what was sent to WinMan when finished goods were booked.</p>
+                </div>
+
+                <div class="p-4 md:p-6 space-y-6">
+                    @if ($labelPrintHistory->isNotEmpty())
+                        <div>
+                            <h3 class="text-sm font-semibold text-slate-700 mb-2">Labels Printed</h3>
+                            <div class="border border-slate-200 rounded-lg overflow-hidden">
+                                <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
+                                        <tr>
+                                            <th class="px-3 py-2">Printed</th>
+                                            <th class="px-3 py-2">Pallecon</th>
+                                            <th class="px-3 py-2 text-right">Weight (kg)</th>
+                                            <th class="px-3 py-2">Status</th>
+                                            <th class="px-3 py-2">Printed By</th>
+                                            <th class="px-3 py-2 text-right"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100">
+                                        @foreach ($labelPrintHistory as $log)
+                                            <tr class="cursor-pointer hover:bg-indigo-50/40" @click="expandedLabel = expandedLabel === {{ $log->id }} ? null : {{ $log->id }}">
+                                                <td class="px-3 py-2 whitespace-nowrap">{{ $log->printed_at?->format('d/m/Y H:i') }}</td>
+                                                <td class="px-3 py-2">{{ $log->pallecon?->serial_number ?? '—' }}</td>
+                                                <td class="px-3 py-2 text-right">{{ $log->fill_weight !== null ? rtrim(rtrim((string) $log->fill_weight, '0'), '.') : '—' }}</td>
+                                                <td class="px-3 py-2">
+                                                    @if ($log->status === \App\Models\LabelPrintLog::STATUS_SUCCESS)
+                                                        <span class="text-green-700 font-semibold">Printed</span>
+                                                    @else
+                                                        <span class="text-red-700 font-semibold" title="{{ $log->error_message }}">Failed</span>
+                                                    @endif
+                                                </td>
+                                                <td class="px-3 py-2">{{ $log->printedBy?->name ?? '—' }}</td>
+                                                <td class="px-3 py-2 text-right text-xs text-indigo-600">Details</td>
+                                            </tr>
+                                            <tr x-show="expandedLabel === {{ $log->id }}" class="bg-indigo-50/40">
+                                                <td colspan="6" class="px-3 py-3">
+                                                    @if ($log->status !== \App\Models\LabelPrintLog::STATUS_SUCCESS && $log->error_message)
+                                                        <div class="text-xs text-red-700 mb-2">{{ $log->error_message }}</div>
+                                                    @endif
+                                                    @if (is_array($log->label_data) && $log->label_data !== [])
+                                                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-1 text-xs">
+                                                            @foreach ($log->label_data as $field => $value)
+                                                                @if ($value !== null && $value !== '')
+                                                                    <div>
+                                                                        <span class="text-slate-400">{{ $field }}:</span>
+                                                                        <span class="text-slate-700">{{ is_scalar($value) ? $value : json_encode($value) }}</span>
+                                                                    </div>
+                                                                @endif
+                                                            @endforeach
+                                                        </div>
+                                                    @else
+                                                        <div class="text-xs text-slate-400">No label data recorded for this print.</div>
+                                                    @endif
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if ($winmanBookingHistory->isNotEmpty())
+                        <div>
+                            <h3 class="text-sm font-semibold text-slate-700 mb-2">Sent to WinMan</h3>
+                            <div class="border border-slate-200 rounded-lg overflow-hidden">
+                                <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
+                                        <tr>
+                                            <th class="px-3 py-2">Booked</th>
+                                            <th class="px-3 py-2">Pallecon</th>
+                                            <th class="px-3 py-2">Lot Number</th>
+                                            <th class="px-3 py-2 text-right">Qty (kg)</th>
+                                            <th class="px-3 py-2 text-right">Qty (TU)</th>
+                                            <th class="px-3 py-2">Inventory ID</th>
+                                            <th class="px-3 py-2">Status</th>
+                                            <th class="px-3 py-2">Booked By</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100">
+                                        @foreach ($winmanBookingHistory as $log)
+                                            <tr>
+                                                <td class="px-3 py-2 whitespace-nowrap">{{ $log->booking_date?->format('d/m/Y H:i') }}</td>
+                                                <td class="px-3 py-2">{{ $log->pallecon?->serial_number ?? '—' }}</td>
+                                                <td class="px-3 py-2 font-mono text-xs">{{ $log->lot_number ?? '—' }}</td>
+                                                <td class="px-3 py-2 text-right">{{ $log->quantity_booked_kg !== null ? rtrim(rtrim((string) $log->quantity_booked_kg, '0'), '.') : '—' }}</td>
+                                                <td class="px-3 py-2 text-right">{{ $log->quantity_booked_traded_units !== null ? rtrim(rtrim((string) $log->quantity_booked_traded_units, '0'), '.') : '—' }}</td>
+                                                <td class="px-3 py-2">{{ $log->winman_inventory_id ?? '—' }}</td>
+                                                <td class="px-3 py-2">
+                                                    @if ($log->booking_status === \App\Models\WinManBookingLog::STATUS_SUCCESS)
+                                                        <span class="text-green-700 font-semibold">Success</span>
+                                                    @elseif ($log->booking_status === \App\Models\WinManBookingLog::STATUS_REJECTED)
+                                                        <span class="text-amber-700 font-semibold" title="{{ $log->error_message }}">Rejected</span>
+                                                    @else
+                                                        <span class="text-red-700 font-semibold" title="{{ $log->error_message }}">Failed</span>
+                                                    @endif
+                                                </td>
+                                                <td class="px-3 py-2">{{ $log->booking_user ?? '—' }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        @endif
     </div>
 </div>

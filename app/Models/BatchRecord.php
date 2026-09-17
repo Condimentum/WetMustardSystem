@@ -145,6 +145,12 @@ class BatchRecord extends Model
         return $this->hasMany(WinManIssueLog::class);
     }
 
+    /** Label prints where this batch was the primary (first-filled) contributor. */
+    public function labelPrintLogs(): HasMany
+    {
+        return $this->hasMany(LabelPrintLog::class);
+    }
+
     public function componentSnapshots(): HasManyThrough
     {
         return $this->hasManyThrough(

@@ -53,6 +53,8 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
 
     public ?string $palleconStatus = null;
 
+    public bool $showAddPalleconModal = false;
+
     public function mount(int $winmanMo): void
     {
         $this->winmanMo = $winmanMo;
@@ -173,11 +175,11 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
         }
 
         $weight = (float) $this->palleconWeight;
-        if (PalleconCapacity::exceedsLimit($weight)) {
+        if (PalleconCapacity::exceedsPhysicalCapacity($weight)) {
             $this->palleconError = sprintf(
-                'Target weight %s kg is above the %s kg pallecon limit.',
+                'Target weight %s kg is above the %s kg pallecon capacity.',
                 rtrim(rtrim(number_format($weight, 3, '.', ''), '0'), '.'),
-                rtrim(rtrim(number_format(PalleconCapacity::limitKg(), 3, '.', ''), '0'), '.'),
+                rtrim(rtrim(number_format(PalleconCapacity::capacityKg(), 3, '.', ''), '0'), '.'),
             );
 
             return;
@@ -199,7 +201,24 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
 
         $this->palleconStatus = 'Pallecon opened with a '.$this->palleconWeight.' kg target. Continue to record fills, number and seals.';
         $this->reset('palleconWeight');
+        $this->showAddPalleconModal = false;
         unset($this->moPallecons, $this->hasOpenPalleconForMo);
+    }
+
+    public function openAddPalleconModal(): void
+    {
+        $this->palleconError = null;
+        $this->palleconStatus = null;
+        $this->reset('palleconWeight');
+        $this->resetErrorBag('palleconWeight');
+        $this->showAddPalleconModal = true;
+    }
+
+    public function closeAddPalleconModal(): void
+    {
+        $this->showAddPalleconModal = false;
+        $this->reset('palleconWeight');
+        $this->resetErrorBag('palleconWeight');
     }
 
     private function loadWorkspace(): void
@@ -573,6 +592,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                                 @foreach ($existingBatches as $batch)
                                     @php
                                         $isIssued = (string) $batch['status'] === \App\Models\BatchRecord::STATUS_IN_PROGRESS;
+                                        $isCompleted = (string) $batch['status'] === \App\Models\BatchRecord::STATUS_COMPLETED;
                                         $batchStatusStyles = match ((string) $batch['status']) {
                                             \App\Models\BatchRecord::STATUS_IN_PROGRESS => ['bg' => '#fef9c3', 'border' => '#fde68a', 'color' => '#92400e', 'dot' => '#f59e0b'],
                                             \App\Models\BatchRecord::STATUS_COMPLETED => ['bg' => '#dcfce7', 'border' => '#86efac', 'color' => '#166534', 'dot' => '#22c55e'],
@@ -603,22 +623,25 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                                             @php
                                                 $allocState = (string) ($batch['allocation_state'] ?? 'awaiting');
                                                 $allocStyles = match ($allocState) {
-                                                    'allocated' => ['bg' => '#dcfce7', 'border' => '#86efac', 'color' => '#166534', 'dot' => '#22c55e', 'label' => 'Allocated'],
+                                                    'allocated' => ['bg' => '#dcfce7', 'border' => '#86efac', 'color' => '#166534', 'dot' => '#22c55e', 'label' => 'Fully Allocated'],
                                                     'partial' => ['bg' => '#dbeafe', 'border' => '#93c5fd', 'color' => '#1e40af', 'dot' => '#3b82f6', 'label' => 'Partially Allocated'],
                                                     default => ['bg' => '#fef9c3', 'border' => '#fde68a', 'color' => '#92400e', 'dot' => '#f59e0b', 'label' => 'Awaiting Allocation'],
                                                 };
                                                 $allocatedKg = (float) ($batch['allocated_kg'] ?? 0);
                                                 $plannedKg = (float) ($batch['planned_quantity'] ?? 0);
+                                                $allocLabel = $allocState === 'allocated'
+                                                    ? $allocStyles['label']
+                                                    : $fmt($allocatedKg) . ' / ' . $fmt($plannedKg) . ' kg';
                                             @endphp
                                             <a href="{{ route('manufacturing-orders.pallecons', ['winmanMo' => $winmanMo]) }}" wire:navigate
-                                               title="{{ $fmt($allocatedKg) }} of {{ $fmt($plannedKg) }} kg allocated to pallecons"
+                                               title="{{ $allocStyles['label'] }}: {{ $fmt($allocatedKg) }} of {{ $fmt($plannedKg) }} kg allocated to pallecons"
                                                style="display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid {{ $allocStyles['border'] }};background:{{ $allocStyles['bg'] }};color:{{ $allocStyles['color'] }};font-size:13px;font-weight:700;text-decoration:none;">
                                                 <span style="height:8px;width:8px;border-radius:999px;background:{{ $allocStyles['dot'] }};display:inline-block;"></span>
-                                                {{ $allocStyles['label'] }}
+                                                {{ $allocLabel }}
                                             </a>
                                         </td>
                                         <td class="px-3 py-2 text-right">
-                                            <a href="{{ route('batches.show', ['batch' => (int) $batch['id'], 'tab' => 'allocation']) }}" wire:navigate style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;background:#eef2ff;border:1px solid #c7d2fe;color:#4338ca;font-size:13px;font-weight:700;text-decoration:none;">Continue</a>
+                                            <a href="{{ route('batches.show', ['batch' => (int) $batch['id'], 'tab' => 'allocation']) }}" wire:navigate style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;background:#eef2ff;border:1px solid #c7d2fe;color:#4338ca;font-size:13px;font-weight:700;text-decoration:none;">{{ $isCompleted ? 'View Completed' : 'Continue' }}</a>
                                         </td>
                                     </tr>
                                 @endforeach
@@ -666,7 +689,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                 @endphp
 
                 @if (! $hasInProgressBatch)
-                    <div class="flex flex-wrap items-end gap-3">
+                    <div class="flex flex-wrap items-end justify-end gap-3">
                         @if (count($variantOptions) > 0)
                             <div>
                                 <label class="block text-xs text-gray-600 mb-1">Batch-size variant (optional)</label>
@@ -690,12 +713,14 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                                 </select>
                                 <span class="block text-xs text-gray-500 mt-1">Multiple sizes are configured for this recipe.</span>
                             </div>
-                        @else
+                        @elseif (count($existingBatches) === 0)
                             <div>
                                 <label class="block text-xs text-gray-600 mb-1">Batch quantity (kg)</label>
                                 <input wire:model="batchPlannedQuantity" type="text" readonly class="border-gray-300 bg-gray-100 rounded-md shadow-sm text-sm w-40" />
                                 <span class="block text-xs text-gray-500 mt-1">Auto from recipe card batch size.</span>
                             </div>
+                        @else
+                            <input wire:model="batchPlannedQuantity" type="hidden" />
                         @endif
 
                         <x-primary-button wire:click="start" wire:loading.attr="disabled">
@@ -747,6 +772,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                                     @foreach ($this->moPallecons as $pallecon)
                                         @php
                                             $pStyle = $palleconStatusStyle($pallecon['on_hold'] ? 'on_hold' : $pallecon['status']);
+                                            $isPalleconCompleted = in_array($pallecon['status'], [\App\Models\Pallecon::STATUS_SEALED, \App\Models\Pallecon::STATUS_CONSUMED], true);
                                         @endphp
                                         <tr>
                                             <td class="px-4 py-3 font-medium text-gray-800">{{ $pallecon['reference'] !== '' ? $pallecon['reference'] : '—' }}</td>
@@ -759,7 +785,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                                                 </span>
                                             </td>
                                             <td class="px-3 py-2 text-right">
-                                                <a href="{{ route('manufacturing-orders.pallecons', ['winmanMo' => $winmanMo, 'pallecon' => $pallecon['id']]) }}" wire:navigate style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;background:#eef2ff;border:1px solid #c7d2fe;color:#4338ca;font-size:13px;font-weight:700;text-decoration:none;">Continue</a>
+                                                <a href="{{ route('manufacturing-orders.pallecons', ['winmanMo' => $winmanMo, 'pallecon' => $pallecon['id']]) }}" wire:navigate style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;background:#eef2ff;border:1px solid #c7d2fe;color:#4338ca;font-size:13px;font-weight:700;text-decoration:none;">{{ $isPalleconCompleted ? 'View Completed' : 'Continue' }}</a>
                                             </td>
                                         </tr>
                                     @endforeach
@@ -772,20 +798,38 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                     @if ($this->hasOpenPalleconForMo)
                         <div class="text-xs text-slate-500">Complete the open pallecon before creating another one for this MO.</div>
                     @else
-                        <div class="flex flex-wrap items-end gap-3">
-                            <div>
-                                <label class="block text-xs text-gray-600 mb-1">Pallecon weight (kg)</label>
-                                <input type="number" step="0.001" min="0.001" wire:model="palleconWeight" class="border-gray-300 rounded-md shadow-sm text-sm w-40" placeholder="e.g. 1000" />
-                                <span class="block text-xs text-gray-500 mt-1">Target weight for this pallecon.</span>
-                            </div>
-                            <x-primary-button wire:click="createPallecon" wire:loading.attr="disabled">
+                        <div class="flex flex-wrap items-center justify-end gap-3">
+                            <x-primary-button wire:click="openAddPalleconModal" wire:loading.attr="disabled">
                                 {{ count($this->moPallecons) === 0 ? 'Add pallecon' : 'Add another pallecon' }}
                             </x-primary-button>
                         </div>
-                        <p class="text-xs text-slate-500">Opens the pallecon. Use Continue on a row to record batch fills, the pallecon number, seals and completion — the WinMan reference is written back on seal.</p>
+                        <p class="text-xs text-slate-500 text-right">Use Continue on a row to record batch fills, the pallecon number, seals and completion — the WinMan reference is written back on seal.</p>
                     @endif
                 </div>
             </div>
         @endif
     </div>
+
+    @if ($showAddPalleconModal)
+        <div style="position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,0.5);padding:16px;" wire:click.self="closeAddPalleconModal">
+            <div style="background:#fff;border-radius:16px;box-shadow:0 20px 40px rgba(15,23,42,0.25);width:100%;max-width:360px;padding:24px;">
+                <h3 style="font-size:16px;font-weight:700;color:#0f172a;margin:0 0 4px;">{{ count($this->moPallecons) === 0 ? 'Add Pallecon' : 'Add Another Pallecon' }}</h3>
+                <p style="font-size:13px;color:#64748b;margin:0 0 16px;">Set a target fill weight to open a new pallecon for this MO.</p>
+
+                @if ($palleconError)
+                    <div class="text-sm bg-red-50 border border-red-200 rounded px-3 py-2 text-red-700" style="margin-bottom:12px;">{{ $palleconError }}</div>
+                @endif
+
+                <label class="block text-xs text-gray-600 mb-1">Pallecon weight (kg)</label>
+                <input type="number" step="0.001" min="0.001" wire:model="palleconWeight" wire:keydown.enter="createPallecon" autofocus class="border-gray-300 rounded-md shadow-sm text-sm w-full" placeholder="e.g. 1000" />
+                @error('palleconWeight') <span class="block text-xs text-red-600 mt-1">{{ $message }}</span> @enderror
+                <span class="block text-xs text-gray-500 mt-1">Target weight for this pallecon.</span>
+
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:20px;">
+                    <button type="button" wire:click="closeAddPalleconModal" style="padding:8px 16px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#334155;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>
+                    <x-primary-button wire:click="createPallecon" wire:loading.attr="disabled">Confirm</x-primary-button>
+                </div>
+            </div>
+        </div>
+    @endif
 </div>
