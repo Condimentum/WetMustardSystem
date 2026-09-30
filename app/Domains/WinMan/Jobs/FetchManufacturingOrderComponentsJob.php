@@ -26,7 +26,7 @@ class FetchManufacturingOrderComponentsJob
      */
     public function __invoke(int $winmanManufacturingOrder): array
     {
-        $itemTypes = array_values((array) config('winman.component_item_types', ['C', 'M']));
+        $itemTypes = array_values((array) config('winman.component_item_types', ['C']));
 
         $bindings = [$winmanManufacturingOrder];
         foreach ($itemTypes as $type) {

@@ -1529,12 +1529,12 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         @endunless
 
         {{-- Tabs --}}
-        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-            <div style="padding:0 14px;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);border-bottom:1px solid #dbe1ea;">
-                <nav style="display:flex;gap:8px;align-items:stretch;overflow:auto hidden;min-height:62px;">
+        <x-batch-allocation-styles />
+        <div class="ba-shell">
+            <div class="ba-tabs-wrap">
+                <nav class="ba-tabs">
                     @if ($this->workspaceUrl)
-                        <a href="{{ $this->workspaceUrl }}" wire:navigate style="display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #cbd5e1;background:#fff;color:#334155;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;text-decoration:none;white-space:nowrap;">
-                            <span aria-hidden="true">&larr;</span>
+                        <a href="{{ $this->workspaceUrl }}" wire:navigate class="ba-tab ba-tab--back">
                             <span>Back to Workspace</span>
                         </a>
                     @endif
@@ -1549,16 +1549,14 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
                     @foreach ($batchTabs as $key => $label)
                         @if ($key === 'packing')
-                            <a href="{{ route($this->packingRoute, $batch) }}" wire:navigate style="display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #cbd5e1;background:#fff;color:#334155;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;text-decoration:none;white-space:nowrap;">
-                                <span aria-hidden="true" style="font-size:14px;line-height:1;">&#129520;</span>
+                            <a href="{{ route($this->packingRoute, $batch) }}" wire:navigate class="ba-tab">
                                 <span>{{ $label }}</span>
                             </a>
                         @else
                             <button
                                 @click="tab = '{{ $key }}'"
-                                :style="tab === '{{ $key }}'
-                                    ? 'display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #4f46e5;background:#4f46e5;color:#fff;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;box-shadow:0 4px 12px rgba(79,70,229,.24);white-space:nowrap;'
-                                    : 'display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #cbd5e1;background:#fff;color:#334155;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;white-space:nowrap;'"
+                                class="ba-tab"
+                                :class="tab === '{{ $key }}' && 'ba-tab--active'"
                                 type="button"
                             >
                                 <span>{{ $label }}</span>
@@ -1714,12 +1712,12 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                     @endif
 
                     <div>
-                        <button @click="tab = 'allocation'" class="inline-flex items-center rounded-full bg-indigo-600 text-white text-sm font-semibold px-4 py-2 hover:bg-indigo-500">Continue to Ingredient Allocation →</button>
+                        <button @click="tab = 'allocation'" class="ba-btn ba-btn--lg">Continue to Ingredient Allocation →</button>
                     </div>
                 </div>
 
                 {{-- Unified Allocation Workspace --}}
-                <div x-show="tab === 'allocation'" class="space-y-3">
+                <div x-show="tab === 'allocation'" class="space-y-3" style="padding:14px;">
 
                     @if ($winManDown)
                         <x-winman-offline-banner message="WinMan connection is currently unavailable. Scanned/entered lots are accepted without live verification and issues will be attempted when you allocate - double-check quantities carefully." />
@@ -1728,20 +1726,16 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                     @if ($batch->componentSnapshots->isEmpty())
                         <div style="background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:12px;padding:12px 14px;font-size:14px;font-weight:600;">No component snapshot stored for this MO.</div>
                     @else
-                        <div style="background:#fff;border:1px solid #dbe1ea;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.05);">
-                            <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200 text-sm">
-                                <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
-                                    <tr>
-                                        <th class="px-3 py-2">Type</th>
-                                        <th class="px-3 py-2">Product</th>
-                                        <th class="px-3 py-2">Description</th>
-                                        <th class="px-3 py-2 text-right">Outstanding</th>
-                                        <th class="px-3 py-2 text-right">Allocated</th>
-                                        <th class="px-3 py-2 text-right"></th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-gray-100">
+                        <div class="ba-list">
+                            <div class="ba-grid ba-head">
+                                <div style="grid-area:badge;">Type</div>
+                                <div class="ba-prod">Product</div>
+                                <div class="ba-desc">Description</div>
+                                <div class="ba-out">Outstanding</div>
+                                <div class="ba-alloc">Allocated</div>
+                                <div class="ba-act"></div>
+                            </div>
+                            <div class="ba-rows">
                                     @foreach ($batch->componentSnapshots as $bomLine)
                                         @php
                                             $componentCode = (string) $bomLine->winman_component_product_id;
@@ -1840,36 +1834,56 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
                                             $allocatedLotCount = $allocatedPreviewRows->count();
                                         @endphp
-                                        <tr
+                                        @php
+                                            $itemType = strtoupper(trim((string) $bomLine->item_type));
+                                            // Shield metal: gold for the made item, silver for components, bronze otherwise.
+                                            $shield = match ($itemType) {
+                                                'M' => ['#fbe7a1', '#d4a93e', '#8a6420', '#5a3f10'],
+                                                'C' => ['#f4f5f7', '#b8bdc6', '#6b7280', '#374151'],
+                                                default => ['#f1d2ae', '#b9814a', '#7a4e24', '#4a2e12'],
+                                            };
+                                            $isOpenRow = $activeBomComponentSnapshotId === (int) $bomLine->id;
+                                        @endphp
+                                        <div
                                             wire:click="toggleBomAllocationRow({{ $bomLine->id }}, @js($componentCode), @js((string) $bomLine->component_description), @js($outstandingForBatchDisplay))"
-                                            class="cursor-pointer hover:bg-indigo-50/40 transition-colors">
-                                            <td class="px-3 py-2">{{ $bomLine->item_type }}</td>
-                                            <td class="px-3 py-2 text-gray-500">{{ $componentCode }}</td>
-                                            <td class="px-3 py-2">{{ $bomLine->component_description }}</td>
-                                            <td class="px-3 py-2 text-right">{{ $outstandingForBatchDisplay }}</td>
-                                            <td class="px-3 py-2 text-right">
-                                                <div class="font-medium">{{ $allocatedQtyDisplay }}</div>
+                                            @class(['ba-row ba-grid', 'ba-row--open' => $isOpenRow])>
+                                            <svg class="ba-badge" viewBox="0 0 40 46" role="img" aria-label="Type {{ $bomLine->item_type }}">
+                                                <defs>
+                                                    <linearGradient id="ba-shield-{{ $bomLine->id }}" x1="0" y1="0" x2="1" y2="1">
+                                                        <stop offset="0" stop-color="{{ $shield[0] }}"/>
+                                                        <stop offset=".55" stop-color="{{ $shield[1] }}"/>
+                                                        <stop offset="1" stop-color="{{ $shield[2] }}"/>
+                                                    </linearGradient>
+                                                </defs>
+                                                <path d="M20 2 L37 8 V22 C37 33 29 41 20 44 C11 41 3 33 3 22 V8 Z" fill="url(#ba-shield-{{ $bomLine->id }})" stroke="{{ $shield[3] }}" stroke-width="1.5"/>
+                                                <path d="M20 6 L33 10.5 V22 C33 31 27 37.5 20 40 C13 37.5 7 31 7 22 V10.5 Z" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1"/>
+                                                <text x="20" y="28.5" text-anchor="middle" font-family="Georgia, serif" font-size="17" font-weight="700" fill="{{ $shield[3] }}">{{ $bomLine->item_type }}</text>
+                                            </svg>
+                                            <div class="ba-prod" data-label="Product">{{ $componentCode }}</div>
+                                            <div class="ba-desc">{{ $bomLine->component_description }}</div>
+                                            <div class="ba-out" data-label="Outstanding">{{ $outstandingForBatchDisplay }}</div>
+                                            <div class="ba-alloc" data-label="Allocated">
+                                                {{ $allocatedQtyDisplay }}
                                                 @if ($allocatedLotCount > 0)
-                                                    <div class="text-xs text-gray-500">{{ $allocatedLotCount }} lot{{ $allocatedLotCount === 1 ? '' : 's' }}</div>
+                                                    <small>{{ $allocatedLotCount }} lot{{ $allocatedLotCount === 1 ? '' : 's' }}</small>
                                                 @endif
-                                            </td>
-                                            <td class="px-3 py-2 text-right">
+                                            </div>
+                                            <div class="ba-act">
                                                 <button
                                                     wire:click.stop="openAllocateModal({{ $bomLine->id }}, @js($componentCode), @js((string) $bomLine->component_description), @js($outstandingForBatchDisplay))"
                                                     type="button"
-                                                    class="inline-flex items-center px-2.5 py-1.5 rounded-md text-xs font-semibold border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100">
-                                                    {{ strtoupper((string) $bomLine->item_type) === 'C' && $this->editable ? 'Allocate' : 'View' }}
+                                                    class="ba-btn">
+                                                    {{ $itemType === 'C' && $this->editable ? 'Allocate' : 'View' }}
                                                 </button>
-                                            </td>
-                                        </tr>
+                                            </div>
+                                        </div>
 
-                                        @if ($activeBomComponentSnapshotId === (int) $bomLine->id)
-                                            <tr class="bg-indigo-50/40">
-                                                <td colspan="6" class="px-3 py-3 space-y-3">
-                                                    <div class="text-sm font-semibold text-indigo-900">{{ $activeBomMaterialCode }} - {{ $activeBomMaterialDescription }}</div>
+                                        @if ($isOpenRow)
+                                            <div class="ba-detail">
+                                                    <div class="ba-detail-title">{{ $activeBomMaterialCode }} - {{ $activeBomMaterialDescription }}</div>
 
                                                     @if ($activeBomMessage)
-                                                        <div class="text-xs text-indigo-700">{{ $activeBomMessage }}</div>
+                                                        <div class="ba-detail-msg">{{ $activeBomMessage }}</div>
                                                     @endif
 
                                                     @php
@@ -1892,59 +1906,46 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                         }
                                                     @endphp
 
-                                                    <div class="border border-indigo-100 rounded-lg overflow-hidden bg-white">
-                                                        <div class="overflow-x-auto">
-                                                        <table class="min-w-full divide-y divide-gray-200 text-sm">
-                                                            <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
-                                                                <tr>
-                                                                    <th class="px-3 py-2">Allocated Lot</th>
-                                                                    <th class="px-3 py-2">Supplier Lot</th>
-                                                                    <th class="px-3 py-2 text-right">Qty</th>
-                                                                    <th class="px-3 py-2">UOM</th>
-                                                                    <th class="px-3 py-2">WinMan</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody class="divide-y divide-gray-100">
-                                                                @forelse ($expandedRows as $row)
-                                                                    <tr>
-                                                                        <td class="px-3 py-2">{{ $row['lot_number'] }}</td>
-                                                                        <td class="px-3 py-2">{{ $row['supplier_lot_number'] }}</td>
-                                                                        <td class="px-3 py-2 text-right">{{ rtrim(rtrim((string) $row['quantity'], '0'), '.') }}</td>
-                                                                        <td class="px-3 py-2">{{ $row['uom'] }}</td>
-                                                                        <td class="px-3 py-2">
-                                                                            @if ($row['issue_status'] === 'success')
-                                                                                <span class="text-green-700">Issued</span>
-                                                                            @elseif ($row['issue_status'] === 'rejected')
-                                                                                <span class="text-amber-700" title="{{ $row['error_message'] }}">Rejected</span>
-                                                                            @elseif ($row['issue_status'] === 'failed')
-                                                                                <span class="text-red-700" title="{{ $row['error_message'] }}">Failed</span>
-                                                                            @else
-                                                                                <span class="text-gray-500">-</span>
-                                                                            @endif
-                                                                        </td>
-                                                                    </tr>
-                                                                @empty
-                                                                    <tr>
-                                                                        <td colspan="5" class="px-3 py-4 text-center text-gray-500">No allocations recorded yet for this BOM line.</td>
-                                                                    </tr>
-                                                                @endforelse
-                                                            </tbody>
-                                                        </table>
+                                                    <div class="ba-lots">
+                                                        <div class="ba-lots-grid ba-lots-head">
+                                                            <div>Allocated Lot</div>
+                                                            <div>Supplier Lot</div>
+                                                            <div class="ba-num">Qty</div>
+                                                            <div>UOM</div>
+                                                            <div>WinMan</div>
                                                         </div>
+                                                        @forelse ($expandedRows as $row)
+                                                            <div class="ba-lots-grid">
+                                                                <div>{{ $row['lot_number'] }}</div>
+                                                                <div>{{ $row['supplier_lot_number'] }}</div>
+                                                                <div class="ba-num">{{ rtrim(rtrim((string) $row['quantity'], '0'), '.') }}</div>
+                                                                <div>{{ $row['uom'] }}</div>
+                                                                <div>
+                                                                    @if ($row['issue_status'] === 'success')
+                                                                        <span class="text-green-700">Issued</span>
+                                                                    @elseif ($row['issue_status'] === 'rejected')
+                                                                        <span class="text-amber-700" title="{{ $row['error_message'] }}">Rejected</span>
+                                                                    @elseif ($row['issue_status'] === 'failed')
+                                                                        <span class="text-red-700" title="{{ $row['error_message'] }}">Failed</span>
+                                                                    @else
+                                                                        <span class="text-gray-500">-</span>
+                                                                    @endif
+                                                                </div>
+                                                            </div>
+                                                        @empty
+                                                            <div style="padding:16px 14px;text-align:center;color:#8a7a5c;">No allocations recorded yet for this BOM line.</div>
+                                                        @endforelse
                                                     </div>
-                                                </td>
-                                            </tr>
+                                            </div>
                                         @endif
                                     @endforeach
-                                </tbody>
-                            </table>
                             </div>
                         </div>
                     @endif
 
                     @if ($this->packingMode === 'pallecon')
-                        <div class="px-6 pb-6">
-                            <button @click="tab = 'signoff'" type="button" class="inline-flex items-center rounded-full bg-indigo-600 text-white text-sm font-semibold px-4 py-2 hover:bg-indigo-500">Continue to Ingredients Sign Off →</button>
+                        <div class="ba-foot">
+                            <button @click="tab = 'signoff'" type="button" class="ba-btn ba-btn--lg">Continue to Ingredients Sign Off →</button>
                         </div>
                     @endif
                 </div>

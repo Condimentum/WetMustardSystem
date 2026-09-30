@@ -65,13 +65,17 @@ return [
     | components (rows that carry a WinMan Product). Routing/resource lines
     | (ItemType 'R', Product NULL) are excluded.
     |
+    | Finished lines (ItemType 'M') are excluded too: WinMan adds one per
+    | finished-goods booking (Quantity o/s 0), so they are output records,
+    | not ingredients to allocate.
+    |
     | NOTE: Mustard-specific classification and issue rules must be reviewed
     | during implementation. Mint-specific classification assumptions must not
     | be copied blindly (scope §11.3).
     |
     */
 
-    'component_item_types' => ['C', 'M'],
+    'component_item_types' => ['C'],
 
     /*
     |--------------------------------------------------------------------------
