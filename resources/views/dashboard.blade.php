@@ -1,38 +1,74 @@
 <x-app-layout>
+    <style>
+        @font-face { font-family: 'Libre Baskerville'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('{{ asset('fonts/libre-baskerville-latin.woff2') }}') format('woff2'); }
+
+        .dash { max-width: 42rem; margin: 0 auto; padding: 18px; border-radius: 24px;
+            background: #f8f4ea url('{{ asset('workspace-bg.png') }}?v={{ filemtime(public_path('workspace-bg.png')) }}') center / cover no-repeat; }
+
+        .dash-banner { position: relative; overflow: hidden; display: flex; align-items: center; gap: 18px; min-height: 150px; margin-bottom: 18px; padding: 24px 26px; border-radius: 20px; box-shadow: 0 8px 22px rgba(80, 60, 20, .22);
+            background: url('{{ asset('dashboard-header-bg.png') }}?v={{ filemtime(public_path('dashboard-header-bg.png')) }}') center / cover no-repeat; }
+        .dash-banner::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(255, 250, 235, .55), rgba(255, 250, 235, .15) 70%, transparent); }
+        .dash-logo { position: relative; flex: none; width: 72px; height: 72px; padding: 5px; border-radius: 18px; background: linear-gradient(160deg, #2c3772, #161d44); border: 2px solid #c9a24a; box-shadow: 0 6px 14px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .2); }
+        .dash-logo img { display: block; width: 100%; height: 100%; border-radius: 13px; object-fit: cover; }
+        .dash-title { position: relative; margin: 0; font-family: 'Libre Baskerville', Georgia, serif; font-size: 1.75rem; font-weight: 700; line-height: 1.2; color: #1c1d26; text-shadow: 0 0 12px rgba(255, 250, 235, .95), 0 0 4px rgba(255, 250, 235, .9); }
+
+        .dash-tiles { display: flex; flex-direction: column; gap: 12px; }
+        .dash-tile { display: flex; align-items: center; gap: 16px; padding: 12px 18px 12px 12px; border: 1px solid #e2d7bf; border-radius: 16px; text-decoration: none; color: inherit;
+            background: linear-gradient(180deg, #fdfbf5, #f2ecde); box-shadow: 0 4px 10px rgba(80, 60, 20, .14), inset 0 1px 0 #fff; transition: transform .15s, box-shadow .15s; }
+        .dash-tile:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(80, 60, 20, .2), inset 0 1px 0 #fff; }
+        .dash-medal { flex: none; display: flex; align-items: center; justify-content: center; width: 60px; height: 60px; border-radius: 50%; border: 3px solid #c9a24a; color: #e8c877;
+            background: radial-gradient(circle at 35% 30%, #3a4686, #1c2552 70%); box-shadow: inset 0 0 0 2px #7a5f22, inset 0 4px 10px rgba(0, 0, 0, .35), 0 3px 8px rgba(0, 0, 0, .25); }
+        .dash-medal img { width: 88%; height: 88%; object-fit: contain; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .35)); }
+        .dash-text { flex: 1; min-width: 0; }
+        .dash-name { display: block; font-size: 1.15rem; font-weight: 700; color: #1f2330; }
+        .dash-sub { display: block; margin-top: 2px; font-size: .86rem; color: #4b4636; }
+        .dash-chevron { flex: none; width: 24px; height: 24px; color: #9a9384; transition: transform .15s, color .15s; }
+        .dash-tile:hover .dash-chevron { transform: translateX(3px); color: #6b5a2f; }
+
+        @media (max-width: 640px) {
+            .dash { padding: 12px; border-radius: 18px; }
+            .dash-banner { min-height: 110px; gap: 12px; padding: 16px; }
+            .dash-logo { width: 54px; height: 54px; border-radius: 14px; }
+            .dash-logo img { border-radius: 10px; }
+            .dash-title { font-size: 1.2rem; }
+            .dash-tile { gap: 12px; padding: 10px 12px 10px 10px; }
+            .dash-medal { width: 50px; height: 50px; }
+            .dash-name { font-size: 1rem; }
+            .dash-sub { font-size: .8rem; }
+        }
+    </style>
+
     <div class="py-8">
-        <div class="max-w-2xl mx-auto sm:px-6 lg:px-8">
-            <div
-                class="relative mb-8 flex items-center justify-center gap-4 overflow-hidden rounded-3xl px-6 py-8 shadow-lg"
-                style="background-image: url('{{ asset('dashboard-header-bg.png') }}'); background-size: 100% 100%; background-repeat: no-repeat;"
-            >
-                <div class="absolute inset-0 bg-white/55"></div>
-                <span class="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
-                    <img src="{{ asset('wet-mustard-booking-icon.png') }}" alt="Wet Mustard Booking System" class="h-full w-full object-cover" />
+        <div class="dash">
+            <div class="dash-banner">
+                <span class="dash-logo">
+                    <img src="{{ asset('wet-mustard-booking-icon.png') }}" alt="Wet Mustard Booking System" />
                 </span>
-                <div class="relative text-left">
-                    <h1 class="text-3xl font-extrabold tracking-tight text-slate-900">Wet Mustard Booking System</h1>
-                </div>
+                <h1 class="dash-title">Wet Mustard Booking System</h1>
             </div>
 
-            <div class="space-y-3">
+            <div class="dash-tiles">
                 @foreach ($tiles as $tile)
-                    <a
-                        href="{{ route($tile['route']) }}"
-                        wire:navigate
-                        class="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm transition hover:border-indigo-300 hover:shadow-md"
-                    >
-                        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 group-hover:bg-indigo-600 group-hover:text-white transition">
-                            <x-menu-tile-icon :icon="$tile['icon']" />
-                        </span>
-
-                        <span class="min-w-0 flex-1">
-                            <span class="block font-semibold text-slate-900">{{ $tile['title'] }}</span>
-                            @if ($tile['subtitle'])
-                                <span class="block text-sm text-slate-500">{{ $tile['subtitle'] }}</span>
+                    @php
+                        $iconFile = 'images/dashboard/'.$tile['icon'].'.png';
+                    @endphp
+                    <a href="{{ route($tile['route']) }}" wire:navigate class="dash-tile">
+                        <span class="dash-medal">
+                            @if (file_exists(public_path($iconFile)))
+                                <img src="{{ asset($iconFile) }}" alt="" />
+                            @else
+                                <x-menu-tile-icon :icon="$tile['icon']" />
                             @endif
                         </span>
 
-                        <svg class="h-5 w-5 shrink-0 text-slate-300 transition group-hover:text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <span class="dash-text">
+                            <span class="dash-name">{{ $tile['title'] }}</span>
+                            @if ($tile['subtitle'])
+                                <span class="dash-sub">{{ $tile['subtitle'] }}</span>
+                            @endif
+                        </span>
+
+                        <svg class="dash-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" />
                         </svg>
                     </a>

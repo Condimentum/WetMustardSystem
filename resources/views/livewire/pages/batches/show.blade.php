@@ -1466,107 +1466,20 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         @endif
 
         {{-- Header --}}
-        @php
-            $moStatus = strtoupper(trim((string) ($this->moWinManStatus ?? '')));
-            $statusPill = match ($moStatus) {
-                'C', 'CANCELLED', 'CANCELED' => ['bg' => '#fef2f2', 'border' => '#fca5a5', 'color' => '#dc2626', 'dot' => '#dc2626', 'label' => 'Cancelled'],
-                'F' => ['bg' => '#eff6ff', 'border' => '#bfdbfe', 'color' => '#2563eb', 'dot' => '#2563eb', 'label' => 'Firm'],
-                'R' => ['bg' => '#fffbeb', 'border' => '#fcd34d', 'color' => '#b45309', 'dot' => '#f59e0b', 'label' => 'Released'],
-                'I' => ['bg' => '#ecfdf5', 'border' => '#86efac', 'color' => '#15803d', 'dot' => '#16a34a', 'label' => 'Issued'],
-                default => ['bg' => '#f3f4f6', 'border' => '#d1d5db', 'color' => '#4b5563', 'dot' => '#6b7280', 'label' => $moStatus !== '' ? $moStatus : 'Unknown'],
-            };
-        @endphp
-        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-            <div style="padding:28px 32px 0;">
-
-                <div style="display:flex;align-items:center;gap:18px;padding-bottom:22px;border-bottom:1px solid #e5e7eb;margin-bottom:22px;flex-wrap:wrap;">
-                    <div style="width:64px;height:64px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:2px solid #86efac;overflow:hidden;">
-                        <img src="{{ asset('mustard.png') }}" alt="Mustard" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
-                    </div>
-                    <div>
-                        <div style="font-size:1.5rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">MANUFACTURING ORDER</div>
-                        <div style="font-size:0.78rem;font-weight:700;color:#9ca3af;letter-spacing:.15em;margin-top:4px;">DETAILS</div>
-                    </div>
-                    <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:700;background:{{ $statusPill['bg'] }};border:1px solid {{ $statusPill['border'] }};color:{{ $statusPill['color'] }};">
-                        <span style="width:7px;height:7px;border-radius:50%;background:{{ $statusPill['dot'] }};display:inline-block;"></span>
-                        {{ $statusPill['label'] }}
-                    </span>
-                </div>
-
-                <div style="overflow:auto hidden;margin-bottom:26px;">
-                    <div style="display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:0;min-width:760px;">
-                        <div style="padding:0 20px 0 0;border-right:1px solid #e5e7eb;">
-                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
-                                <div style="width:32px;height:32px;background:#ecfdf5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">&#128230;</div>
-                                <span style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">MO Number</span>
-                            </div>
-                            <div style="font-size:1.05rem;font-weight:800;color:#16a34a;">{{ $batch->manufacturingOrder?->mo_number ?? '—' }}</div>
-                        </div>
-
-                        <div style="padding:0 20px;border-right:1px solid #e5e7eb;">
-                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
-                                <div style="width:32px;height:32px;background:#ecfdf5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">&#127981;</div>
-                                <span style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Product</span>
-                            </div>
-                            <div style="font-size:1.05rem;font-weight:800;color:#1a1a2e;">{{ $batch->manufacturingOrder?->winman_product_id ?? '—' }}</div>
-                        </div>
-
-                        <div style="padding:0 20px;border-right:1px solid #e5e7eb;">
-                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
-                                <div style="width:32px;height:32px;background:#eff6ff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">&#128221;</div>
-                                <span style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Product Description</span>
-                            </div>
-                            <div style="font-size:0.95rem;font-weight:700;color:#1a1a2e;line-height:1.35;">{{ $this->moProductDescription ?? '—' }}</div>
-                        </div>
-
-                        <div style="padding:0 0 0 20px;">
-                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
-                                <div style="width:32px;height:32px;background:#eff6ff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">&#128197;</div>
-                                <span style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Release Date</span>
-                            </div>
-                            <div style="font-size:1.05rem;font-weight:800;color:#1a1a2e;">{{ $this->moReleaseDate ?? ($batch->production_date?->format('d/m/Y') ?? '—') }}</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="background:#2d3f8f;border-radius:10px;overflow:hidden;margin-bottom:20px;">
-                    <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.12);">
-                        <span style="font-size:0.75rem;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:.12em;">Quantities</span>
-                    </div>
-                    <div style="overflow:auto hidden;background:#f8fafc;">
-                        <div style="display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:0;min-width:700px;">
-                            <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
-                                <div style="width:44px;height:44px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#128230;</div>
-                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">On Order</div>
-                                <div style="font-size:1.3rem;font-weight:900;color:#f59e0b;">{{ $this->formatQty($this->moPlannedQuantity) }}</div>
-                            </div>
-
-                            <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
-                                <div style="width:44px;height:44px;background:#16a34a;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#9989;</div>
-                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Made</div>
-                                <div style="font-size:1.3rem;font-weight:900;color:#16a34a;">{{ $this->formatQty($this->moQuantityMade) }}</div>
-                            </div>
-
-                            <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
-                                <div style="width:44px;height:44px;background:#2563eb;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#128202;</div>
-                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Outstanding</div>
-                                <div style="font-size:1.3rem;font-weight:900;color:#2563eb;">{{ $this->formatQty($this->moQuantityOutstanding) }}</div>
-                            </div>
-
-                            <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
-                                <div style="width:44px;height:44px;background:#7c3aed;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#128196;</div>
-                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Batches</div>
-                                <div style="font-size:1.3rem;font-weight:900;color:#7c3aed;">{{ $this->moBatchCount }}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div style="padding:0 32px 18px;">
-                <a href="{{ route('manufacturing-orders.search') }}" wire:navigate style="font-size:0.88rem;color:#4f46e5;text-decoration:none;">&larr; MO Search</a>
-            </div>
-        </div>
+        <x-mo-header
+            :system-type="$this->moWinManStatus ?? ''"
+            :mo-number="$batch->manufacturingOrder?->mo_number ?? '—'"
+            :product="$batch->manufacturingOrder?->winman_product_id ?? '—'"
+            :description="$this->moProductDescription ?? '—'"
+            date-label="Release Date"
+            :date-value="$this->moReleaseDate ?? ($batch->production_date?->format('d/m/Y') ?? '—')"
+            :planned="$this->moPlannedQuantity"
+            :made="$this->moQuantityMade"
+            :outstanding="$this->moQuantityOutstanding"
+            :batches="$this->moBatchCount"
+            :fmt="fn (float $v): string => $this->formatQty($v)"
+            style="margin-bottom:16px;"
+        ><a href="{{ route('manufacturing-orders.search') }}" wire:navigate style="font-size:0.88rem;color:#4f46e5;text-decoration:none;">&larr; MO Search</a></x-mo-header>
 
         @unless ($this->editable)
             <div @class([

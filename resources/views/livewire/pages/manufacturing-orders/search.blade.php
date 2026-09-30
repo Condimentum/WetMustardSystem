@@ -473,7 +473,8 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
 }; ?>
 
 <div class="py-8">
-    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <x-mo-workspace-styles />
+    <div class="wm-page max-w-7xl mx-auto space-y-6">
 
         @if ($winManDown)
             <x-winman-offline-banner :message="'WinMan connection is currently unavailable. Showing the last synced list of outstanding orders'.($ordersSyncedAt ? ' (synced '.$ordersSyncedAt.')' : '').' — existing in-progress batches remain fully usable from the batch screen.'" />
@@ -593,11 +594,11 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
             @php
                 $startSelectedOrder = collect($orders)->firstWhere('winman_manufacturing_order', $selectedWinmanMo);
             @endphp
-            <div class="bg-white shadow-sm rounded-lg p-5 border border-indigo-100">
+            <div class="wm-card" style="padding:18px 22px;">
                 <div class="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                        <div class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Start Workspace</div>
-                        <div class="text-lg font-semibold text-gray-800 mt-1">
+                        <div style="font-size:.72rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#8a6a2a;">Start Workspace</div>
+                        <div class="wml-title" style="font-size:1.2rem;margin-top:4px;">
                             {{ $startSelectedOrder['winman_manufacturing_order_id'] ?? $selectedWinmanMo }}
                         </div>
                         <div class="text-sm text-gray-600 mt-1">
@@ -607,100 +608,68 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                     <button
                         type="button"
                         wire:click="openSelectedBatchWorkspace"
-                        class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                        class="wm-btn-dark">
                         Open Batch
                     </button>
                 </div>
             </div>
         @endif
-        <div style="background:#fff;border:1px solid #dbe1ea;border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(15,23,42,0.08);">
-            @php
-                $allOrders = collect($orders);
-                $hasAnyOrder = $allOrders->isNotEmpty();
-
-                $renderOrderRow = function (array $order): string {
-                    $winmanMo = (int) $order['winman_manufacturing_order'];
-                    $systemTypeRaw = strtoupper(trim((string) ($order['system_type'] ?? '')));
-                    $systemTypeStyles = match ($systemTypeRaw) {
-                        'F' => ['bg' => '#eff6ff', 'border' => '#bfdbfe', 'color' => '#1d4ed8', 'label' => 'Firm'],
-                        'R' => ['bg' => '#fffbeb', 'border' => '#fcd34d', 'color' => '#b45309', 'label' => 'Released'],
-                        'I' => ['bg' => '#ecfdf5', 'border' => '#86efac', 'color' => '#15803d', 'label' => 'Issued'],
-                        default => ['bg' => '#f1f5f9', 'border' => '#cbd5e1', 'color' => '#334155', 'label' => $systemTypeRaw !== '' ? $systemTypeRaw : 'Unknown'],
-                    };
-
-                    $actionButton = '<a href="'.e(route('manufacturing-orders.workspace', ['winmanMo' => $winmanMo])).'" wire:navigate style="display:inline-flex;align-items:center;padding:9px 14px;border-radius:10px;background:linear-gradient(180deg,#4f46e5 0%,#4338ca 100%);border:1px solid #4338ca;color:#fff;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;text-decoration:none;box-shadow:0 3px 10px rgba(67,56,202,.22);">Start</a>';
-
-                    $productDescription = e(\Illuminate\Support\Str::limit((string) $order['product_description'], 52));
-                    $moRef = e((string) $order['winman_manufacturing_order_id']);
-                    $productId = e((string) $order['winman_product_id']);
-                    $formattedOutstanding = number_format((float) $order['quantity_outstanding'], 3, '.', '');
-                    $outstanding = e(rtrim(rtrim($formattedOutstanding, '0'), '.'));
-                    $due = e($order['due_date'] ? (string) \Illuminate\Support\Str::of($order['due_date'])->before(' ') : '—');
-
-                    return '<tr style="color:#334155;background:#fff;">'
-                        .'<td class="px-4 py-4 font-semibold" style="color:#1e293b;">'.$moRef.'</td>'
-                        .'<td class="px-4 py-4">'
-                            .'<span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid '.$systemTypeStyles['border'].';background:'.$systemTypeStyles['bg'].';color:'.$systemTypeStyles['color'].';font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;">'.$systemTypeStyles['label'].'</span>'
-                        .'</td>'
-                        .'<td class="px-4 py-4" style="line-height:1.35;">'
-                            .'<div style="color:#1e293b;font-weight:700;">'.$productDescription.'</div>'
-                            .'<div style="color:#64748b;font-size:12px;margin-top:2px;">'.$productId.'</div>'
-                        .'</td>'
-                        .'<td class="px-4 py-4 text-right" style="color:#0f766e;font-weight:800;">'.$outstanding.'</td>'
-                        .'<td class="px-4 py-4" style="font-weight:700;color:#1e293b;">'.$due.'</td>'
-                        .'<td class="px-4 py-4 text-right">'.$actionButton.'</td>'
-                        .'</tr>';
-                };
-            @endphp
-
-            <div style="padding:24px 26px;background:linear-gradient(135deg,#f8fafc 0%,#e0ecff 100%);border-bottom:1px solid #dbe1ea;">
-                <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
-                    <div style="width:56px;height:56px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #86efac;overflow:hidden;flex-shrink:0;">
-                        <img src="{{ asset('mo-list-icon.png') }}" alt="Manufacturing Order List" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
-                    </div>
-
-                    <div>
-                        <div style="font-size:1.3rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">WET MUSTARD - MANUFACTURING</div>
-                        <div style="font-size:0.75rem;font-weight:700;color:#64748b;letter-spacing:.14em;margin-top:4px;">OUTSTANDING MANUFACTURING ORDERS</div>
-                    </div>
-
-                    <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:12px;font-weight:800;">
-                        {{ count($orders) }} shown
-                    </span>
+        <section class="wm-card wm-card--gear-tr">
+            <div class="wml-head">
+                <span class="wml-medal"><img src="{{ asset('images/dashboard/gear.png') }}" alt="" /></span>
+                <div>
+                    <div class="wml-title">WET MUSTARD - MANUFACTURING</div>
+                    <div class="wml-sub">OUTSTANDING MANUFACTURING ORDERS</div>
                 </div>
+                <span class="wml-count">{{ count($orders) }} shown</span>
             </div>
 
-            <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead>
-                    <tr style="background:#2d3f8f;color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
-                        <th class="px-4 py-3">MO Ref</th>
-                        <th class="px-4 py-3">Type</th>
-                        <th class="px-4 py-3">Product</th>
-                        <th class="px-4 py-3 text-right">Outstanding</th>
-                        <th class="px-4 py-3">Due</th>
-                        <th class="px-4 py-3"></th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    @if (! $hasAnyOrder)
-                        <tr>
-                            <td colspan="6" class="px-4 py-10 text-center text-sm text-gray-500">
-                                No eligible outstanding MOs found.
-                                <div class="mt-1 text-xs text-gray-400">
-                                    The ProductMaster WinMan mapping may be empty (pending WM024).
-                                </div>
-                            </td>
-                        </tr>
-                    @else
-                        @foreach ($allOrders as $order)
-                            {!! $renderOrderRow($order) !!}
-                        @endforeach
-                    @endif
-                </tbody>
-            </table>
+            <div class="wml-table">
+                <div class="wml-bar wm-grid wm-grid--molist">
+                    <div>MO Ref</div>
+                    <div>Type</div>
+                    <div>Product</div>
+                    <div class="wml-num">Outstanding</div>
+                    <div>Due</div>
+                    <div></div>
+                </div>
+
+                @forelse ($orders as $order)
+                    @php
+                        $systemTypeRaw = strtoupper(trim((string) ($order['system_type'] ?? '')));
+                        $systemType = match ($systemTypeRaw) {
+                            'F' => ['bg' => '#1e4f8a', 'dot' => '#bfdbfe', 'label' => 'Firm'],
+                            'R' => ['bg' => '#9a5b12', 'dot' => '#fde68a', 'label' => 'Released'],
+                            'I' => ['bg' => '#2f5d3a', 'dot' => '#86efac', 'label' => 'Issued'],
+                            default => ['bg' => '#4b5563', 'dot' => '#d1d5db', 'label' => $systemTypeRaw !== '' ? $systemTypeRaw : 'Unknown'],
+                        };
+                    @endphp
+                    <div class="wm-prow wm-grid wm-grid--molist">
+                        <div class="wm-ref wml-ref">{{ $order['winman_manufacturing_order_id'] }}</div>
+                        <div data-label="Type">
+                            <span class="wm-pill" style="background:{{ $systemType['bg'] }};">
+                                <span class="wm-pill-dot" style="background:{{ $systemType['dot'] }};"></span>
+                                {{ $systemType['label'] }}
+                            </span>
+                        </div>
+                        <div class="wml-prod" data-label="Product">
+                            {{ \Illuminate\Support\Str::limit((string) $order['product_description'], 52) }}
+                            <small>{{ $order['winman_product_id'] }}</small>
+                        </div>
+                        <div class="wml-num" data-label="Outstanding">{{ $this->formatQuantity((float) $order['quantity_outstanding']) }}</div>
+                        <div data-label="Due">{{ $order['due_date'] ? (string) \Illuminate\Support\Str::of($order['due_date'])->before(' ') : '—' }}</div>
+                        <div class="wm-action">
+                            <a href="{{ route('manufacturing-orders.workspace', ['winmanMo' => (int) $order['winman_manufacturing_order']]) }}" wire:navigate class="wm-btn-continue">Start</a>
+                        </div>
+                    </div>
+                @empty
+                    <div class="wml-empty">
+                        No eligible outstanding MOs found.
+                        <div style="margin-top:4px;font-size:.75rem;color:#9a8b6d;">The ProductMaster WinMan mapping may be empty (pending WM024).</div>
+                    </div>
+                @endforelse
             </div>
-        </div>
+        </section>
         @endif
     </div>
 </div>

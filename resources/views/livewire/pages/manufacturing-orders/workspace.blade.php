@@ -456,7 +456,8 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
 }; ?>
 
 <div class="py-8">
-    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <x-mo-workspace-styles />
+    <div class="wm-page max-w-7xl mx-auto space-y-6">
         <div class="flex items-center justify-end">
             <a href="{{ route('manufacturing-orders.search') }}" wire:navigate class="text-sm text-indigo-600 hover:underline">Back to Manufacturing Orders</a>
         </div>
@@ -477,15 +478,6 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
             @endif
 
             @php
-                $moStatus = strtoupper(trim((string) ($order['system_type'] ?? '')));
-                $statusPill = match ($moStatus) {
-                    'C', 'CANCELLED', 'CANCELED' => ['bg' => '#fef2f2', 'border' => '#fca5a5', 'color' => '#dc2626', 'dot' => '#dc2626', 'label' => 'Cancelled'],
-                    'F' => ['bg' => '#eff6ff', 'border' => '#bfdbfe', 'color' => '#2563eb', 'dot' => '#2563eb', 'label' => 'Firm'],
-                    'R' => ['bg' => '#fffbeb', 'border' => '#fcd34d', 'color' => '#b45309', 'dot' => '#f59e0b', 'label' => 'Released'],
-                    'I' => ['bg' => '#ecfdf5', 'border' => '#86efac', 'color' => '#15803d', 'dot' => '#16a34a', 'label' => 'Issued'],
-                    default => ['bg' => '#f3f4f6', 'border' => '#d1d5db', 'color' => '#4b5563', 'dot' => '#6b7280', 'label' => $moStatus !== '' ? $moStatus : 'Unknown'],
-                };
-
                 $planned = (float) ($order['planned_quantity'] ?? 0);
                 $outstanding = (float) ($order['quantity_outstanding'] ?? 0);
                 $made = max($planned - $outstanding, 0.0);
@@ -496,184 +488,129 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                 };
             @endphp
 
-            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-                <div style="padding:28px 32px 0;">
-                    <div style="display:flex;align-items:center;gap:18px;padding-bottom:22px;border-bottom:1px solid #e5e7eb;margin-bottom:22px;flex-wrap:wrap;">
-                        <div style="width:64px;height:64px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:2px solid #86efac;overflow:hidden;">
-                            <img src="{{ asset('mustard.png') }}" alt="Mustard" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
-                        </div>
-                        <div>
-                            <div style="font-size:1.5rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">MANUFACTURING ORDER</div>
-                            <div style="font-size:0.78rem;font-weight:700;color:#9ca3af;letter-spacing:.15em;margin-top:4px;">DETAILS</div>
-                        </div>
-                        <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:700;background:{{ $statusPill['bg'] }};border:1px solid {{ $statusPill['border'] }};color:{{ $statusPill['color'] }};">
-                            <span style="width:7px;height:7px;border-radius:50%;background:{{ $statusPill['dot'] }};display:inline-block;"></span>
-                            {{ $statusPill['label'] }}
-                        </span>
-                    </div>
+            <x-mo-header
+                :system-type="$order['system_type'] ?? ''"
+                :mo-number="$order['winman_manufacturing_order_id'] ?? $winmanMo"
+                :product="$order['winman_product_id'] ?? '-'"
+                :description="$order['product_description'] ?? '-'"
+                date-label="Due Date"
+                :date-value="! empty($order['due_date']) ? (string) \Illuminate\Support\Str::of((string) $order['due_date'])->before(' ') : '-'"
+                :planned="$planned"
+                :made="$made"
+                :outstanding="$outstanding"
+                :batches="count($existingBatches)"
+                :fmt="$fmt"
+            />
 
-                    <div style="overflow:auto hidden;margin-bottom:26px;">
-                        <div style="display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:0;min-width:760px;">
-                            <div style="padding:0 20px 0 0;border-right:1px solid #e5e7eb;">
-                                <div style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">MO Number</div>
-                                <div style="font-size:1.05rem;font-weight:800;color:#16a34a;">{{ $order['winman_manufacturing_order_id'] ?? $winmanMo }}</div>
-                            </div>
-
-                            <div style="padding:0 20px;border-right:1px solid #e5e7eb;">
-                                <div style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">Product</div>
-                                <div style="font-size:1.05rem;font-weight:800;color:#1a1a2e;">{{ $order['winman_product_id'] ?? '-' }}</div>
-                            </div>
-
-                            <div style="padding:0 20px;border-right:1px solid #e5e7eb;">
-                                <div style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">Product Description</div>
-                                <div style="font-size:0.95rem;font-weight:700;color:#1a1a2e;line-height:1.35;">{{ $order['product_description'] ?? '-' }}</div>
-                            </div>
-
-                            <div style="padding:0 0 0 20px;">
-                                <div style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">Due Date</div>
-                                <div style="font-size:1.05rem;font-weight:800;color:#1a1a2e;">{{ ! empty($order['due_date']) ? (string) \Illuminate\Support\Str::of((string) $order['due_date'])->before(' ') : '-' }}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div style="background:#2d3f8f;border-radius:10px;overflow:hidden;margin-bottom:20px;">
-                        <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.12);">
-                            <span style="font-size:0.75rem;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:.12em;">Quantities</span>
-                        </div>
-                        <div style="overflow:auto hidden;background:#f8fafc;">
-                            <div style="display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:0;min-width:700px;">
-                                <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
-                                    <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">On Order</div>
-                                    <div style="font-size:1.3rem;font-weight:900;color:#f59e0b;">{{ $fmt($planned) }}</div>
-                                </div>
-                                <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
-                                    <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Made</div>
-                                    <div style="font-size:1.3rem;font-weight:900;color:#16a34a;">{{ $fmt($made) }}</div>
-                                </div>
-                                <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
-                                    <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Outstanding</div>
-                                    <div style="font-size:1.3rem;font-weight:900;color:#2563eb;">{{ $fmt($outstanding) }}</div>
-                                </div>
-                                <div style="padding:22px 16px;text-align:center;">
-                                    <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Batches</div>
-                                    <div style="font-size:1.3rem;font-weight:900;color:#7c3aed;">{{ count($existingBatches) }}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-                <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-                    <div class="text-base font-semibold text-gray-800">Batch Workspace</div>
-                </div>
-                <div class="p-6 space-y-6">
-
+            <section class="wm-card wm-card--gear-tr">
                 @if ($error)
-                    <div class="text-sm bg-red-50 border border-red-200 rounded px-3 py-2 text-red-700">{{ $error }}</div>
+                    <div class="text-sm bg-red-50 border border-red-200 rounded px-3 py-2 text-red-700" style="margin-bottom:12px;">{{ $error }}</div>
                 @endif
 
                 @if (count($existingBatches) > 0)
-                    <div style="background:#fff;border:1px solid #dbe1ea;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.05);">
-                        <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200 text-sm">
-                            <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
-                                <tr>
-                                    <th class="px-4 py-3">Reference</th>
-                                    <th class="px-3 py-2">Qty</th>
-                                    <th class="px-3 py-2">Production Date</th>
-                                    <th class="px-3 py-2">Status</th>
-                                    <th class="px-3 py-2">Allocation</th>
-                                    <th class="px-3 py-2 text-right"></th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100">
-                                @foreach ($existingBatches as $batch)
-                                    @php
-                                        $isIssued = (string) $batch['status'] === \App\Models\BatchRecord::STATUS_IN_PROGRESS;
-                                        $isCompleted = (string) $batch['status'] === \App\Models\BatchRecord::STATUS_COMPLETED;
-                                        $batchStatusStyles = match ((string) $batch['status']) {
-                                            \App\Models\BatchRecord::STATUS_IN_PROGRESS => ['bg' => '#fef9c3', 'border' => '#fde68a', 'color' => '#92400e', 'dot' => '#f59e0b'],
-                                            \App\Models\BatchRecord::STATUS_COMPLETED => ['bg' => '#dcfce7', 'border' => '#86efac', 'color' => '#166534', 'dot' => '#22c55e'],
-                                            \App\Models\BatchRecord::STATUS_QA_REVIEW => ['bg' => '#ede9fe', 'border' => '#c4b5fd', 'color' => '#5b21b6', 'dot' => '#8b5cf6'],
-                                            \App\Models\BatchRecord::STATUS_CLOSED => ['bg' => '#f1f5f9', 'border' => '#cbd5e1', 'color' => '#334155', 'dot' => '#64748b'],
-                                            default => ['bg' => '#fee2e2', 'border' => '#fca5a5', 'color' => '#991b1b', 'dot' => '#ef4444'],
-                                        };
-                                        $batchStatusLabel = $isIssued
-                                            ? 'Issued'
-                                            : \Illuminate\Support\Str::headline((string) $batch['status']);
-                                    @endphp
-                                    <tr>
-                                        <td class="px-4 py-3 font-medium text-gray-800">
-                                            <div>{{ $batch['reference'] !== '' ? $batch['reference'] : '—' }}</div>
-                                            @if ($batch['reference'] !== $batch['application_batch_number'] && $batch['application_batch_number'] !== '')
-                                                <div class="text-xs text-slate-400 mt-1">App ref: {{ $batch['application_batch_number'] }}</div>
-                                            @endif
-                                        </td>
-                                        <td class="px-3 py-2">{{ $fmt((float) $batch['planned_quantity']) }}</td>
-                                        <td class="px-3 py-2">{{ $batch['production_date'] ?? '-' }}</td>
-                                        <td class="px-3 py-2">
-                                            <span style="display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid {{ $batchStatusStyles['border'] }};background:{{ $batchStatusStyles['bg'] }};color:{{ $batchStatusStyles['color'] }};font-size:13px;font-weight:700;">
-                                                <span style="height:8px;width:8px;border-radius:999px;background:{{ $batchStatusStyles['dot'] }};display:inline-block;"></span>
-                                                {{ $batchStatusLabel }}
-                                            </span>
-                                        </td>
-                                        <td class="px-3 py-2">
-                                            @php
-                                                $allocState = (string) ($batch['allocation_state'] ?? 'awaiting');
-                                                $allocStyles = match ($allocState) {
-                                                    'allocated' => ['bg' => '#dcfce7', 'border' => '#86efac', 'color' => '#166534', 'dot' => '#22c55e', 'label' => 'Fully Allocated'],
-                                                    'partial' => ['bg' => '#dbeafe', 'border' => '#93c5fd', 'color' => '#1e40af', 'dot' => '#3b82f6', 'label' => 'Partially Allocated'],
-                                                    default => ['bg' => '#fef9c3', 'border' => '#fde68a', 'color' => '#92400e', 'dot' => '#f59e0b', 'label' => 'Awaiting Allocation'],
-                                                };
-                                                $allocatedKg = (float) ($batch['allocated_kg'] ?? 0);
-                                                $plannedKg = (float) ($batch['planned_quantity'] ?? 0);
-                                                $allocLabel = $allocState === 'allocated'
-                                                    ? $allocStyles['label']
-                                                    : $fmt($allocatedKg) . ' / ' . $fmt($plannedKg) . ' kg';
-                                            @endphp
-                                            <a href="{{ route('manufacturing-orders.pallecons', ['winmanMo' => $winmanMo]) }}" wire:navigate
-                                               title="{{ $allocStyles['label'] }}: {{ $fmt($allocatedKg) }} of {{ $fmt($plannedKg) }} kg allocated to pallecons"
-                                               style="display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid {{ $allocStyles['border'] }};background:{{ $allocStyles['bg'] }};color:{{ $allocStyles['color'] }};font-size:13px;font-weight:700;text-decoration:none;">
-                                                <span style="height:8px;width:8px;border-radius:999px;background:{{ $allocStyles['dot'] }};display:inline-block;"></span>
-                                                {{ $allocLabel }}
-                                            </a>
-                                        </td>
-                                        <td class="px-3 py-2 text-right">
-                                            <a href="{{ route('batches.show', ['batch' => (int) $batch['id'], 'tab' => 'allocation']) }}" wire:navigate style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;background:#eef2ff;border:1px solid #c7d2fe;color:#4338ca;font-size:13px;font-weight:700;text-decoration:none;">{{ $isCompleted ? 'View Completed' : 'Continue' }}</a>
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                        </div>
+                    <div class="wm-grid wm-grid--batch wm-head wm-head--batch">
+                        <h2 class="wm-title">Batch Workspace</h2>
+                        <div>Qty</div>
+                        <div>Production Date</div>
+                        <div>Status</div>
+                        <div>Allocation</div>
+                        <div></div>
                     </div>
-                @else
-                    <div style="background:#fff;border:1px solid #dbe1ea;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.05);">
-                        <div style="padding:14px 22px;">
-                            <div style="display:flex;align-items:stretch;gap:0;flex-wrap:wrap;">
-                                <div style="padding:0 26px 0 0;min-width:220px;border-right:1px solid #dbe1ea;">
-                                    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Reference</div>
-                                    <div style="margin-top:8px;font-size:28px;line-height:1.05;font-weight:800;color:#0f172a;">Not Created</div>
-                                </div>
 
-                                <div style="padding:0 26px;min-width:190px;border-right:1px solid #dbe1ea;">
-                                    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Batch Qty</div>
-                                    <div style="margin-top:8px;font-size:28px;line-height:1.05;font-weight:800;color:#0f172a;">{{ $batchPlannedQuantity !== '' ? $batchPlannedQuantity : '0' }}</div>
-                                </div>
+                    <div class="wm-rows">
+                        @foreach ($existingBatches as $batch)
+                            @php
+                                $isCompleted = (string) $batch['status'] === \App\Models\BatchRecord::STATUS_COMPLETED;
+                                $batchTone = match ((string) $batch['status']) {
+                                    \App\Models\BatchRecord::STATUS_IN_PROGRESS => ['strip' => '#c9a24a', 'pill' => 'linear-gradient(180deg,#d4ad55,#b8913a)', 'dot' => '#fdf3d0'],
+                                    \App\Models\BatchRecord::STATUS_COMPLETED => ['strip' => '#1f5c61', 'pill' => '#1f5c61', 'dot' => '#7fd1bf'],
+                                    \App\Models\BatchRecord::STATUS_QA_REVIEW => ['strip' => '#6d5a96', 'pill' => '#6d5a96', 'dot' => '#d6ccf0'],
+                                    \App\Models\BatchRecord::STATUS_CLOSED => ['strip' => '#6b7280', 'pill' => '#6b7280', 'dot' => '#d1d5db'],
+                                    default => ['strip' => '#9b3b3b', 'pill' => '#9b3b3b', 'dot' => '#f5c2c2'],
+                                };
+                                $batchStatusLabel = (string) $batch['status'] === \App\Models\BatchRecord::STATUS_IN_PROGRESS
+                                    ? 'Issued'
+                                    : \Illuminate\Support\Str::headline((string) $batch['status']);
 
-                                <div style="padding:0 26px;min-width:220px;border-right:1px solid #dbe1ea;display:flex;flex-direction:column;justify-content:center;">
-                                    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#64748b;font-weight:700;">Status</div>
-                                    <span style="margin-top:10px;display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;border:1px solid #bae6fd;background:#f0f9ff;color:#0369a1;font-size:14px;font-weight:700;width:max-content;">
-                                        <span style="height:8px;width:8px;border-radius:999px;background:#0ea5e9;display:inline-block;"></span>
-                                        Awaiting First Batch
+                                $allocState = (string) ($batch['allocation_state'] ?? 'awaiting');
+                                $allocTitle = match ($allocState) {
+                                    'allocated' => 'Fully Allocated',
+                                    'partial' => 'Partially Allocated',
+                                    default => 'Awaiting Allocation',
+                                };
+                                $allocatedKg = (float) ($batch['allocated_kg'] ?? 0);
+                                $plannedKg = (float) ($batch['planned_quantity'] ?? 0);
+                                $allocPct = $plannedKg > 0 ? min(100, max(0, $allocatedKg / $plannedKg * 100)) : 0;
+                            @endphp
+                            <div class="wm-row wm-grid wm-grid--batch" style="--wm-strip: {{ $batchTone['strip'] }};">
+                                <div class="wm-ref">
+                                    <img src="{{ asset('images/batch-row-icon.png') }}" alt="" class="wm-picon" style="width:48px;height:48px;" />
+                                    <div style="min-width:0;">
+                                        <div class="wm-ref-text">{{ $batch['reference'] !== '' ? $batch['reference'] : '—' }}</div>
+                                        @if ($batch['reference'] !== $batch['application_batch_number'] && $batch['application_batch_number'] !== '')
+                                            <div class="wm-sub">App ref: {{ $batch['application_batch_number'] }}</div>
+                                        @endif
+                                    </div>
+                                </div>
+                                <div data-label="Qty">{{ $fmt((float) $batch['planned_quantity']) }}</div>
+                                <div data-label="Production Date">{{ $batch['production_date'] ?? '-' }}</div>
+                                <div data-label="Status">
+                                    <span class="wm-pill" style="background:{{ $batchTone['pill'] }};">
+                                        <span class="wm-pill-dot" style="background:{{ $batchTone['dot'] }};"></span>
+                                        {{ $batchStatusLabel }}
                                     </span>
                                 </div>
-
-                                <div style="padding:0 0 0 26px;margin-left:auto;display:flex;align-items:center;color:#64748b;font-size:14px;font-weight:600;">
-                                    No batches exist yet for this MO.
+                                <div data-label="Allocation">
+                                    <a href="{{ route('manufacturing-orders.pallecons', ['winmanMo' => $winmanMo]) }}" wire:navigate
+                                       title="{{ $allocTitle }}: {{ $fmt($allocatedKg) }} of {{ $fmt($plannedKg) }} kg allocated to pallecons"
+                                       class="wm-alloc wm-alloc--{{ $allocState === 'allocated' ? 'full' : ($allocState === 'partial' ? 'partial' : 'awaiting') }}">
+                                        @if ($allocState === 'allocated')
+                                            <span class="wm-orb"></span>
+                                            <span style="max-width:70px;">Fully Allocated</span>
+                                        @else
+                                            <span class="wm-alloc-fill" style="width:{{ round($allocPct, 1) }}%;"></span>
+                                            <span>{{ $fmt($allocatedKg) }} / {{ $fmt($plannedKg) }} kg</span>
+                                        @endif
+                                    </a>
                                 </div>
+                                <div class="wm-action">
+                                    @if ($isCompleted)
+                                        <a href="{{ route('batches.show', ['batch' => (int) $batch['id'], 'tab' => 'allocation']) }}" wire:navigate class="wm-link">View Completed</a>
+                                    @else
+                                        <a href="{{ route('batches.show', ['batch' => (int) $batch['id'], 'tab' => 'allocation']) }}" wire:navigate class="wm-btn-continue">Continue</a>
+                                        <span class="wm-info" tabindex="0" aria-label="WinMan reference is automatically updated upon pallecon seal.">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 11v6M12 7.5v.01" stroke-linecap="round"/></svg>
+                                            <span class="wm-tip" role="tooltip"><strong>Note:</strong> WinMan reference is automatically updated upon pallecon seal.</span>
+                                        </span>
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <h2 class="wm-title">Batch Workspace</h2>
+                    <div class="wm-row" style="--wm-strip:#c9a24a;margin-top:12px;">
+                        <div style="display:flex;align-items:stretch;gap:0;flex-wrap:wrap;row-gap:14px;">
+                            <div style="padding:0 26px 0 0;min-width:180px;border-right:1px solid #ebe2cd;">
+                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#8a7a5c;font-weight:700;">Reference</div>
+                                <div style="margin-top:8px;font-size:24px;line-height:1.05;font-weight:800;color:#1f3f4f;">Not Created</div>
+                            </div>
+
+                            <div style="padding:0 26px;min-width:150px;border-right:1px solid #ebe2cd;">
+                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#8a7a5c;font-weight:700;">Batch Qty</div>
+                                <div style="margin-top:8px;font-size:24px;line-height:1.05;font-weight:800;color:#1f3f4f;">{{ $batchPlannedQuantity !== '' ? $batchPlannedQuantity : '0' }}</div>
+                            </div>
+
+                            <div style="padding:0 26px;display:flex;flex-direction:column;justify-content:center;">
+                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#8a7a5c;font-weight:700;">Status</div>
+                                <span class="wm-pill" style="margin-top:8px;width:max-content;background:linear-gradient(180deg,#d4ad55,#b8913a);">
+                                    <span class="wm-pill-dot" style="background:#fdf3d0;"></span>
+                                    Awaiting First Batch
+                                </span>
+                            </div>
+
+                            <div style="margin-left:auto;display:flex;align-items:center;color:#8a7a5c;font-size:14px;font-weight:600;">
+                                No batches exist yet for this MO.
                             </div>
                         </div>
                     </div>
@@ -689,7 +626,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                 @endphp
 
                 @if (! $hasInProgressBatch)
-                    <div class="flex flex-wrap items-end justify-end gap-3">
+                    <div class="flex flex-wrap items-end justify-end gap-3" style="margin-top:18px;">
                         @if (count($variantOptions) > 0)
                             <div>
                                 <label class="block text-xs text-gray-600 mb-1">Batch-size variant (optional)</label>
@@ -723,90 +660,95 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                             <input wire:model="batchPlannedQuantity" type="hidden" />
                         @endif
 
-                        <x-primary-button wire:click="start" wire:loading.attr="disabled">
+                        <button type="button" class="wm-btn-dark" wire:click="start" wire:loading.attr="disabled">
                             {{ count($existingBatches) === 0 ? 'Add batch' : 'Add another batch' }}
-                        </x-primary-button>
+                            <span class="wm-plus">+</span>
+                        </button>
                     </div>
                 @elseif (count($existingBatches) > 0)
-                    <div class="text-xs text-slate-500">Complete the in-progress batch before adding another one to this MO.</div>
+                    <div class="wm-warn" style="margin-top:14px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 10.5v6M12 7.2v.01" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
+                        Complete the in-progress batch before adding another one to this MO.
+                    </div>
                 @endif
-            </div>
+            </section>
 
-            <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-                <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);">
-                    <div class="text-base font-semibold text-gray-800">Pallecon Workspace</div>
-                </div>
-                <div class="p-6 space-y-6">
-                    @if ($palleconError)
-                        <div class="text-sm bg-red-50 border border-red-200 rounded px-3 py-2 text-red-700">{{ $palleconError }}</div>
-                    @endif
-                    @if ($palleconStatus)
-                        <div class="text-sm bg-green-50 border border-green-200 rounded px-3 py-2 text-green-700">{{ $palleconStatus }}</div>
-                    @endif
+            <section class="wm-card wm-card--gear-bl">
+                <h2 class="wm-title">Pallecon Workspace</h2>
 
-                    @php
-                        $palleconStatusStyle = fn (string $s): array => match ($s) {
-                            'filling' => ['bg' => '#fef9c3', 'border' => '#fde68a', 'color' => '#92400e', 'dot' => '#f59e0b'],
-                            'open' => ['bg' => '#eff6ff', 'border' => '#bfdbfe', 'color' => '#1e40af', 'dot' => '#3b82f6'],
-                            'sealed' => ['bg' => '#dcfce7', 'border' => '#86efac', 'color' => '#166534', 'dot' => '#22c55e'],
-                            'consumed' => ['bg' => '#f1f5f9', 'border' => '#cbd5e1', 'color' => '#334155', 'dot' => '#64748b'],
-                            'on_hold' => ['bg' => '#fee2e2', 'border' => '#fca5a5', 'color' => '#991b1b', 'dot' => '#ef4444'],
-                            default => ['bg' => '#f3f4f6', 'border' => '#d1d5db', 'color' => '#4b5563', 'dot' => '#6b7280'],
-                        };
-                    @endphp
+                @if ($palleconError)
+                    <div class="text-sm bg-red-50 border border-red-200 rounded px-3 py-2 text-red-700" style="margin-top:12px;">{{ $palleconError }}</div>
+                @endif
+                @if ($palleconStatus)
+                    <div class="text-sm bg-green-50 border border-green-200 rounded px-3 py-2 text-green-700" style="margin-top:12px;">{{ $palleconStatus }}</div>
+                @endif
 
-                    @if (count($this->moPallecons) > 0)
-                        <div style="background:#fff;border:1px solid #dbe1ea;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.05);">
-                            <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200 text-sm">
-                                <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
-                                    <tr>
-                                        <th class="px-4 py-3">Reference</th>
-                                        <th class="px-3 py-2">Qty (kg)</th>
-                                        <th class="px-3 py-2">Production Date</th>
-                                        <th class="px-3 py-2">Status</th>
-                                        <th class="px-3 py-2 text-right"></th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-gray-100">
-                                    @foreach ($this->moPallecons as $pallecon)
-                                        @php
-                                            $pStyle = $palleconStatusStyle($pallecon['on_hold'] ? 'on_hold' : $pallecon['status']);
-                                            $isPalleconCompleted = in_array($pallecon['status'], [\App\Models\Pallecon::STATUS_SEALED, \App\Models\Pallecon::STATUS_CONSUMED], true);
-                                        @endphp
-                                        <tr>
-                                            <td class="px-4 py-3 font-medium text-gray-800">{{ $pallecon['reference'] !== '' ? $pallecon['reference'] : '—' }}</td>
-                                            <td class="px-3 py-2">{{ rtrim(rtrim(number_format((float) $pallecon['quantity_kg'], 3, '.', ''), '0'), '.') ?: '0' }}</td>
-                                            <td class="px-3 py-2">{{ $pallecon['production_date'] ?? '-' }}</td>
-                                            <td class="px-3 py-2">
-                                                <span style="display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid {{ $pStyle['border'] }};background:{{ $pStyle['bg'] }};color:{{ $pStyle['color'] }};font-size:13px;font-weight:700;">
-                                                    <span style="height:8px;width:8px;border-radius:999px;background:{{ $pStyle['dot'] }};display:inline-block;"></span>
-                                                    {{ $pallecon['on_hold'] ? 'On Hold' : \Illuminate\Support\Str::headline($pallecon['status']) }}
-                                                </span>
-                                            </td>
-                                            <td class="px-3 py-2 text-right">
-                                                <a href="{{ route('manufacturing-orders.pallecons', ['winmanMo' => $winmanMo, 'pallecon' => $pallecon['id']]) }}" wire:navigate style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;background:#eef2ff;border:1px solid #c7d2fe;color:#4338ca;font-size:13px;font-weight:700;text-decoration:none;">{{ $isPalleconCompleted ? 'View Completed' : 'Continue' }}</a>
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
+                @php
+                    $palleconTone = fn (string $s): array => match ($s) {
+                        'filling' => ['pill' => 'linear-gradient(180deg,#d4ad55,#b8913a)', 'dot' => '#fdf3d0'],
+                        'open' => ['pill' => '#3d6a8a', 'dot' => '#c7e0f2'],
+                        'sealed' => ['pill' => '#1f5c61', 'dot' => '#7fd1bf'],
+                        'consumed' => ['pill' => '#6b7280', 'dot' => '#d1d5db'],
+                        'on_hold' => ['pill' => '#9b3b3b', 'dot' => '#f5c2c2'],
+                        default => ['pill' => '#6b7280', 'dot' => '#d1d5db'],
+                    };
+                @endphp
+
+                @if (count($this->moPallecons) > 0)
+                    <div class="wm-table">
+                        <div class="wm-grid wm-grid--pallecon wm-head">
+                            <div>Reference</div>
+                            <div>Qty (kg)</div>
+                            <div>Production Date</div>
+                            <div>Status</div>
+                            <div></div>
+                        </div>
+                        @foreach ($this->moPallecons as $pallecon)
+                            @php
+                                $pTone = $palleconTone($pallecon['on_hold'] ? 'on_hold' : $pallecon['status']);
+                                $isPalleconCompleted = in_array($pallecon['status'], [\App\Models\Pallecon::STATUS_SEALED, \App\Models\Pallecon::STATUS_CONSUMED], true);
+                                $palleconUrl = route('manufacturing-orders.pallecons', ['winmanMo' => $winmanMo, 'pallecon' => $pallecon['id']]);
+                            @endphp
+                            <div class="wm-prow wm-grid wm-grid--pallecon">
+                                <div class="wm-ref">
+                                    <img src="{{ asset('pallecon-row-icon.png') }}" alt="" class="wm-picon" />
+                                    <div class="wm-ref-text">{{ $pallecon['reference'] !== '' ? $pallecon['reference'] : '—' }}</div>
+                                </div>
+                                <div data-label="Qty (kg)">{{ rtrim(rtrim(number_format((float) $pallecon['quantity_kg'], 3, '.', ''), '0'), '.') ?: '0' }}</div>
+                                <div data-label="Production Date">{{ $pallecon['production_date'] ?? '-' }}</div>
+                                <div data-label="Status">
+                                    <span class="wm-pill" style="background:{{ $pTone['pill'] }};">
+                                        <span class="wm-pill-dot" style="background:{{ $pTone['dot'] }};"></span>
+                                        {{ $pallecon['on_hold'] ? 'On Hold' : \Illuminate\Support\Str::headline($pallecon['status']) }}
+                                    </span>
+                                </div>
+                                <div class="wm-action">
+                                    @if ($isPalleconCompleted)
+                                        <a href="{{ $palleconUrl }}" wire:navigate class="wm-link">View Completed</a>
+                                    @else
+                                        <a href="{{ $palleconUrl }}" wire:navigate class="wm-btn-continue">Continue</a>
+                                    @endif
+                                </div>
                             </div>
-                        </div>
-                    @endif
+                        @endforeach
+                    </div>
+                @endif
 
-                    @if ($this->hasOpenPalleconForMo)
-                        <div class="text-xs text-slate-500">Complete the open pallecon before creating another one for this MO.</div>
-                    @else
-                        <div class="flex flex-wrap items-center justify-end gap-3">
-                            <x-primary-button wire:click="openAddPalleconModal" wire:loading.attr="disabled">
-                                {{ count($this->moPallecons) === 0 ? 'Add pallecon' : 'Add another pallecon' }}
-                            </x-primary-button>
-                        </div>
-                        <p class="text-xs text-slate-500 text-right">Use Continue on a row to record batch fills, the pallecon number, seals and completion — the WinMan reference is written back on seal.</p>
-                    @endif
-                </div>
-            </div>
+                @if ($this->hasOpenPalleconForMo)
+                    <div class="wm-warn" style="margin-top:14px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 10.5v6M12 7.2v.01" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
+                        Complete the open pallecon before creating another one for this MO.
+                    </div>
+                @else
+                    <div class="flex flex-wrap items-center justify-end gap-3" style="margin-top:18px;">
+                        <button type="button" class="wm-btn-dark" wire:click="openAddPalleconModal" wire:loading.attr="disabled">
+                            {{ count($this->moPallecons) === 0 ? 'Add pallecon' : 'Add another pallecon' }}
+                            <span class="wm-plus">+</span>
+                        </button>
+                    </div>
+                    <p class="wm-note" style="margin-top:10px;">Use Continue on a row to record batch fills, the pallecon number, seals and completion — the WinMan reference is written back on seal.</p>
+                @endif
+            </section>
         @endif
     </div>
 
