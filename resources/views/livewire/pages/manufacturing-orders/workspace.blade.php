@@ -4,7 +4,7 @@ use App\Domains\Audit\Jobs\RecordErrorLogJob;
 use App\Domains\Batch\Exceptions\BatchException;
 use App\Domains\Pallecon\Support\PalleconCapacity;
 use App\Domains\WinMan\Exceptions\WinManException;
-use App\Domains\WinMan\Jobs\FetchManufacturingOrderJob;
+use App\Domains\WinMan\Jobs\FetchManufacturingOrderForDisplayJob;
 use App\Domains\WinMan\Support\WinManHealthCheck;
 use App\Features\Batches\StartBatchFromManufacturingOrderFeature;
 use App\Features\Pallecon\OpenPalleconFeature;
@@ -230,7 +230,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
             $this->winManDown = false;
 
             try {
-                $winmanOrder = app(FetchManufacturingOrderJob::class)($this->winmanMo);
+                $winmanOrder = app(FetchManufacturingOrderForDisplayJob::class)($this->winmanMo);
             } catch (\Throwable $e) {
                 report($e);
                 $winmanOrder = null;

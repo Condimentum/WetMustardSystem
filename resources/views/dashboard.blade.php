@@ -2,13 +2,18 @@
     <style>
         @font-face { font-family: 'Libre Baskerville'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('{{ asset('fonts/libre-baskerville-latin.woff2') }}') format('woff2'); }
 
-        .dash { max-width: 42rem; margin: 0 auto; padding: 18px; border-radius: 24px;
-            background: #f8f4ea url('{{ asset('workspace-bg.png') }}?v={{ filemtime(public_path('workspace-bg.png')) }}') center / cover no-repeat; }
+        .dash { position: relative; max-width: 42rem; margin: 0 auto; padding: 18px; border-radius: 24px;
+            background-color: #f8f4ea;
+            background-image: linear-gradient(rgba(248, 244, 234, .82), rgba(248, 244, 234, .82)), url('{{ asset('gear-graphic.png') }}'), url('{{ asset('workspace-bg.png') }}?v={{ filemtime(public_path('workspace-bg.png')) }}');
+            background-repeat: no-repeat, no-repeat, no-repeat;
+            background-position: 0 0, right -40px top -30px, center;
+            background-size: auto, 280px, cover; }
 
         .dash-banner { position: relative; overflow: hidden; display: flex; align-items: center; gap: 18px; min-height: 150px; margin-bottom: 18px; padding: 24px 26px; border-radius: 20px; box-shadow: 0 8px 22px rgba(80, 60, 20, .22);
             background: url('{{ asset('dashboard-header-bg.png') }}?v={{ filemtime(public_path('dashboard-header-bg.png')) }}') center / cover no-repeat; }
         .dash-banner::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(255, 250, 235, .55), rgba(255, 250, 235, .15) 70%, transparent); }
-        .dash-logo { position: relative; flex: none; width: 72px; height: 72px; padding: 5px; border-radius: 18px; background: linear-gradient(160deg, #2c3772, #161d44); border: 2px solid #c9a24a; box-shadow: 0 6px 14px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .2); }
+        .dash-banner-avatar { position: absolute; top: 14px; right: 14px; z-index: 5; }
+        .dash-logo { position: relative; flex: none; width: 72px; height: 72px; padding: 5px; border-radius: 18px; background: #f8f5ec; border: 2px solid #d9d3bf; box-shadow: 0 4px 10px rgba(0, 0, 0, .12); }
         .dash-logo img { display: block; width: 100%; height: 100%; border-radius: 13px; object-fit: cover; }
         .dash-title { position: relative; margin: 0; font-family: 'Libre Baskerville', Georgia, serif; font-size: 1.75rem; font-weight: 700; line-height: 1.2; color: #1c1d26; text-shadow: 0 0 12px rgba(255, 250, 235, .95), 0 0 4px rgba(255, 250, 235, .9); }
 
@@ -31,6 +36,7 @@
             .dash-logo { width: 54px; height: 54px; border-radius: 14px; }
             .dash-logo img { border-radius: 10px; }
             .dash-title { font-size: 1.2rem; }
+            .dash-banner-avatar { top: 10px; right: 10px; }
             .dash-tile { gap: 12px; padding: 10px 12px 10px 10px; }
             .dash-medal { width: 50px; height: 50px; }
             .dash-name { font-size: 1rem; }
@@ -41,6 +47,9 @@
     <div class="py-8">
         <div class="dash">
             <div class="dash-banner">
+                <div class="dash-banner-avatar">
+                    <livewire:layout.user-menu />
+                </div>
                 <span class="dash-logo">
                     <img src="{{ asset('wet-mustard-booking-icon.png') }}" alt="Wet Mustard Booking System" />
                 </span>

@@ -154,6 +154,27 @@ class PalleconWorkspaceTest extends TestCase
         $this->assertSame(2, $pallecon->fresh()->fills()->count());
     }
 
+    public function test_a_completed_batch_can_be_issued_and_fully_issued_batches_are_hidden(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $full = $this->makeBatch(6016, 'WM-PW-FULL', true, 400);
+        $completed = $this->makeBatch(6016, 'WM-PW-COMPLETED', true, 300);
+        $completed->update(['status' => BatchRecord::STATUS_COMPLETED]);
+        // WM-PW-FULL is issued in full (400 of 400 kg) when the pallecon is opened.
+        $pallecon = $this->openPalleconFor($full, 'PAL-PW-COMP', 400);
+
+        $component = Volt::test('pages.manufacturing-orders.pallecon-workspace', ['winmanMo' => 6016])
+            ->set('palleconId', $pallecon->id)
+            ->assertSeeHtml('<div class="wml-ref">WM-PW-COMPLETED</div>')
+            ->assertSee('Issue to Pallecon')
+            // Still listed in the pallecon's own fills, but not as a batch to fill from.
+            ->assertDontSeeHtml('<div class="wml-ref">WM-PW-FULL</div>');
+
+        $component->call('issueBatchToPallecon', $completed->id)->assertSet('flashError', false);
+
+        $this->assertEqualsWithDelta(700.0, $pallecon->fresh()->filledWeight(), 0.001);
+    }
+
     public function test_issuing_a_batch_does_not_call_winman(): void
     {
         $this->actingAs(User::factory()->create());
@@ -343,6 +364,70 @@ class PalleconWorkspaceTest extends TestCase
 
         $this->assertDatabaseHas('winman_booking_logs', ['booking_status' => 'success']);
         $this->assertTrue($pallecon->fresh()->isWinManBooked());
+    }
+
+    public function test_retry_is_only_offered_after_a_failed_booking_attempt(): void
+    {
+        $this->actingAs(User::factory()->create());
+        config(['winman.booking.enabled' => true]);
+        $this->mockWinMan([
+            'context' => ['last_modified_date' => '2026-01-01 00:00:00', 'quantity_outstanding' => 0.0, 'quantity' => 5200.0, 'location' => 5],
+            'finishingCalls' => 0,
+        ]);
+
+        // Sealed with no booking attempt on record (e.g. before booking was linked): no retry.
+        $legacyBatch = $this->makeBatch(6013, 'WM-PW-LEGACY');
+        $legacy = $this->openPalleconFor($legacyBatch, 'PAL-PW-LEGACY', 400);
+        $legacy->forceFill(['status' => Pallecon::STATUS_SEALED, 'final_weight' => 400])->save();
+
+        Volt::test('pages.manufacturing-orders.pallecon-workspace', ['winmanMo' => 6013])
+            ->assertSee('PAL-PW-LEGACY')
+            ->assertDontSee('Retry WinMan booking');
+
+        // Completed via "Complete pallecon" and WinMan rejected the booking: retry is offered.
+        $batch = $this->makeBatch(6014, 'WM-PW-FAILED');
+        $pallecon = $this->openPalleconFor($batch, 'PAL-PW-FAILED', 400);
+
+        Volt::test('pages.manufacturing-orders.pallecon-workspace', ['winmanMo' => 6014])
+            ->set('palleconId', $pallecon->id)
+            ->call('startSeal', $pallecon->id)
+            ->set('sealForm.final_weight', '400')
+            ->call('completePallecon');
+
+        Volt::test('pages.manufacturing-orders.pallecon-workspace', ['winmanMo' => 6014])
+            ->assertSee('PAL-PW-FAILED')
+            ->assertSee('Retry WinMan booking');
+    }
+
+    public function test_winman_unreachable_on_complete_still_offers_retry(): void
+    {
+        $this->actingAs(User::factory()->create());
+        config(['winman.booking.enabled' => true]);
+        $this->mockWinMan(['finishingCalls' => 0]);
+        // WinMan down while reading the MO - before the booking operation logs anything itself.
+        $context = Mockery::mock(ReadMoBookingContextJob::class);
+        $context->shouldReceive('__invoke')->andThrow(new \RuntimeException('WinMan connection timed out'));
+        $this->instance(ReadMoBookingContextJob::class, $context);
+
+        $batch = $this->makeBatch(6015, 'WM-PW-DOWN');
+        $pallecon = $this->openPalleconFor($batch, 'PAL-PW-DOWN', 400);
+
+        Volt::test('pages.manufacturing-orders.pallecon-workspace', ['winmanMo' => 6015])
+            ->set('palleconId', $pallecon->id)
+            ->call('startSeal', $pallecon->id)
+            ->set('sealForm.final_weight', '400')
+            ->call('completePallecon');
+
+        $this->assertSame(Pallecon::STATUS_SEALED, $pallecon->fresh()->status);
+        $this->assertDatabaseHas('winman_booking_logs', [
+            'pallecon_id' => $pallecon->id,
+            'booking_status' => 'failed',
+            'error_message' => 'WinMan connection timed out',
+        ]);
+
+        Volt::test('pages.manufacturing-orders.pallecon-workspace', ['winmanMo' => 6015])
+            ->assertSee('WinMan booking failed.')
+            ->assertSee('Retry WinMan booking');
     }
 
     public function test_a_pallecon_from_another_mo_is_not_shown(): void

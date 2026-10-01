@@ -149,40 +149,40 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
     }
 }; ?>
 
+<x-mo-workspace-styles />
+
 <div class="py-8">
-    <div class="max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <div class="wm-page max-w-5xl mx-auto space-y-6">
 
-        <div style="background:#fff;border:1px solid #dbe1ea;border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(15,23,42,0.08);">
-            <div style="padding:24px 26px;background:linear-gradient(135deg,#f8fafc 0%,#e0ecff 100%);border-bottom:1px solid #dbe1ea;">
-                <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
-                    <div style="width:56px;height:56px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #86efac;overflow:hidden;flex-shrink:0;">
-                        <img src="{{ asset('metal-detector-icon.png') }}" alt="Metal Detection" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
-                    </div>
+        <section class="wm-card wm-card--gear-tr">
+            <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+                <span style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #c9a24a;overflow:hidden;flex-shrink:0;background:#fffdf7;">
+                    <img src="{{ asset('metal-detector-icon.png') }}" alt="Metal Detection" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+                </span>
 
-                    <div>
-                        <div style="font-size:1.3rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">METAL DETECTION CHECK LOG</div>
-                        <div style="font-size:0.75rem;font-weight:700;color:#64748b;letter-spacing:.14em;margin-top:4px;">START OF SHIFT &middot; HOURLY &middot; END OF SHIFT CHECKS</div>
-                    </div>
-
-                    <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:12px;font-weight:800;">
-                        {{ $this->todayStats['total'] }} checks today
-                    </span>
+                <div>
+                    <h1 class="wm-title">METAL DETECTION CHECK LOG</h1>
+                    <div class="wm-sub" style="text-transform:uppercase;letter-spacing:.1em;">Start of Shift &middot; Hourly &middot; End of Shift Checks</div>
                 </div>
 
-                <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
-                    <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#ecfdf5;border:1px solid #86efac;color:#15803d;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">Pass: {{ $this->todayStats['pass'] }}</span>
-                    <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">Fail: {{ $this->todayStats['fail'] }}</span>
-                </div>
+                <span class="wm-pill" style="margin-left:auto;background:linear-gradient(180deg,#2b6f86,#1d4f61);">
+                    {{ $this->todayStats['total'] }} checks today
+                </span>
             </div>
 
-            <div style="padding:24px 26px;">
+            <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+                <span class="wm-pill" style="background:linear-gradient(180deg,#3aa33a,#1d6b24);">Pass: {{ $this->todayStats['pass'] }}</span>
+                <span class="wm-pill" style="background:linear-gradient(180deg,#c0392b,#8a271b);">Fail: {{ $this->todayStats['fail'] }}</span>
+            </div>
+
+            <div style="margin-top:18px;">
 
         @if ($flash)
             <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 mb-6">{{ $flash }}</div>
         @endif
 
-        <form wire:submit="record" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div class="flex items-center justify-between px-6 py-4" style="background:#2d3f8f;">
+        <form wire:submit="record" class="wm-table" style="margin-top:0;">
+            <div class="flex items-center justify-between px-6 py-4" style="background:linear-gradient(180deg,#2b3238,#171c20);border-radius:16px 16px 0 0;">
                 <h2 class="text-lg font-semibold text-white">Record a check</h2>
                 <svg class="h-6 w-6 text-white/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
@@ -287,12 +287,12 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
                     </div>
                 </div>
 
-                <x-primary-button type="submit" class="!rounded-lg !px-5 !py-2.5">Record check</x-primary-button>
+                <button type="submit" class="wm-btn-dark">Record check</button>
             </div>
         </form>
 
-        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div class="flex items-center justify-between px-6 py-4" style="background:#2d3f8f;">
+        <div class="wm-table">
+            <div class="flex items-center justify-between px-6 py-4" style="background:linear-gradient(180deg,#2b3238,#171c20);border-radius:16px 16px 0 0;">
                 <h3 class="text-lg font-semibold text-white">Today&apos;s Check Summary</h3>
                 <svg class="h-6 w-6 text-white/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
                     <rect x="3.5" y="5" width="17" height="15" rx="2" />
@@ -303,7 +303,7 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-200 text-sm">
                     <thead>
-                        <tr style="background:#2d3f8f;color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
+                        <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
                             <th class="px-4 py-3">Time</th>
                             <th class="px-4 py-3">Type</th>
                             <th class="px-4 py-3">Context</th>
@@ -387,7 +387,7 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
             @endif
         </div>
             </div>
-        </div>
+        </section>
     </div>
 </div>
 

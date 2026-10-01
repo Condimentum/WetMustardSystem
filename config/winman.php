@@ -141,6 +141,11 @@ return [
         // How long a cached "is WinMan reachable" health-check result is
         // trusted before probing again.
         'health_check_cache_seconds' => (int) env('WINMAN_HEALTH_CHECK_CACHE_SECONDS', 15),
+        // How long a single MO's display data (product/UOM description etc.)
+        // is cached for screens that just SHOW it (batch workspace header,
+        // MO workspace mount). Authoritative/concurrency-sensitive reads
+        // (selection, pre-booking checks) deliberately bypass this cache.
+        'mo_display_cache_seconds' => (int) env('WINMAN_MO_DISPLAY_CACHE_SECONDS', 20),
     ],
 
 ];

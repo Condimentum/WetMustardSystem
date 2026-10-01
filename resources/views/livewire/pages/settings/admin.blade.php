@@ -79,13 +79,15 @@ new #[Layout('layouts.app')] #[Title('Settings Admin')] class extends Component 
     }
 }; ?>
 
-<div class="py-8">
-    <div class="max-w-4xl mx-auto sm:px-6 lg:px-8 space-y-6">
-        <h2 class="text-xl font-semibold text-gray-800">Settings Admin</h2>
-        <p class="text-sm text-gray-600">Central project toggles. Use these switches to turn features on or off without code changes.</p>
+<x-mo-workspace-styles />
 
-        <div class="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
-            <div class="flex flex-wrap items-center gap-2">
+<div class="py-8">
+    <div class="wm-page max-w-4xl mx-auto space-y-6">
+        <section class="wm-card wm-card--gear-tr">
+            <h1 class="wm-title">Settings Admin</h1>
+            <p class="wm-sub" style="margin-top:4px;">Central project toggles. Use these switches to turn features on or off without code changes.</p>
+
+            <div class="wm-rows" style="flex-direction:row;flex-wrap:wrap;gap:8px;margin-top:16px;">
                 <a href="{{ route('settings.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.admin') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">General</a>
                 <a href="{{ route('settings.recipes') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.recipes') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Recipes</a>
                 <a href="{{ route('settings.product-mapping') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.product-mapping') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Product Mapping</a>
@@ -96,7 +98,7 @@ new #[Layout('layouts.app')] #[Title('Settings Admin')] class extends Component 
                 <a href="{{ route('audit.index') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.index') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Audit</a>
                 <a href="{{ route('audit.errors') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.errors') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Error Log</a>
             </div>
-        </div>
+        </section>
 
         @if ($flash)
             <div @class([
@@ -106,16 +108,16 @@ new #[Layout('layouts.app')] #[Title('Settings Admin')] class extends Component 
             ])>{{ $flash }}</div>
         @endif
 
-        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-            <div class="px-5 py-4 border-b border-gray-100 font-medium text-gray-800">Feature Toggles</div>
+        <section class="wm-card wm-card--gear-bl">
+            <h2 class="wm-title" style="font-size:1.05rem;">Feature Toggles</h2>
 
-            <div class="divide-y divide-gray-100">
+            <div class="wm-rows" style="margin-top:14px;">
                 @foreach ($this->definitions() as $definition)
-                    <div class="px-5 py-4 flex items-start justify-between gap-4">
+                    <div class="wm-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;--wm-strip:#c9a24a;">
                         <div>
-                            <div class="font-medium text-gray-800">{{ $definition['label'] }}</div>
-                            <div class="text-sm text-gray-600">{{ $definition['description'] }}</div>
-                            <div class="text-xs text-gray-400 mt-1">Key: {{ $definition['key'] }}</div>
+                            <div class="wm-ref-text">{{ $definition['label'] }}</div>
+                            <div class="wm-sub" style="margin-top:4px;">{{ $definition['description'] }}</div>
+                            <div class="wm-sub">Key: {{ $definition['key'] }}</div>
                         </div>
                         <label class="inline-flex items-center cursor-pointer mt-1">
                             <input type="checkbox" wire:model="toggles.{{ $definition['key'] }}" class="rounded border-gray-300 text-indigo-600 shadow-sm" />
@@ -124,10 +126,10 @@ new #[Layout('layouts.app')] #[Title('Settings Admin')] class extends Component 
                 @endforeach
             </div>
 
-            <div class="px-5 py-4 border-t border-gray-100 flex items-center justify-end gap-2">
+            <div class="flex items-center justify-end gap-2" style="margin-top:16px;">
                 <x-secondary-button type="button" wire:click="resetToDefaults">Reset to defaults</x-secondary-button>
-                <x-primary-button type="button" wire:click="save">Save settings</x-primary-button>
+                <button type="button" wire:click="save" class="wm-btn-dark">Save settings</button>
             </div>
-        </div>
+        </section>
     </div>
 </div>

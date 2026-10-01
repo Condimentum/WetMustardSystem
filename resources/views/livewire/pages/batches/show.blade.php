@@ -10,7 +10,7 @@ use App\Features\Batches\RejectBatchQaFeature;
 use App\Features\Batches\GetAvailableIngredientLotsFeature;
 use App\Features\Booking\BookFinishedGoodsFeature;
 use App\Domains\WinMan\Exceptions\WinManException;
-use App\Domains\WinMan\Jobs\FetchManufacturingOrderJob;
+use App\Domains\WinMan\Jobs\FetchManufacturingOrderForDisplayJob;
 use App\Domains\WinMan\Jobs\ListIssuedLotsForWorkInProgressJob;
 use App\Domains\WinMan\Support\WinManHealthCheck;
 use App\Operations\AllocateBomIngredientOperation;
@@ -1218,7 +1218,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
         try {
             if ($winmanMo > 0) {
-                $moData = app(FetchManufacturingOrderJob::class)($winmanMo);
+                $moData = app(FetchManufacturingOrderForDisplayJob::class)($winmanMo);
 
                 if ($moData !== null) {
                     $fetchedDescription = trim((string) $moData->productDescription);
@@ -1388,24 +1388,30 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
     }
 
     .ingredient-signoff-submit--idle {
-        background: #1e293b;
+        border: 1px solid #c9a24a;
+        background: linear-gradient(180deg, #4a2a78, #2c1650);
+        color: #f6e7b8;
+        box-shadow: 0 3px 8px rgba(44, 22, 80, .3), inset 0 1px 0 rgba(255, 255, 255, .15);
     }
 
     .ingredient-signoff-submit--idle:hover {
-        background: #334155;
+        filter: brightness(1.15);
         transform: translateY(-1px);
     }
 
     .ingredient-signoff-submit--loading {
         min-width: 132px;
-        background: #1e293b;
+        border: 1px solid #c9a24a;
+        background: linear-gradient(180deg, #4a2a78, #2c1650);
+        color: #f6e7b8;
         transform: scaleX(0.82);
     }
 
     .ingredient-signoff-submit--success {
         min-width: 158px;
-        background: #059669;
-        box-shadow: 0 0 0 5px rgba(5, 150, 105, 0.12);
+        border: 1px solid #14464a;
+        background: #1f5c61;
+        box-shadow: 0 0 0 5px rgba(31, 92, 97, 0.14);
         animation: ingredient-signoff-success-settle 350ms ease-out;
     }
 
@@ -1479,7 +1485,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
             :batches="$this->moBatchCount"
             :fmt="fn (float $v): string => $this->formatQty($v)"
             style="margin-bottom:16px;"
-        ><a href="{{ route('manufacturing-orders.search') }}" wire:navigate style="font-size:0.88rem;color:#4f46e5;text-decoration:none;">&larr; MO Search</a></x-mo-header>
+        />
 
         @unless ($this->editable)
             <div @class([
@@ -1951,7 +1957,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                 </div>
 
                 @if ($this->packingMode === 'pallecon')
-                    <div x-show="tab === 'signoff'" class="space-y-6 p-6">
+                    <div x-show="tab === 'signoff'" class="bs-wrap" style="padding:14px;">
                         @php
                             $packingSignoffRows = $batch->ingredientLots
                                 ->sortBy([
@@ -1963,15 +1969,15 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                 ->values();
                         @endphp
 
-                        <div class="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden">
-                            <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);">
-                                <h3 class="text-sm font-semibold text-slate-700">Ingredients Sign Off</h3>
-                                <p class="text-xs text-slate-500 mt-1">Complete this tab before moving to Pallecon Packing.</p>
+                        <div class="bs-card">
+                            <div class="bs-head">
+                                <h3 class="bs-title">Ingredients Sign Off</h3>
+                                <p class="bs-sub">Complete this tab before moving to Pallecon Packing.</p>
                             </div>
 
-                            <div class="p-4">
+                            <div class="bs-body">
                                 @if ($packingSignoffRows->isEmpty())
-                                    <p class="text-sm text-slate-500">No ingredient lots allocated yet. Complete Ingredient Allocation first.</p>
+                                    <p class="bs-empty">No ingredient lots allocated yet. Complete Ingredient Allocation first.</p>
                                 @else
                                     @php
                                         $submittedSignoff = $this->paperworkIngredientSignoff;
@@ -1982,8 +1988,8 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                     @endphp
 
                                     @if ($this->editable || $signoffTruthComplete)
-                                        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 mb-4">
-                                            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;">
+                                        <div>
+                                            <div class="bs-roles">
                                                 @foreach ([
                                                     'powdersWeighedOperatorId' => ['label' => 'Powders Weighed', 'class' => '', 'submitted_key' => 'powders'],
                                                     'liquidsWeighedOperatorId' => ['label' => 'Liquids Weighed', 'class' => '', 'submitted_key' => 'liquids'],
@@ -1995,18 +2001,16 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                             $submittedName = (string) ($signoff['submitted_key'] === 'tipping' ? $fallbackTipper : $fallbackWeigher);
                                                         }
                                                     @endphp
-                                                    <div class="{{ $signoff['class'] }}">
-                                                        <label class="block text-xs text-slate-600 mb-1">{{ $signoff['label'] }}</label>
+                                                    <div class="bs-role {{ $signoff['class'] }}">
+                                                        <label class="bs-role-label">{{ $signoff['label'] }}</label>
                                                         @if ($signoffTruthComplete)
-                                                            <div class="flex min-h-[38px] items-center rounded-md border border-emerald-300 bg-emerald-50 px-3 text-sm text-emerald-800 shadow-sm">
-                                                                <span class="flex items-center gap-2 font-semibold">
-                                                                    <span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-xs text-white" aria-hidden="true">✓</span>
-                                                                    Submitted <span class="font-normal text-emerald-700">{{ $submittedName }}</span>
-                                                                </span>
+                                                            <div class="bs-done">
+                                                                <span class="bs-done-check" aria-hidden="true">✓</span>
+                                                                <span>Submitted <span class="bs-done-name">{{ $submittedName }}</span></span>
                                                             </div>
                                                         @else
                                                             {{-- Keep the dropdowns editable right up to Submit - no intermediate "Selected" step. --}}
-                                                            <select wire:model="{{ $field }}" class="w-full rounded-md border-gray-300 text-sm shadow-sm">
+                                                            <select wire:model="{{ $field }}" class="bs-select">
                                                                 <option value="">Select operator</option>
                                                                 @foreach ($this->signoffOperators as $operator)
                                                                     <option value="{{ $operator->id }}" @selected((string) $this->{$field} === (string) $operator->id)>{{ $operator->name }}</option>
@@ -2018,7 +2022,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                             </div>
 
                                             @if ($this->editable)
-                                                <div class="mt-3 flex items-center justify-end gap-3" x-data="{
+                                                <div class="bs-actions" x-data="{
                                                     state: 'idle',
                                                     successTimer: null,
                                                     submit() { this.state = 'loading'; },
@@ -2030,7 +2034,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                     },
                                                 }" x-on:ingredient-signoff-submitted.window="submitted()" x-on:ingredient-signoff-failed.window="failed()">
                                                     @if ($signoffTruthComplete)
-                                                        <button type="button" wire:click="resetIngredientSignoff" wire:loading.attr="disabled" class="inline-flex h-10 items-center rounded-md border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-800 hover:bg-amber-100" title="Reset clears the saved sign-off so operators can be reselected; the reset and resubmission are both audited.">Reset sign-off</button>
+                                                        <button type="button" wire:click="resetIngredientSignoff" wire:loading.attr="disabled" class="bs-btn-ghost" title="Reset clears the saved sign-off so operators can be reselected; the reset and resubmission are both audited.">Reset sign-off</button>
                                                     @else
                                                         <button type="button" wire:click="applyBulkIngredientSignoff" @click="submit()" wire:loading.attr="disabled" wire:target="applyBulkIngredientSignoff" class="ingredient-signoff-submit inline-flex h-10 min-w-[220px] items-center justify-center overflow-hidden rounded-md px-4 text-sm font-semibold text-white" x-bind:class="state === 'success' ? 'ingredient-signoff-submit--success' : (state === 'loading' ? 'ingredient-signoff-submit--loading' : 'ingredient-signoff-submit--idle')">
                                                             <span x-show="state === 'idle'" x-transition.opacity.duration.150ms>Submit Ingredients Sign Off</span>
@@ -2049,13 +2053,11 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                         </div>
                                     @endif
 
-                                    <div class="mt-4 flex flex-col items-end gap-2">
+                                    <div class="bs-foot">
                                         @if (! $this->ingredientSignoffComplete)
-                                            <div class="w-full rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900" style="animation:ingredient-signoff-pulse 1.7s ease-in-out infinite;">
-                                                <div class="flex items-center gap-3">
-                                                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-base font-black text-white" aria-hidden="true">!</span>
-                                                    <span class="text-sm font-bold">Make sure you signed off all ingredients before completing batch.</span>
-                                                </div>
+                                            <div class="bs-warn">
+                                                <span class="bs-warn-icon" aria-hidden="true">!</span>
+                                                <span>Make sure you signed off all ingredients before completing batch.</span>
                                             </div>
                                         @endif
 
@@ -2064,11 +2066,11 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                 type="button"
                                                 wire:click="complete"
                                                 @disabled(! $this->ingredientSignoffComplete)
-                                                class="inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold {{ $this->ingredientSignoffComplete ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-slate-200 text-slate-500 cursor-not-allowed' }}"
+                                                class="ba-btn ba-btn--lg"
                                             >
                                                 Complete Batch &amp; Return to MO →
                                             </button>
-                                            <p class="text-xs text-slate-500">Pallecon filling, WinMan booking and labels happen in the Pallecon Workspace on the MO screen.</p>
+                                            <p class="bs-note">Pallecon filling, WinMan booking and labels happen in the Pallecon Workspace on the MO screen.</p>
                                         @endif
                                     </div>
                                 @endif

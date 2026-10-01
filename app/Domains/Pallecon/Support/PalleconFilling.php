@@ -2,6 +2,7 @@
 
 namespace App\Domains\Pallecon\Support;
 
+use App\Domains\Booking\Jobs\RecordWinManBookingLogJob;
 use App\Features\Booking\BookFinishedGoodsFeature;
 use App\Features\Pallecon\PrintPalleconLabelFeature;
 use App\Models\BatchRecord;
@@ -11,6 +12,7 @@ use App\Models\PalleconFill;
 use App\Models\PalleconRecord;
 use App\Models\PaperworkRow;
 use App\Models\User;
+use App\Models\WinManBookingLog;
 use Illuminate\Support\Carbon;
 
 /**
@@ -217,11 +219,39 @@ class PalleconFilling
                 'error' => true,
             ];
         } catch (\Throwable $e) {
+            // Errors raised before the booking operation logs anything (e.g. WinMan
+            // unreachable while reading the MO) still need a failed attempt on record,
+            // so the pallecon offers "Retry WinMan booking".
+            $this->recordFailedBookingAttempt($container, $batch, $lotNumber ?? (string) ($container->winman_reference ?? ''), $user, $e->getMessage());
+
             return [
                 'preview' => ['booking_status' => 'failed', 'error_message' => $e->getMessage()],
                 'messages' => ['Pallecon sealed, but WinMan booking failed: '.$e->getMessage()],
                 'error' => true,
             ];
+        }
+    }
+
+    private function recordFailedBookingAttempt(Pallecon $container, BatchRecord $batch, string $lotNumber, ?User $user, string $message): void
+    {
+        $mo = $batch->manufacturingOrder;
+
+        try {
+            app(RecordWinManBookingLogJob::class)([
+                'batch_record_id' => $batch->id,
+                'pallecon_id' => $container->id,
+                'winman_manufacturing_order' => (int) ($mo?->winman_manufacturing_order ?? 0),
+                'winman_manufacturing_order_id' => $mo?->winman_manufacturing_order_id,
+                'winman_product_internal' => $mo?->winman_product_internal,
+                'winman_product_id' => $mo?->winman_product_id,
+                'batch_number' => $batch->batch_number,
+                'lot_number' => $lotNumber,
+                'booking_user' => $user?->name ?? (string) config('winman.booking.user_name', 'DBMTS'),
+                'booking_status' => WinManBookingLog::STATUS_FAILED,
+                'error_message' => $message,
+            ]);
+        } catch (\Throwable) {
+            // Logging must never mask the original booking error.
         }
     }
 

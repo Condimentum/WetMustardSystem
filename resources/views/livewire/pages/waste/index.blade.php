@@ -92,18 +92,23 @@ new #[Layout('layouts.app')] #[Title('Waste / Scrap')] class extends Component {
     }
 }; ?>
 
-<div class="py-8">
-    <div class="max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-6">
+<x-mo-workspace-styles />
 
-        <div style="background:#0f172a;border-radius:16px;padding:20px 24px;display:flex;align-items:center;gap:14px;">
-            <span style="display:inline-flex;align-items:center;justify-content:center;height:44px;width:44px;border-radius:12px;background:#1e293b;">
-                <x-menu-tile-icon icon="waste" class="h-6 w-6" style="color:#fbbf24;" />
-            </span>
-            <div>
-                <h1 class="text-xl font-bold text-white">Waste / Scrap</h1>
-                <p class="text-sm text-slate-300">Log spilled, damaged, disposed or lost material with a reason.</p>
+<div class="py-8">
+    <div class="wm-page max-w-5xl mx-auto space-y-6">
+
+        <section class="wm-card wm-card--gear-tr">
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+                <span style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #c9a24a;overflow:hidden;flex-shrink:0;background:#fffdf7;">
+                    <x-menu-tile-icon icon="waste" class="h-6 w-6" style="color:#8c6427;" />
+                </span>
+                <div>
+                    <h1 class="wm-title">Waste / Scrap</h1>
+                    <div class="wm-sub">Log spilled, damaged, disposed or lost material with a reason.</div>
+                </div>
+                <a href="{{ route('dashboard') }}" wire:navigate class="wm-link" style="margin-left:auto;">Back to Main Menu</a>
             </div>
-        </div>
+        </section>
 
         @if ($flash)
             <div class="rounded-md p-3 text-sm {{ $flashError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200' }}">
@@ -111,9 +116,9 @@ new #[Layout('layouts.app')] #[Title('Waste / Scrap')] class extends Component {
             </div>
         @endif
 
-        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
-            <h2 class="text-sm font-semibold text-slate-800 mb-3">Record waste</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <section class="wm-card wm-card--gear-bl">
+            <h2 class="wm-title" style="font-size:1.05rem;">Record waste</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3" style="margin-top:14px;">
                 <div>
                     <label class="block text-xs font-medium text-slate-500 mb-1">Category *</label>
                     <select wire:model="form.category" class="w-full rounded-lg border-slate-300 text-sm">
@@ -155,25 +160,24 @@ new #[Layout('layouts.app')] #[Title('Waste / Scrap')] class extends Component {
                 </div>
             </div>
             <div class="mt-4">
-                <button wire:click="record" class="inline-flex items-center px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800">Record waste</button>
+                <button wire:click="record" type="button" class="wm-btn-dark">Record waste</button>
             </div>
-        </div>
+        </section>
 
-        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-            <div class="px-5 py-3 border-b border-slate-100">
-                <h2 class="text-sm font-semibold text-slate-800">Recent waste</h2>
-            </div>
+        <section class="wm-card wm-card--gear-tr">
+            <h2 class="wm-title" style="font-size:1.05rem;">Recent waste</h2>
+            <div class="wm-table" style="margin-top:14px;">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-100 text-sm">
-                    <thead class="text-left text-xs text-slate-500 uppercase">
-                        <tr>
-                            <th class="px-5 py-2">When</th>
-                            <th class="px-5 py-2">Category</th>
-                            <th class="px-5 py-2">Quantity</th>
-                            <th class="px-5 py-2">Material</th>
-                            <th class="px-5 py-2">Batch</th>
-                            <th class="px-5 py-2">Reason</th>
-                            <th class="px-5 py-2">By</th>
+                    <thead>
+                        <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
+                            <th class="px-5 py-3">When</th>
+                            <th class="px-5 py-3">Category</th>
+                            <th class="px-5 py-3">Quantity</th>
+                            <th class="px-5 py-3">Material</th>
+                            <th class="px-5 py-3">Batch</th>
+                            <th class="px-5 py-3">Reason</th>
+                            <th class="px-5 py-3">By</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
@@ -193,7 +197,8 @@ new #[Layout('layouts.app')] #[Title('Waste / Scrap')] class extends Component {
                     </tbody>
                 </table>
             </div>
-        </div>
+            </div>
+        </section>
 
     </div>
 </div>

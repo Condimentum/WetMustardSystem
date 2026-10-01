@@ -24,68 +24,49 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
     }
 }; ?>
 
+<x-mo-workspace-styles />
+
 <div class="py-8">
-    <div class="max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <div class="wm-page max-w-5xl mx-auto space-y-6">
         @php
             $checkCount = collect($this->todayStatus)->count();
             $completedTodayCount = collect($this->todayStatus)->filter()->count();
+
+            $tiles = [
+                ['key' => 'wm001', 'code' => 'WM001', 'label' => 'Lab Scales Daily Calibration', 'route' => 'calibrations.wm001'],
+                ['key' => 'wm002', 'code' => 'WM002', 'label' => 'Daily Salt Meter Calibration', 'route' => 'calibrations.wm002'],
+                ['key' => 'wm006', 'code' => 'WM006', 'label' => 'Viscosity Meter Autozero Check', 'route' => 'calibrations.wm006'],
+                ['key' => 'wm013', 'code' => 'WM013', 'label' => 'Production Scales Daily Calibration', 'route' => 'calibrations.wm013'],
+            ];
         @endphp
 
-        <div style="background:#fff;border:1px solid #dbe1ea;border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(15,23,42,0.08);">
-            <div style="padding:24px 26px;background:linear-gradient(135deg,#f8fafc 0%,#e0ecff 100%);border-bottom:1px solid #dbe1ea;">
-                <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
-                    <div style="width:56px;height:56px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #86efac;overflow:hidden;flex-shrink:0;">
-                        <img src="{{ asset('calibration-icon.png') }}" alt="Daily Calibrations" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
-                    </div>
+        <section class="wm-card wm-card--gear-tr">
+            <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+                <span style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #c9a24a;overflow:hidden;flex-shrink:0;background:#fffdf7;">
+                    <img src="{{ asset('calibration-icon.png') }}" alt="Daily Calibrations" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+                </span>
 
-                    <div>
-                        <div style="font-size:1.3rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">DAILY CALIBRATIONS</div>
-                        <div style="font-size:0.75rem;font-weight:700;color:#64748b;letter-spacing:.14em;margin-top:4px;">WM001 &middot; WM002 &middot; WM006 &middot; WM013 TOLERANCE CHECKS</div>
-                    </div>
-
-                    <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:12px;font-weight:800;">
-                        {{ $completedTodayCount }} of {{ $checkCount }} completed today
-                    </span>
-
-                    <a href="{{ route('dashboard') }}" wire:navigate style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:12px;font-weight:800;text-decoration:none;">
-                        Back to Main Menu
-                    </a>
+                <div>
+                    <h1 class="wm-title">DAILY CALIBRATIONS</h1>
+                    <div class="wm-sub" style="text-transform:uppercase;letter-spacing:.1em;">WM001 &middot; WM002 &middot; WM006 &middot; WM013 Tolerance Checks</div>
                 </div>
+
+                <span class="wm-pill" style="margin-left:auto;background:linear-gradient(180deg,#2b6f86,#1d4f61);">{{ $completedTodayCount }} of {{ $checkCount }} completed today</span>
+                <a href="{{ route('dashboard') }}" wire:navigate class="wm-link">Back to Main Menu</a>
             </div>
 
-            <div class="p-6 grid gap-4 md:grid-cols-2">
-                <a href="{{ route('calibrations.wm001') }}" wire:navigate class="rounded-xl border border-slate-200 p-4 hover:border-indigo-300 hover:bg-indigo-50/40 transition flex items-start justify-between gap-3">
-                    <div>
-                        <div class="font-semibold text-slate-900">WM001</div>
-                        <div class="text-xs text-slate-500 mt-1">Lab Scales Daily Calibration</div>
-                    </div>
-                    <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid {{ $this->todayStatus['wm001'] ? '#86efac' : '#cbd5e1' }};background:{{ $this->todayStatus['wm001'] ? '#ecfdf5' : '#f1f5f9' }};color:{{ $this->todayStatus['wm001'] ? '#15803d' : '#475569' }};font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">{{ $this->todayStatus['wm001'] ? 'Done' : 'Pending' }}</span>
-                </a>
-
-                <a href="{{ route('calibrations.wm002') }}" wire:navigate class="rounded-xl border border-slate-200 p-4 hover:border-indigo-300 hover:bg-indigo-50/40 transition flex items-start justify-between gap-3">
-                    <div>
-                        <div class="font-semibold text-slate-900">WM002</div>
-                        <div class="text-xs text-slate-500 mt-1">Daily Salt Meter Calibration</div>
-                    </div>
-                    <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid {{ $this->todayStatus['wm002'] ? '#86efac' : '#cbd5e1' }};background:{{ $this->todayStatus['wm002'] ? '#ecfdf5' : '#f1f5f9' }};color:{{ $this->todayStatus['wm002'] ? '#15803d' : '#475569' }};font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">{{ $this->todayStatus['wm002'] ? 'Done' : 'Pending' }}</span>
-                </a>
-
-                <a href="{{ route('calibrations.wm006') }}" wire:navigate class="rounded-xl border border-slate-200 p-4 hover:border-indigo-300 hover:bg-indigo-50/40 transition flex items-start justify-between gap-3">
-                    <div>
-                        <div class="font-semibold text-slate-900">WM006</div>
-                        <div class="text-xs text-slate-500 mt-1">Viscosity Meter Autozero Check</div>
-                    </div>
-                    <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid {{ $this->todayStatus['wm006'] ? '#86efac' : '#cbd5e1' }};background:{{ $this->todayStatus['wm006'] ? '#ecfdf5' : '#f1f5f9' }};color:{{ $this->todayStatus['wm006'] ? '#15803d' : '#475569' }};font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">{{ $this->todayStatus['wm006'] ? 'Done' : 'Pending' }}</span>
-                </a>
-
-                <a href="{{ route('calibrations.wm013') }}" wire:navigate class="rounded-xl border border-slate-200 p-4 hover:border-indigo-300 hover:bg-indigo-50/40 transition flex items-start justify-between gap-3">
-                    <div>
-                        <div class="font-semibold text-slate-900">WM013</div>
-                        <div class="text-xs text-slate-500 mt-1">Production Scales Daily Calibration</div>
-                    </div>
-                    <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid {{ $this->todayStatus['wm013'] ? '#86efac' : '#cbd5e1' }};background:{{ $this->todayStatus['wm013'] ? '#ecfdf5' : '#f1f5f9' }};color:{{ $this->todayStatus['wm013'] ? '#15803d' : '#475569' }};font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;">{{ $this->todayStatus['wm013'] ? 'Done' : 'Pending' }}</span>
-                </a>
+            <div class="wm-rows">
+                @foreach ($tiles as $tile)
+                    <a href="{{ route($tile['route']) }}" wire:navigate class="wm-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;text-decoration:none;--wm-strip: {{ $this->todayStatus[$tile['key']] ? '#3aa33a' : '#c9a24a' }};">
+                        <div>
+                            <div class="wm-ref-text">{{ $tile['code'] }}</div>
+                            <div class="wm-sub">{{ $tile['label'] }}</div>
+                        </div>
+                        <span class="wm-pill" style="background:{{ $this->todayStatus[$tile['key']] ? 'linear-gradient(180deg,#3aa33a,#1d6b24)' : 'linear-gradient(180deg,#9a8b6d,#6b5d42)' }};">{{ $this->todayStatus[$tile['key']] ? 'Done' : 'Pending' }}</span>
+                    </a>
+                @endforeach
             </div>
-        </div>
+        </section>
     </div>
 </div>
+

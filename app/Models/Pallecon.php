@@ -92,6 +92,15 @@ class Pallecon extends Model
         );
     }
 
+    /**
+     * Whether completing this pallecon attempted a WinMan booking that did not succeed.
+     * Pallecons with no attempt on record (e.g. sealed before booking was linked) are not retryable.
+     */
+    public function hasFailedWinManBooking(): bool
+    {
+        return $this->winmanBookingLogs->isNotEmpty() && ! $this->isWinManBooked();
+    }
+
     public function batches(): BelongsToMany
     {
         return $this->belongsToMany(BatchRecord::class, 'pallecon_fills')

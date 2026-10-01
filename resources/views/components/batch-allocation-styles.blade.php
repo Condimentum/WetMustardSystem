@@ -39,6 +39,38 @@
 
     .ba-foot { padding: 6px 0 4px; }
 
+    /* Ingredients Sign Off tab */
+    .bs-wrap { container: bs / inline-size; }
+    .bs-card { border: 1px solid #e6dcc5; border-radius: 16px; background: linear-gradient(180deg, #fffdf8, #f7f2e6); box-shadow: 0 3px 8px rgba(110, 85, 35, .09), inset 0 1px 0 #fff; }
+    .bs-head { padding: 16px 20px; border-bottom: 1px solid #e6dcc5; }
+    .bs-title { margin: 0; font-size: 1.1rem; font-weight: 800; color: #2c1650; }
+    .bs-sub { margin-top: 3px; font-size: .82rem; color: #6b5a2f; }
+    .bs-body { padding: 18px 20px 20px; }
+    .bs-empty { font-size: .9rem; color: #8a7a5c; }
+    .bs-roles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .bs-role { padding: 12px 14px; border: 1px solid #e3d8bf; border-radius: 12px; background: #fffdf8; }
+    .bs-role-label { display: block; margin-bottom: 8px; font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #5b5140; }
+    .bs-select { width: 100%; border: 1px solid #d8ccb0; border-radius: 10px; background-color: #fffdf7; color: #1f2a33; font-size: .9rem; }
+    .bs-select:focus { border-color: #4a2a78; box-shadow: 0 0 0 3px rgba(74, 42, 120, .18); }
+    .bs-done { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 12px; border: 1px solid #9fc8bc; border-radius: 10px; background: linear-gradient(180deg, #e2f0ec, #cfe6df); color: #1f4f4f; font-size: .88rem; font-weight: 700; }
+    .bs-done-check { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #1f5c61; color: #fff; font-size: 12px; }
+    .bs-done-name { font-weight: 500; color: #2f5f5f; }
+    .bs-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+    .bs-btn-ghost { display: inline-flex; align-items: center; height: 40px; padding: 0 18px; border: 1px solid #c9a24a; border-radius: 10px; background: linear-gradient(180deg, #fffdf7, #f6ecd2); color: #6b4e14; font-size: .88rem; font-weight: 700; }
+    .bs-btn-ghost:hover { background: #f3e5bf; }
+    .bs-foot { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; margin-top: 18px; }
+    .bs-warn { box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid #ecd98e; border-radius: 12px; background: linear-gradient(180deg, #fdf6d8, #f8ecbd); color: #4a3a12; font-size: .9rem; font-weight: 700; animation: ingredient-signoff-pulse 1.7s ease-in-out infinite; }
+    .bs-warn-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(180deg, #e0b85a, #b8892f); color: #fff; font-weight: 900; }
+    .ba-btn:disabled { border-color: #cfc8b8; background: linear-gradient(180deg, #ebe8e1, #dcd8cf); color: #8a8578; box-shadow: none; cursor: not-allowed; filter: none; }
+    .bs-note { font-size: .78rem; color: #6b6147; text-align: right; }
+
+    @container bs (max-width: 640px) {
+        .bs-roles { grid-template-columns: minmax(0, 1fr); }
+        .bs-actions, .bs-foot { justify-content: stretch; align-items: stretch; }
+        .bs-actions > *, .bs-foot > .ba-btn { justify-content: center; }
+        .bs-note { text-align: left; }
+    }
+
     @container ba (max-width: 720px) {
         .ba-head { display: none; }
         .ba-grid { grid-template-columns: 44px repeat(3, minmax(0, 1fr)); grid-template-areas: "badge desc desc act" "badge prod out alloc"; row-gap: 10px; column-gap: 10px; }

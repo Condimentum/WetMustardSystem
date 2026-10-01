@@ -205,14 +205,9 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             return;
         }
 
+        // A completed batch (ingredients signed off) is exactly what gets filled into
+        // pallecons, so only sign-off and remaining kg gate issuing - not batch status.
         $batchMeta = collect($this->moBatches)->firstWhere('id', $batchId);
-
-        if (($batchMeta['status'] ?? null) === BatchRecord::STATUS_COMPLETED) {
-            $this->flash = 'Batch '.($batchMeta['batch_number'] ?? $batchId).' is completed and can no longer be issued to a pallecon.';
-            $this->flashError = true;
-
-            return;
-        }
 
         $error = app(PalleconFilling::class)->signOffError($batchMeta);
         if ($error !== null) {
@@ -533,25 +528,30 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
 }; ?>
 
 <div class="py-8">
-    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <x-mo-workspace-styles />
+    <x-pallecon-workspace-styles />
+    <div class="wm-page max-w-7xl mx-auto space-y-6">
 
         {{-- Header --}}
-        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-            <div style="padding:10px 14px;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);display:flex;justify-content:flex-end;">
-                <a href="{{ route('dashboard') }}" wire:navigate style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:12px;font-weight:800;text-decoration:none;">
-                    Back to Main Menu
-                </a>
+        <section class="wm-card wm-card--gear-tr">
+            <div class="pw-hero">
+                <span class="pw-hero-icon"><img src="{{ asset('pallecon-row-icon.png') }}" alt="" /></span>
+                <div class="pw-hero-text">
+                    <div class="wml-title">PALLECON WORKSPACE</div>
+                    <div class="wml-sub">{{ $localOrder?->mo_number ?? $winmanMo }}</div>
+                </div>
+                <a href="{{ route('dashboard') }}" wire:navigate class="pw-back">Back to Main Menu</a>
             </div>
-            <div class="px-5 py-3 text-sm text-slate-600 flex flex-wrap gap-x-6 gap-y-1">
-                <span><span class="text-slate-400">MO:</span> <strong>{{ $localOrder?->mo_number ?? $winmanMo }}</strong></span>
-                <span><span class="text-slate-400">Product:</span> <strong>{{ $localOrder?->winman_product_id ?? '—' }}</strong></span>
-                <span><span class="text-slate-400">Batches:</span> <strong>{{ count($this->moBatches) }}</strong></span>
-                <span><span class="text-slate-400">Physical capacity:</span> <strong>{{ number_format($this->capacityKg, 0) }} kg</strong></span>
+            <div class="pw-stats">
+                <div class="pw-stat"><div class="pw-stat-label">MO</div><div class="pw-stat-value" style="color:#1f5130;">{{ $localOrder?->mo_number ?? $winmanMo }}</div></div>
+                <div class="pw-stat"><div class="pw-stat-label">Product</div><div class="pw-stat-value">{{ $localOrder?->winman_product_id ?? '—' }}</div></div>
+                <div class="pw-stat"><div class="pw-stat-label">Batches</div><div class="pw-stat-value" style="color:#5b3b8f;">{{ count($this->moBatches) }}</div></div>
+                <div class="pw-stat"><div class="pw-stat-label">Physical capacity</div><div class="pw-stat-value">{{ number_format($this->capacityKg, 0) }} kg</div></div>
             </div>
-        </div>
+        </section>
 
         @if ($flash)
-            <div class="rounded-md p-3 text-sm {{ $flashError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200' }}">
+            <div class="pw-flash {{ $flashError ? 'pw-flash--err' : 'pw-flash--ok' }}">
                 {{ $flash }}
             </div>
         @endif
@@ -560,29 +560,27 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             <div class="space-y-3">
                 @foreach ($winman_booking_results as $result)
                     @php $preview = $result['preview']; @endphp
-                    <div class="border rounded-lg p-4 shadow-sm {{ $result['error'] ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50' }}">
-                        <h3 class="text-sm font-semibold mb-3 {{ $result['error'] ? 'text-red-800' : 'text-emerald-800' }}">
+                    <div class="pw-booking {{ $result['error'] ? 'pw-booking--err' : '' }}">
+                        <h3 class="pw-booking-title">
                             WinMan Booking &mdash; pallecon {{ $result['serial_number'] }} ({{ number_format($result['fill_weight'], 1) }} kg)
                         </h3>
-                        <div class="w-full rounded-lg border {{ $result['error'] ? 'border-red-200' : 'border-emerald-200' }} bg-white p-4">
-                            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
-                                <div><span class="text-slate-500">Status:</span> <span class="font-semibold text-slate-900">{{ $preview['booking_status'] ?? '—' }}</span></div>
-                                <div><span class="text-slate-500">Inventory ID:</span> <span class="font-semibold text-slate-900">{{ $preview['winman_inventory_id'] ?? '—' }}</span></div>
-                                <div><span class="text-slate-500">Booked At:</span> <span class="font-medium text-slate-900">{{ $preview['booked_at'] ?? '—' }}</span></div>
-                                <div><span class="text-slate-500">MO ID:</span> <span class="font-medium text-slate-900">{{ $preview['manufacturing_order_id'] ?? '—' }}</span></div>
-                                <div><span class="text-slate-500">Quantity (kg):</span> <span class="font-medium text-slate-900">{{ $preview['quantity_kg'] ?? '—' }}</span></div>
-                                <div><span class="text-slate-500">Pallecon Number:</span> <span class="font-medium text-slate-900">{{ $preview['pallecon_number'] ?? '—' }}</span></div>
-                                <div class="md:col-span-2"><span class="text-slate-500">Lot Number Sent:</span> <span class="font-medium text-slate-900">{{ $preview['lot_number'] ?? '—' }}</span></div>
-                                <div><span class="text-slate-500">Finished Date:</span> <span class="font-medium text-slate-900">{{ $preview['finished_date'] ?? '—' }}</span></div>
-                                <div><span class="text-slate-500">Expiry Date:</span> <span class="font-medium text-slate-900">{{ $preview['expiry_date'] ?? '—' }}</span></div>
-                                <div><span class="text-slate-500">Logged Qty (kg):</span> <span class="font-medium text-slate-900">{{ $preview['booked_quantity_kg_logged'] ?? '—' }}</span></div>
-                                <div><span class="text-slate-500">Logged Qty (TU):</span> <span class="font-medium text-slate-900">{{ $preview['booked_quantity_traded_units'] ?? '—' }}</span></div>
-                                @if (! empty($preview['error_message']))
-                                    <div class="md:col-span-2 xl:col-span-4 text-red-700">
-                                        <span class="text-slate-500">Error:</span> {{ $preview['error_message'] }}
-                                    </div>
-                                @endif
-                            </div>
+                        <div class="pw-kv">
+                            <div><span>Status:</span> <strong>{{ $preview['booking_status'] ?? '—' }}</strong></div>
+                            <div><span>Inventory ID:</span> <strong>{{ $preview['winman_inventory_id'] ?? '—' }}</strong></div>
+                            <div><span>Booked At:</span> <strong>{{ $preview['booked_at'] ?? '—' }}</strong></div>
+                            <div><span>MO ID:</span> <strong>{{ $preview['manufacturing_order_id'] ?? '—' }}</strong></div>
+                            <div><span>Quantity (kg):</span> <strong>{{ $preview['quantity_kg'] ?? '—' }}</strong></div>
+                            <div><span>Pallecon Number:</span> <strong>{{ $preview['pallecon_number'] ?? '—' }}</strong></div>
+                            <div class="pw-kv-wide"><span>Lot Number Sent:</span> <strong>{{ $preview['lot_number'] ?? '—' }}</strong></div>
+                            <div><span>Finished Date:</span> <strong>{{ $preview['finished_date'] ?? '—' }}</strong></div>
+                            <div><span>Expiry Date:</span> <strong>{{ $preview['expiry_date'] ?? '—' }}</strong></div>
+                            <div><span>Logged Qty (kg):</span> <strong>{{ $preview['booked_quantity_kg_logged'] ?? '—' }}</strong></div>
+                            <div><span>Logged Qty (TU):</span> <strong>{{ $preview['booked_quantity_traded_units'] ?? '—' }}</strong></div>
+                            @if (! empty($preview['error_message']))
+                                <div class="pw-kv-wide" style="color:#b42318;">
+                                    <span>Error:</span> {{ $preview['error_message'] }}
+                                </div>
+                            @endif
                         </div>
                     </div>
                 @endforeach
@@ -599,23 +597,33 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
             $isCompletedPalleconView = $this->palleconId !== null
                 && $active !== null
                 && in_array($active->status, [Pallecon::STATUS_SEALED, Pallecon::STATUS_CONSUMED], true);
+
+            $palleconTone = static fn (Pallecon $p): array => match (true) {
+                $p->isOnHold() => ['bg' => '#9b3b3b', 'dot' => '#f5c2c2', 'label' => 'On hold'],
+                $p->status === Pallecon::STATUS_SEALED => ['bg' => '#1f5c61', 'dot' => '#7fd1bf', 'label' => ucfirst($p->status)],
+                $p->status === Pallecon::STATUS_CONSUMED => ['bg' => '#6b7280', 'dot' => '#d1d5db', 'label' => ucfirst($p->status)],
+                $p->status === Pallecon::STATUS_FILLING => ['bg' => 'linear-gradient(180deg,#d4ad55,#b8913a)', 'dot' => '#fdf3d0', 'label' => ucfirst($p->status)],
+                default => ['bg' => '#3d6a8a', 'dot' => '#c7e0f2', 'label' => ucfirst($p->status)],
+            };
         @endphp
 
         @if ($isCompletedPalleconView)
             {{-- Completed pallecon: read-only summary --}}
-            <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
-                <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            @php $tone = $palleconTone($active); @endphp
+            <section class="wm-card wm-card--gear-tr">
+                <div class="pw-pallecon">
+                    <img src="{{ asset('pallecon-row-icon.png') }}" alt="" />
                     <div>
-                        <span class="font-semibold text-slate-900 text-lg">{{ $active->serial_number ?? 'Pallecon #'.$active->id }}</span>
-                        <span class="ml-2 text-xs px-2 py-0.5 rounded-full {{ $active->status === 'consumed' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-100 text-emerald-800' }}">{{ ucfirst($active->status) }}</span>
+                        <span class="pw-serial">{{ $active->serial_number ?? 'Pallecon #'.$active->id }}</span>
+                        <span class="wm-pill" style="margin-left:8px;background:{{ $tone['bg'] }};"><span class="wm-pill-dot" style="background:{{ $tone['dot'] }};"></span>{{ ucfirst($active->status) }}</span>
                         @if ($active->isOnHold())
-                            <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-800">On hold</span>
+                            <span class="wm-pill" style="margin-left:6px;background:#9b3b3b;"><span class="wm-pill-dot" style="background:#f5c2c2;"></span>On hold</span>
                         @endif
                     </div>
-                    <div class="text-sm text-slate-500">
-                        {{ $active->final_weight !== null ? number_format((float) $active->final_weight, 1).' kg' : '—' }}
+                    <div class="pw-weight">
+                        <strong>{{ $active->final_weight !== null ? number_format((float) $active->final_weight, 1).' kg' : '—' }}</strong>
                         @if ($active->sealed_at)
-                            · sealed {{ $active->sealed_at->format('d/m/Y H:i') }}
+                            sealed {{ $active->sealed_at->format('d/m/Y H:i') }}
                         @endif
                         @if ($active->sealedBy)
                             by {{ $active->sealedBy->name }}
@@ -624,161 +632,137 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
                 </div>
 
                 @if ($active->isOnHold())
-                    <p class="text-xs text-red-600 mb-4">{{ $active->hold_reason }}</p>
+                    <p class="pw-error" style="margin-top:10px;">{{ $active->hold_reason }}</p>
                 @endif
 
-                <dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-sm mb-5">
-                    <div><dt class="text-xs text-slate-400">MO</dt><dd class="font-medium text-slate-800">{{ $localOrder?->mo_number ?? $winmanMo }}</dd></div>
-                    <div><dt class="text-xs text-slate-400">WinMan reference</dt><dd class="font-mono text-slate-800">{{ $active->winman_reference ?: '—' }}</dd></div>
-                    <div><dt class="text-xs text-slate-400">Top / bottom seal</dt><dd class="text-slate-800">{{ $active->top_seal_number ?: '—' }} / {{ $active->bottom_seal_number ?: '—' }}</dd></div>
-                    <div><dt class="text-xs text-slate-400">Liner number</dt><dd class="text-slate-800">{{ $active->liner_number ?: '—' }}</dd></div>
-                </dl>
+                <div class="pw-tiles">
+                    <div class="pw-stat"><div class="pw-stat-label">MO</div><div class="pw-stat-value">{{ $localOrder?->mo_number ?? $winmanMo }}</div></div>
+                    <div class="pw-stat"><div class="pw-stat-label">WinMan reference</div><div class="pw-stat-value" style="font-family:ui-monospace,monospace;font-size:.9rem;">{{ $active->winman_reference ?: '—' }}</div></div>
+                    <div class="pw-stat"><div class="pw-stat-label">Top / bottom seal</div><div class="pw-stat-value">{{ $active->top_seal_number ?: '—' }} / {{ $active->bottom_seal_number ?: '—' }}</div></div>
+                    <div class="pw-stat"><div class="pw-stat-label">Liner number</div><div class="pw-stat-value">{{ $active->liner_number ?: '—' }}</div></div>
+                </div>
 
-                <h3 class="text-xs font-semibold uppercase text-slate-400 mb-2">Batches used</h3>
-                <div class="overflow-x-auto mb-5">
-                    <table class="min-w-full text-sm">
-                        <thead class="text-left text-xs uppercase text-slate-400">
-                            <tr>
-                                <th class="py-2 pr-3">Batch</th>
-                                <th class="py-2 pr-3 text-right">Weight</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
-                            @forelse ($active->fills->sortBy('sequence') as $fill)
-                                <tr>
-                                    <td class="py-2 pr-3 font-medium text-slate-800">{{ $fill->batchRecord?->batch_number ?? 'Batch '.$fill->batch_record_id }}</td>
-                                    <td class="py-2 pr-3 text-right">{{ $fill->fill_weight !== null ? number_format((float) $fill->fill_weight, 1).' kg' : '—' }}</td>
-                                </tr>
-                            @empty
-                                <tr><td colspan="2" class="py-2 text-slate-400 italic">No fills recorded.</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
+                <h3 class="pw-subhead">Batches used</h3>
+                <div class="pw-mini">
+                    <div class="pw-mini-row pw-mini-head"><div>Batch</div><div class="pw-num">Weight</div></div>
+                    @forelse ($active->fills->sortBy('sequence') as $fill)
+                        <div class="pw-mini-row">
+                            <div style="font-weight:600;">{{ $fill->batchRecord?->batch_number ?? 'Batch '.$fill->batch_record_id }}</div>
+                            <div class="pw-num">{{ $fill->fill_weight !== null ? number_format((float) $fill->fill_weight, 1).' kg' : '—' }}</div>
+                        </div>
+                    @empty
+                        <div class="pw-mini-row"><div class="pw-empty">No fills recorded.</div></div>
+                    @endforelse
                 </div>
 
                 @php $lastBooking = $active->winmanBookingLogs->sortByDesc('id')->first(); @endphp
-                <h3 class="text-xs font-semibold uppercase text-slate-400 mb-2">WinMan booking</h3>
-                <div class="mb-5">
+                <h3 class="pw-subhead">WinMan booking</h3>
+                <div>
                     @if ($lastBooking === null)
-                        <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Not booked</span>
+                        <span class="pw-tag pw-tag--muted">Not booked</span>
                     @else
-                        <div class="flex flex-wrap items-center gap-2 mb-1">
+                        <div class="flex flex-wrap items-center gap-2">
                             @if ($lastBooking->booking_status === 'success')
-                                <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Booked &middot; Inventory {{ $lastBooking->winman_inventory_id ?? '—' }}</span>
+                                <span class="pw-tag pw-tag--ok">Booked &middot; Inventory {{ $lastBooking->winman_inventory_id ?? '—' }}</span>
                             @else
-                                <span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-800">{{ \Illuminate\Support\Str::headline($lastBooking->booking_status) }}</span>
+                                <span class="pw-tag pw-tag--err">{{ \Illuminate\Support\Str::headline($lastBooking->booking_status) }}</span>
                             @endif
-                            <span class="text-xs text-slate-500">lot {{ $lastBooking->lot_number }} &middot; {{ number_format((float) $lastBooking->quantity_booked_kg, 1) }} kg &middot; {{ $lastBooking->booking_date?->format('d/m/Y H:i') }}</span>
+                            <span class="pw-ref">lot {{ $lastBooking->lot_number }} &middot; {{ number_format((float) $lastBooking->quantity_booked_kg, 1) }} kg &middot; {{ $lastBooking->booking_date?->format('d/m/Y H:i') }}</span>
                         </div>
                         @if ($lastBooking->error_message)
-                            <p class="text-xs text-red-600">{{ $lastBooking->error_message }}</p>
+                            <p class="pw-error">{{ $lastBooking->error_message }}</p>
                         @endif
                     @endif
                 </div>
 
-                <h3 class="text-xs font-semibold uppercase text-slate-400 mb-2">Label prints</h3>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full text-sm">
-                        <thead class="text-left text-xs uppercase text-slate-400">
-                            <tr>
-                                <th class="py-2 pr-3">Printed</th>
-                                <th class="py-2 pr-3">Type</th>
-                                <th class="py-2 pr-3">By</th>
-                                <th class="py-2 pr-3">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
-                            @forelse ($active->labelPrintLogs->sortByDesc('printed_at') as $log)
-                                <tr>
-                                    <td class="py-2 pr-3 text-slate-600">{{ $log->printed_at?->format('d/m/Y H:i') ?? '—' }}</td>
-                                    <td class="py-2 pr-3 text-slate-600">{{ \Illuminate\Support\Str::headline($log->label_type ?? '—') }}</td>
-                                    <td class="py-2 pr-3 text-slate-600">{{ $log->printedBy?->name ?? '—' }}</td>
-                                    <td class="py-2 pr-3">
-                                        @if ($log->status === 'success')
-                                            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Printed</span>
-                                        @else
-                                            <span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-800">Failed</span>
-                                            @if ($log->error_message)
-                                                <span class="block text-xs text-red-600 mt-0.5">{{ $log->error_message }}</span>
-                                            @endif
-                                        @endif
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr><td colspan="4" class="py-2 text-slate-400 italic">No label prints recorded.</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
+                <h3 class="pw-subhead">Label prints</h3>
+                <div class="pw-mini" style="--pw-cols: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr);">
+                    <div class="pw-mini-row pw-mini-head"><div>Printed</div><div>Type</div><div>By</div><div>Status</div></div>
+                    @forelse ($active->labelPrintLogs->sortByDesc('printed_at') as $log)
+                        <div class="pw-mini-row">
+                            <div>{{ $log->printed_at?->format('d/m/Y H:i') ?? '—' }}</div>
+                            <div>{{ \Illuminate\Support\Str::headline($log->label_type ?? '—') }}</div>
+                            <div>{{ $log->printedBy?->name ?? '—' }}</div>
+                            <div>
+                                @if ($log->status === 'success')
+                                    <span class="pw-tag pw-tag--ok">Printed</span>
+                                @else
+                                    <span class="pw-tag pw-tag--err">Failed</span>
+                                    @if ($log->error_message)
+                                        <span class="pw-error">{{ $log->error_message }}</span>
+                                    @endif
+                                @endif
+                            </div>
+                        </div>
+                    @empty
+                        <div class="pw-mini-row"><div class="pw-empty">No label prints recorded.</div></div>
+                    @endforelse
                 </div>
-            </div>
+            </section>
         @else
 
         {{-- Batches available from this MO --}}
-        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
-            <h2 class="text-sm font-semibold text-slate-800 mb-3">Batches &mdash; {{ $localOrder?->mo_number ?? $winmanMo }}</h2>
+        <section class="wm-card wm-card--gear-tr">
+            <h2 class="wm-title">Batches &mdash; {{ $localOrder?->mo_number ?? $winmanMo }}</h2>
 
+            @php
+                // Fully issued batches have nothing left to put into a pallecon.
+                $batchesToFill = collect($this->moBatches)->filter(fn (array $b): bool => $b['remaining_kg'] > 0.0001);
+            @endphp
             @if (count($this->moBatches) === 0)
-                <p class="text-sm text-slate-400">No batches created for this manufacturing order yet.</p>
+                <p class="pw-empty" style="margin-top:12px;">No batches created for this manufacturing order yet.</p>
+            @elseif ($batchesToFill->isEmpty())
+                <p class="pw-empty" style="margin-top:12px;">All batches for this manufacturing order have been fully issued to pallecons.</p>
             @else
-                <div class="overflow-x-auto">
-                    <table class="min-w-full text-sm">
-                        <thead class="text-left text-xs uppercase text-slate-400">
-                            <tr>
-                                <th class="py-2 pr-3">Batch</th>
-                                <th class="py-2 pr-3">Status</th>
-                                <th class="py-2 pr-3 text-right">Planned</th>
-                                <th class="py-2 pr-3 text-right">Filled</th>
-                                <th class="py-2 pr-3 text-right">Remaining</th>
-                                <th class="py-2 pr-3"></th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
-                            @foreach ($this->moBatches as $batchOption)
-                                @php
-                                    $canIssue = $batchOption['signoff_complete']
-                                        && $batchOption['remaining_kg'] > 0.0001
-                                        && $active !== null
-                                        && $active->isOpenForFilling()
-                                        && ($activeRemaining === null || $activeRemaining > 0.0001);
-                                @endphp
-                                <tr class="{{ $batchOption['signoff_complete'] ? '' : 'opacity-50' }}">
-                                    <td class="py-2 pr-3 font-medium text-slate-800">{{ $batchOption['batch_number'] }}</td>
-                                    <td class="py-2 pr-3">
-                                        <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{{ \Illuminate\Support\Str::headline($batchOption['status']) }}</span>
-                                        @unless ($batchOption['signoff_complete'])
-                                            <span class="ml-1 text-xs text-amber-700">sign-off pending</span>
-                                        @endunless
-                                    </td>
-                                    <td class="py-2 pr-3 text-right">{{ $fmtKg($batchOption['planned_kg']) }}</td>
-                                    <td class="py-2 pr-3 text-right">{{ $fmtKg($batchOption['filled_kg']) }}</td>
-                                    <td class="py-2 pr-3 text-right font-semibold {{ $batchOption['remaining_kg'] <= 0.0001 ? 'text-emerald-600' : 'text-slate-800' }}">
-                                        {{ $fmtKg($batchOption['remaining_kg']) }}
-                                    </td>
-                                    <td class="py-2 pr-3 text-right">
-                                        @unless ($batchOption['status'] === \App\Models\BatchRecord::STATUS_COMPLETED)
-                                            <button type="button" wire:click="issueBatchToPallecon({{ $batchOption['id'] }})" wire:loading.attr="disabled" @disabled(! $canIssue)
-                                                class="inline-flex items-center px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed">Issue to Pallecon</button>
-                                        @endunless
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+                <div class="wml-table">
+                    <div class="wml-bar wm-grid wm-grid--pwbatch">
+                        <div>Batch</div>
+                        <div class="wml-num">Batch Qty</div>
+                        <div class="wml-num">Qty Filled</div>
+                        <div class="wml-num">Qty Remaining</div>
+                        <div></div>
+                    </div>
+                    @foreach ($batchesToFill as $batchOption)
+                        @php
+                            $canIssue = $batchOption['signoff_complete']
+                                && $batchOption['remaining_kg'] > 0.0001
+                                && $active !== null
+                                && $active->isOpenForFilling()
+                                && ($activeRemaining === null || $activeRemaining > 0.0001);
+                        @endphp
+                        <div @class(['wm-prow wm-grid wm-grid--pwbatch', 'wm-prow--muted' => ! $batchOption['signoff_complete']])>
+                            <div class="wm-ref">
+                                <div class="wml-ref">{{ $batchOption['batch_number'] }}</div>
+                                @unless ($batchOption['signoff_complete'])
+                                    <span class="pw-pending">sign-off pending</span>
+                                @endunless
+                            </div>
+                            <div class="wml-num" data-label="Batch Qty" style="color:#1f2a33;font-weight:600;">{{ $fmtKg($batchOption['planned_kg']) }}</div>
+                            <div class="wml-num" data-label="Qty Filled" style="color:#1f2a33;font-weight:600;">{{ $fmtKg($batchOption['filled_kg']) }}</div>
+                            <div class="wml-num" data-label="Qty Remaining" style="color:#1f2a33;">
+                                {{ $fmtKg($batchOption['remaining_kg']) }}
+                            </div>
+                            <div class="wm-action">
+                                <button type="button" wire:click="issueBatchToPallecon({{ $batchOption['id'] }})" wire:loading.attr="disabled" @disabled(! $canIssue)
+                                    class="wm-btn-continue">Issue to Pallecon</button>
+                            </div>
+                        </div>
+                    @endforeach
                 </div>
                 @if ($active === null)
-                    <p class="mt-2 text-xs text-amber-700">No pallecon is open. <a href="{{ route('manufacturing-orders.workspace', ['winmanMo' => $winmanMo]) }}" wire:navigate class="font-semibold underline">Open one on the MO Workspace</a> to issue batches.</p>
+                    <p class="pw-note">No pallecon is open. <a href="{{ route('manufacturing-orders.workspace', ['winmanMo' => $winmanMo]) }}" wire:navigate>Open one on the MO Workspace</a> to issue batches.</p>
                 @endif
             @endif
-        </div>
+        </section>
 
         {{-- Pallecon Workspace: the one pallecon this page works on --}}
-        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
-            <h2 class="text-sm font-semibold text-slate-800 mb-3">Pallecon Workspace</h2>
+        <section class="wm-card wm-card--gear-bl">
+            <h2 class="wm-title">Pallecon Workspace</h2>
 
             @if ($active === null)
-                <p class="text-sm text-slate-500">
+                <p class="pw-empty" style="margin-top:12px;font-style:normal;">
                     No pallecon selected.
-                    <a href="{{ route('manufacturing-orders.workspace', ['winmanMo' => $winmanMo]) }}" wire:navigate class="text-indigo-600 font-semibold">Go to the MO Workspace</a>
+                    <a href="{{ route('manufacturing-orders.workspace', ['winmanMo' => $winmanMo]) }}" wire:navigate class="wm-link">Go to the MO Workspace</a>
                     to create one or pick one from the list.
                 </p>
             @else
@@ -787,127 +771,132 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
                     $target = $active->target_weight_kg !== null ? (float) $active->target_weight_kg : null;
                     $pct = $target !== null && $target > 0 ? min(100, round($filled / $target * 100)) : null;
                     $isFull = $pct !== null && $pct >= 100;
+                    $tone = $palleconTone($active);
                 @endphp
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                        <span class="font-semibold text-slate-900">{{ $active->serial_number ?? 'Pallecon #'.$active->id }}</span>
-                        <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">{{ ucfirst($active->status) }}</span>
-                        @if ($isFull)
-                            <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">Full &mdash; ready to complete</span>
-                        @endif
-                        @if ($active->winman_reference)
-                            <span class="ml-2 text-xs text-slate-500">Ref: <span class="font-mono text-slate-700">{{ $active->winman_reference }}</span></span>
-                        @endif
+                <div class="wml-table" style="padding:16px 18px;">
+                    <div class="pw-pallecon">
+                        <img src="{{ asset('pallecon-row-icon.png') }}" alt="" />
+                        <div>
+                            <span class="pw-serial">{{ $active->serial_number ?? 'Pallecon #'.$active->id }}</span>
+                            <span class="wm-pill" style="margin-left:8px;background:{{ $tone['bg'] }};"><span class="wm-pill-dot" style="background:{{ $tone['dot'] }};"></span>{{ ucfirst($active->status) }}</span>
+                            @if ($isFull)
+                                <span class="wm-pill" style="margin-left:6px;background:#1f5c61;"><span class="wm-pill-dot" style="background:#7fd1bf;"></span>Full &mdash; ready to complete</span>
+                            @endif
+                            @if ($active->winman_reference)
+                                <div class="pw-ref" style="margin-top:4px;">Ref: <code>{{ $active->winman_reference }}</code></div>
+                            @endif
+                        </div>
+                        <div class="pw-weight">
+                            @if ($target !== null)
+                                <strong>{{ number_format($filled, 1) }} / {{ $fmtKg($target) }} kg</strong>
+                                {{ $pct }}% filled
+                            @else
+                                <strong>{{ number_format($filled, 1) }} kg</strong>
+                                no target set
+                            @endif
+                        </div>
                     </div>
-                    <div class="text-sm text-slate-500">
-                        @if ($target !== null)
-                            {{ number_format($filled, 1) }} / {{ $fmtKg($target) }} kg ({{ $pct }}%)
+                    <div @class(['pw-bar', 'pw-bar--full' => $isFull])><span style="width: {{ $pct ?? 0 }}%"></span></div>
+
+                    <div class="pw-fills">
+                        @forelse ($active->fills->sortBy('sequence') as $fill)
+                            <div class="pw-fill">
+                                <span>#{{ $fill->sequence }} · {{ $fill->batchRecord?->batch_number ?? 'Batch '.$fill->batch_record_id }}</span>
+                                <strong>{{ $fill->fill_weight !== null ? number_format((float) $fill->fill_weight, 1).' kg' : '—' }}</strong>
+                            </div>
+                        @empty
+                            <p class="pw-empty">No fills yet.</p>
+                        @endforelse
+                    </div>
+
+                    {{-- Pallecon number --}}
+                    <div class="pw-section">
+                        <label class="pw-label">Pallecon number</label>
+                        <div style="max-width:20rem;">
+                            <input type="text" wire:model.live.blur="containerForm.serial_number" class="pw-input" placeholder="e.g. PAL-00123" />
+                        </div>
+                    </div>
+
+                    {{-- Complete the pallecon --}}
+                    <div class="pw-section">
+                        @if ($sealingId === $active->id)
+                            <div class="pw-seal">
+                                <div>
+                                    <label class="pw-label">Final weight (kg) *</label>
+                                    <input type="number" step="0.001" min="0.001" wire:model="sealForm.final_weight" class="pw-input" />
+                                    @error('sealForm.final_weight') <span class="pw-error">{{ $message }}</span> @enderror
+                                </div>
+                                <div>
+                                    <label class="pw-label">Top seal (optional)</label>
+                                    <input type="text" wire:model="sealForm.top_seal_number" class="pw-input" />
+                                </div>
+                                <div>
+                                    <label class="pw-label">Bottom seal (optional)</label>
+                                    <input type="text" wire:model="sealForm.bottom_seal_number" class="pw-input" />
+                                </div>
+                                <div>
+                                    <label class="pw-label">Liner number (optional)</label>
+                                    <input type="text" wire:model="sealForm.liner_number" class="pw-input" />
+                                </div>
+                            </div>
+                            <div class="pw-actions" style="margin-top:14px;">
+                                <button type="button" wire:click="completePallecon" class="pw-btn">Submit &amp; complete{{ $this->bartenderEnabled ? ' + print label' : '' }}</button>
+                                <button type="button" wire:click="cancelSeal" class="pw-btn-ghost">Cancel</button>
+                            </div>
                         @else
-                            {{ number_format($filled, 1) }} kg (no target set)
+                            <div class="pw-actions">
+                                <button type="button" wire:click="startSeal({{ $active->id }})" @disabled($active->fills->isEmpty()) class="pw-btn">Complete pallecon</button>
+                                @unless ($this->bartenderEnabled)
+                                    <span class="pw-hint">Label printing disabled (BARTENDER_ENABLED=false)</span>
+                                @endunless
+                            </div>
                         @endif
                     </div>
-                </div>
-                <div class="mt-2 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                    <div class="h-full {{ $isFull ? 'bg-emerald-500' : 'bg-amber-400' }}" style="width: {{ $pct ?? 0 }}%"></div>
-                </div>
-
-                <div class="mt-3 text-sm text-slate-600">
-                    @forelse ($active->fills->sortBy('sequence') as $fill)
-                        <div class="flex justify-between border-b border-slate-100 py-1">
-                            <span>#{{ $fill->sequence }} · {{ $fill->batchRecord?->batch_number ?? 'Batch '.$fill->batch_record_id }}</span>
-                            <span>{{ $fill->fill_weight !== null ? number_format((float) $fill->fill_weight, 1).' kg' : '—' }}</span>
-                        </div>
-                    @empty
-                        <p class="text-slate-400 italic">No fills yet.</p>
-                    @endforelse
-                </div>
-
-                {{-- Pallecon number --}}
-                <div class="mt-4 border-t border-slate-100 pt-4">
-                    <h3 class="text-xs font-semibold uppercase text-slate-400 mb-2">Pallecon number</h3>
-                    <div class="max-w-xs">
-                        <input type="text" wire:model.live.blur="containerForm.serial_number" class="w-full rounded-lg border-slate-300 text-sm" placeholder="e.g. PAL-00123" />
-                    </div>
-                </div>
-
-                {{-- Complete the pallecon --}}
-                <div class="mt-4 border-t border-slate-100 pt-4">
-                    @if ($sealingId === $active->id)
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-                            <div>
-                                <label class="block text-xs font-medium text-slate-500 mb-1">Final weight (kg) *</label>
-                                <input type="number" step="0.001" min="0.001" wire:model="sealForm.final_weight" class="w-full rounded-lg border-slate-300 text-sm" />
-                                @error('sealForm.final_weight') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-500 mb-1">Top seal (optional)</label>
-                                <input type="text" wire:model="sealForm.top_seal_number" class="w-full rounded-lg border-slate-300 text-sm" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-500 mb-1">Bottom seal (optional)</label>
-                                <input type="text" wire:model="sealForm.bottom_seal_number" class="w-full rounded-lg border-slate-300 text-sm" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-slate-500 mb-1">Liner number (optional)</label>
-                                <input type="text" wire:model="sealForm.liner_number" class="w-full rounded-lg border-slate-300 text-sm" />
-                            </div>
-                            <div class="flex items-end gap-2 md:col-span-4">
-                                <button type="button" wire:click="completePallecon" class="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500">Submit &amp; complete{{ $this->bartenderEnabled ? ' + print label' : '' }}</button>
-                                <button type="button" wire:click="cancelSeal" class="inline-flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-600 text-sm">Cancel</button>
-                            </div>
-                        </div>
-                    @else
-                        <button type="button" wire:click="startSeal({{ $active->id }})" @disabled($active->fills->isEmpty())
-                            class="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed">Complete pallecon</button>
-                        @unless ($this->bartenderEnabled)
-                            <span class="ml-3 text-xs text-amber-700">Label printing disabled (BARTENDER_ENABLED=false)</span>
-                        @endunless
-                    @endif
                 </div>
             @endif
-        </div>
+        </section>
 
         @endif
 
         @unless ($isCompletedPalleconView)
         {{-- Completed containers (this MO only) --}}
-        <div>
-            <h2 class="text-sm font-semibold text-slate-800 mb-3">Completed &mdash; {{ $localOrder?->mo_number ?? $winmanMo }}</h2>
-            <div class="space-y-3">
+        <section class="wm-card">
+            <h2 class="wm-title">Completed &mdash; {{ $localOrder?->mo_number ?? $winmanMo }}</h2>
+            <div class="wml-table">
                 @forelse ($this->completedContainers as $container)
-                    @php $hasUnbooked = ! $container->isWinManBooked(); @endphp
-                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                            <span class="font-semibold text-slate-900">{{ $container->serial_number ?? 'Pallecon #'.$container->id }}</span>
+                    @php
+                        $hasFailedBooking = $container->hasFailedWinManBooking();
+                        $tone = $palleconTone($container);
+                    @endphp
+                    <div class="wm-prow pw-completed">
+                        <div class="pw-completed-main">
+                            <img src="{{ asset('pallecon-row-icon.png') }}" alt="" class="wm-picon" />
+                            <span class="wml-ref">{{ $container->serial_number ?? 'Pallecon #'.$container->id }}</span>
+                            <span class="wm-pill" style="background:{{ $tone['bg'] }};"><span class="wm-pill-dot" style="background:{{ $tone['dot'] }};"></span>{{ $tone['label'] }}</span>
+                            <span class="pw-ref">{{ number_format((float) $container->final_weight, 1) }} kg</span>
                             @if ($container->isOnHold())
-                                <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-800">On hold</span>
-                            @else
-                                <span class="ml-2 text-xs px-2 py-0.5 rounded-full {{ $container->status === 'consumed' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-100 text-emerald-800' }}">{{ ucfirst($container->status) }}</span>
+                                <div class="pw-error" style="flex-basis:100%;">{{ $container->hold_reason }}</div>
                             @endif
-                            <span class="ml-2 text-sm text-slate-500">{{ number_format((float) $container->final_weight, 1) }} kg · {{ $container->fills->count() }} batch(es) · {{ $container->fills->map(fn ($fill) => $fill->batchRecord?->batch_number)->filter()->implode(', ') }}</span>
-                            @if ($container->isOnHold())
-                                <div class="text-xs text-red-600 mt-1">{{ $container->hold_reason }}</div>
-                            @endif
-                            @if ($this->winmanBookingEnabled && $hasUnbooked)
-                                <div class="text-xs text-amber-700 mt-1">Not yet booked to WinMan.</div>
+                            @if ($this->winmanBookingEnabled && $hasFailedBooking)
+                                <div class="pw-hint" style="flex-basis:100%;font-weight:700;">WinMan booking failed.</div>
                             @endif
                         </div>
-                        <div class="flex items-center gap-2">
-                            @if ($this->winmanBookingEnabled && $hasUnbooked)
-                                <button type="button" wire:click="retryWinManBooking({{ $container->id }})" class="inline-flex items-center px-3 py-2 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-400">Retry WinMan booking</button>
+                        <div class="pw-completed-actions">
+                            @if ($this->winmanBookingEnabled && $hasFailedBooking)
+                                <button type="button" wire:click="retryWinManBooking({{ $container->id }})" class="pw-btn-warn">Retry WinMan booking</button>
                             @endif
                             @if ($container->isOnHold())
-                                <span class="text-xs text-red-700">Quarantined — labelling blocked</span>
+                                <span class="pw-error">Quarantined — labelling blocked</span>
                             @elseif ($this->bartenderEnabled)
-                                <button type="button" wire:click="printLabel({{ $container->id }})" class="inline-flex items-center px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500">Print label</button>
+                                <button type="button" wire:click="printLabel({{ $container->id }})" class="wm-btn-continue">Print label</button>
                             @endif
                         </div>
                     </div>
                 @empty
-                    <div class="bg-white border border-dashed border-slate-200 rounded-2xl p-6 text-center text-slate-400 text-sm">No completed pallecons yet.</div>
+                    <div class="wml-empty">No completed pallecons yet.</div>
                 @endforelse
             </div>
-        </div>
+        </section>
         @endunless
 
     </div>
