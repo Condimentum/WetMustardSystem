@@ -150,39 +150,39 @@ new #[Layout('layouts.app')] #[Title('WM005 Wet Mustard Lab Testing')] class ext
 }; ?>
 
 <div class="py-8">
-    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-        <div style="background:#fff;border:1px solid #dbe1ea;border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(15,23,42,0.08);">
-            <div style="padding:24px 26px;background:linear-gradient(135deg,#f8fafc 0%,#e0ecff 100%);border-bottom:1px solid #dbe1ea;">
-                <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
-                    <div style="width:56px;height:56px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #86efac;overflow:hidden;flex-shrink:0;">
-                        <img src="{{ asset('lab-testing-icon.png') }}" alt="Wet Mustard Lab Testing" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
-                    </div>
+    <x-mo-workspace-styles />
+    <div class="wm-page max-w-6xl mx-auto space-y-6">
 
-                    <div>
-                        <div style="font-size:1.3rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">WM005 WET MUSTARD LAB TESTING</div>
-                        <div style="font-size:0.75rem;font-weight:700;color:#64748b;letter-spacing:.14em;margin-top:4px;">ANALYTICAL CHECKS PER PRODUCED BATCH</div>
-                    </div>
+        <section class="wm-card wm-card--gear-tr">
+            <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+                <span style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #c9a24a;overflow:hidden;flex-shrink:0;background:#fffdf7;">
+                    <img src="{{ asset('lab-testing-icon.png') }}" alt="Wet Mustard Lab Testing" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+                </span>
 
-                    <a href="{{ route('quality.lab-testing') }}" wire:navigate style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:12px;font-weight:800;text-decoration:none;">
-                        Back to Quality &amp; Lab Testing
-                    </a>
+                <div>
+                    <h1 class="wm-title">WM005 WET MUSTARD LAB TESTING</h1>
+                    <div class="wm-sub" style="text-transform:uppercase;letter-spacing:.1em;">Analytical Checks Per Produced Batch</div>
                 </div>
-            </div>
 
-            <div style="padding:24px 26px;">
+                <a href="{{ route('quality.lab-testing') }}" wire:navigate class="wm-link" style="margin-left:auto;">Back to Quality &amp; Lab Testing</a>
+            </div>
+        </section>
 
         @if ($flash)
-            <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 mb-6">{{ $flash }}</div>
+            <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{{ $flash }}</div>
         @endif
 
-        <form wire:submit="save" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div style="background:#2d3f8f;" class="px-5 py-3 text-white font-semibold">New lab test row</div>
-            <div class="p-5 grid gap-3 md:grid-cols-4">
-                <div><label class="block text-xs text-gray-600 mb-1">Date</label><input type="date" wire:model.defer="tested_date" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Time</label><input type="time" wire:model.defer="tested_time" class="w-full rounded-md border-gray-300 text-sm" /></div>
+        <form wire:submit="save" class="wm-table">
+            <div class="flex items-center justify-between px-6 py-4" style="background:linear-gradient(180deg,#2b3238,#171c20);border-radius:16px 16px 0 0;">
+                <h2 class="text-lg font-semibold text-white">New lab test row</h2>
+            </div>
+
+            <div class="p-6 grid gap-4 md:grid-cols-4">
+                <div><label class="mb-1 block text-sm text-slate-600">Date</label><input type="date" wire:model.defer="tested_date" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Time</label><input type="time" wire:model.defer="tested_time" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
                 <div class="md:col-span-2">
-                    <label class="block text-xs text-gray-600 mb-1">Active manufacturing order</label>
-                    <select wire:model.live="selected_manufacturing_order_id" class="w-full rounded-md border-gray-300 text-sm">
+                    <label class="mb-1 block text-sm text-slate-600">Active manufacturing order</label>
+                    <select wire:model.live="selected_manufacturing_order_id" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">- select active MO -</option>
                         @foreach ($this->activeManufacturingOrders as $order)
                             <option value="{{ $order->id }}">
@@ -191,23 +191,23 @@ new #[Layout('layouts.app')] #[Title('WM005 Wet Mustard Lab Testing')] class ext
                         @endforeach
                     </select>
                 </div>
-                <div><label class="block text-xs text-gray-600 mb-1">MO number</label><input wire:model.defer="mo_number" readonly class="w-full rounded-md border-gray-300 bg-slate-50 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Product ID</label><input wire:model.defer="part_number" readonly class="w-full rounded-md border-gray-300 bg-slate-50 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Product</label><input wire:model.defer="product" readonly class="w-full rounded-md border-gray-300 bg-slate-50 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Batch number</label><input wire:model.defer="batch_number" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Analytical spec</label><input wire:model.defer="analytical_specification" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Appearance</label><input wire:model.defer="appearance" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">pH</label><input type="number" step="0.001" wire:model.defer="ph" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Acidity (acetic)</label><input type="number" step="0.001" wire:model.defer="acidity_acetic" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Acidity (citric)</label><input type="number" step="0.001" wire:model.defer="acidity_citric" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Salt</label><input type="number" step="0.001" wire:model.defer="salt" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Viscosity (Brookfield)</label><input type="number" step="0.001" wire:model.defer="viscosity_brookfield" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Viscosity (Bostwick)</label><input type="number" step="0.001" wire:model.defer="viscosity_bostwick" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">aW</label><input type="number" step="0.001" wire:model.defer="aw" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Solids</label><input type="number" step="0.001" wire:model.defer="solids" class="w-full rounded-md border-gray-300 text-sm" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">MO number</label><input wire:model.defer="mo_number" readonly class="block w-full rounded-lg border-slate-300 bg-slate-100 text-sm shadow-sm" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Product ID</label><input wire:model.defer="part_number" readonly class="block w-full rounded-lg border-slate-300 bg-slate-100 text-sm shadow-sm" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Product</label><input wire:model.defer="product" readonly class="block w-full rounded-lg border-slate-300 bg-slate-100 text-sm shadow-sm" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Batch number</label><input wire:model.defer="batch_number" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Analytical spec</label><input wire:model.defer="analytical_specification" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Appearance</label><input wire:model.defer="appearance" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">pH</label><input type="number" step="0.001" wire:model.defer="ph" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Acidity (acetic)</label><input type="number" step="0.001" wire:model.defer="acidity_acetic" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Acidity (citric)</label><input type="number" step="0.001" wire:model.defer="acidity_citric" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Salt</label><input type="number" step="0.001" wire:model.defer="salt" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Viscosity (Brookfield)</label><input type="number" step="0.001" wire:model.defer="viscosity_brookfield" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Viscosity (Bostwick)</label><input type="number" step="0.001" wire:model.defer="viscosity_bostwick" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">aW</label><input type="number" step="0.001" wire:model.defer="aw" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Solids</label><input type="number" step="0.001" wire:model.defer="solids" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
                 <div>
-                    <label class="block text-xs text-gray-600 mb-1">Tested by</label>
-                    <select wire:model.defer="tested_by_user_id" class="w-full rounded-md border-gray-300 text-sm">
+                    <label class="mb-1 block text-sm text-slate-600">Tested by</label>
+                    <select wire:model.defer="tested_by_user_id" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                         <option value="">- select operator -</option>
                         @foreach ($this->operators as $operator)
                             <option value="{{ $operator->id }}">{{ $operator->name }}</option>
@@ -216,31 +216,41 @@ new #[Layout('layouts.app')] #[Title('WM005 Wet Mustard Lab Testing')] class ext
                     @error('tested_by_user_id') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                 </div>
             </div>
-            <div class="px-5 pb-5"><x-primary-button type="submit">Save WM005</x-primary-button></div>
+
+            <div class="px-6 pb-6"><button type="submit" class="wm-btn-dark">Save WM005</button></div>
         </form>
 
-        <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mt-6">
-            <div style="background:#2d3f8f;" class="px-4 py-2 text-sm font-semibold text-white">Recent WM005 entries</div>
-            <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
-                <thead><tr style="background:#2d3f8f;color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-3 py-2 text-left">Date</th><th class="px-3 py-2 text-left">Time</th><th class="px-3 py-2 text-left">Batch</th><th class="px-3 py-2 text-left">pH</th><th class="px-3 py-2 text-left">Salt</th><th class="px-3 py-2 text-left">Tested by</th></tr></thead>
-                <tbody class="divide-y divide-slate-100">
-                @forelse ($this->recent as $row)
-                    <tr>
-                        <td class="px-3 py-2">{{ $row->tested_date?->toDateString() }}</td>
-                        <td class="px-3 py-2">{{ $row->tested_time ? \Illuminate\Support\Carbon::parse($row->tested_time)->format('H:i') : '—' }}</td>
-                        <td class="px-3 py-2">{{ $row->batch_number ?? '—' }}</td>
-                        <td class="px-3 py-2">{{ $row->ph ?? '—' }}</td>
-                        <td class="px-3 py-2">{{ $row->salt ?? '—' }}</td>
-                        <td class="px-3 py-2">{{ $row->tested_by }}</td>
-                    </tr>
-                @empty
-                    <tr><td colspan="6" class="px-3 py-3 text-slate-500">No entries yet.</td></tr>
-                @endforelse
-                </tbody>
-            </table>
+        <div class="wm-table">
+            <div class="flex items-center justify-between px-6 py-4" style="background:linear-gradient(180deg,#2b3238,#171c20);border-radius:16px 16px 0 0;">
+                <h3 class="text-lg font-semibold text-white">Recent WM005 entries</h3>
             </div>
-        </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead>
+                        <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
+                            <th class="px-4 py-3">Date</th>
+                            <th class="px-4 py-3">Time</th>
+                            <th class="px-4 py-3">Batch</th>
+                            <th class="px-4 py-3">pH</th>
+                            <th class="px-4 py-3">Salt</th>
+                            <th class="px-4 py-3">Tested by</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse ($this->recent as $row)
+                            <tr>
+                                <td class="px-4 py-2">{{ $row->tested_date?->toDateString() }}</td>
+                                <td class="px-4 py-2">{{ $row->tested_time ? \Illuminate\Support\Carbon::parse($row->tested_time)->format('H:i') : '—' }}</td>
+                                <td class="px-4 py-2">{{ $row->batch_number ?? '—' }}</td>
+                                <td class="px-4 py-2">{{ $row->ph ?? '—' }}</td>
+                                <td class="px-4 py-2">{{ $row->salt ?? '—' }}</td>
+                                <td class="px-4 py-2">{{ $row->tested_by }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">No entries yet.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

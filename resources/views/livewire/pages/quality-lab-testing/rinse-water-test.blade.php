@@ -70,71 +70,81 @@ new #[Layout('layouts.app')] #[Title('WM010 Rinse Water Test')] class extends Co
 }; ?>
 
 <div class="py-8">
-    <div class="max-w-6xl mx-auto sm:px-6 lg:px-8 space-y-6">
-        <div style="background:#fff;border:1px solid #dbe1ea;border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(15,23,42,0.08);">
-            <div style="padding:24px 26px;background:linear-gradient(135deg,#f8fafc 0%,#e0ecff 100%);border-bottom:1px solid #dbe1ea;">
-                <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
-                    <div style="width:56px;height:56px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #86efac;overflow:hidden;flex-shrink:0;">
-                        <img src="{{ asset('lab-testing-icon.png') }}" alt="Rinse Water Test" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
-                    </div>
+    <x-mo-workspace-styles />
+    <div class="wm-page max-w-6xl mx-auto space-y-6">
 
-                    <div>
-                        <div style="font-size:1.3rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">WM010 RINSE WATER TEST SHEET</div>
-                        <div style="font-size:0.75rem;font-weight:700;color:#64748b;letter-spacing:.14em;margin-top:4px;">CLEANING CHEMICALS &middot; SULPHITES &middot; TITRATION</div>
-                    </div>
+        <section class="wm-card wm-card--gear-tr">
+            <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
+                <span style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #c9a24a;overflow:hidden;flex-shrink:0;background:#fffdf7;">
+                    <img src="{{ asset('lab-testing-icon.png') }}" alt="Rinse Water Test" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+                </span>
 
-                    <a href="{{ route('quality.lab-testing') }}" wire:navigate style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:12px;font-weight:800;text-decoration:none;">
-                        Back to Quality &amp; Lab Testing
-                    </a>
+                <div>
+                    <h1 class="wm-title">WM010 RINSE WATER TEST SHEET</h1>
+                    <div class="wm-sub" style="text-transform:uppercase;letter-spacing:.1em;">Cleaning Chemicals &middot; Sulphites &middot; Titration</div>
                 </div>
-            </div>
 
-            <div style="padding:24px 26px;">
+                <a href="{{ route('quality.lab-testing') }}" wire:navigate class="wm-link" style="margin-left:auto;">Back to Quality &amp; Lab Testing</a>
+            </div>
+        </section>
 
         @if ($flash)
-            <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 mb-6">{{ $flash }}</div>
+            <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{{ $flash }}</div>
         @endif
 
-        <form wire:submit="save" class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <div style="background:#2d3f8f;" class="px-5 py-3 text-white font-semibold">New rinse-water row</div>
-            <div class="p-5 grid gap-3 md:grid-cols-3">
-                <div><label class="block text-xs text-gray-600 mb-1">Date</label><input type="date" wire:model.defer="tested_date" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Section</label><select wire:model.defer="section" class="w-full rounded-md border-gray-300 text-sm"><option value="cleaning_chemicals">Cleaning chemicals</option><option value="sulphites">Sulphites</option><option value="chemical_titration">Chemical titration check</option></select></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Operator name</label><input wire:model.defer="operator_name" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Equipment</label><input wire:model.defer="equipment" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Reading</label><input type="number" step="0.001" wire:model.defer="reading" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Reading unit</label><input wire:model.defer="reading_unit" placeholder="pH or mg/Ltr" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Pass / Fail</label><select wire:model.defer="pass_or_fail" class="w-full rounded-md border-gray-300 text-sm"><option value="Pass">Pass</option><option value="Fail">Fail</option></select></div>
-                <div class="md:col-span-2"><label class="block text-xs text-gray-600 mb-1">Action taken if failed</label><input wire:model.defer="action_taken_if_failed" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Chemical used</label><input wire:model.defer="chemical_used" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Target</label><input wire:model.defer="target" class="w-full rounded-md border-gray-300 text-sm" /></div>
-                <div><label class="block text-xs text-gray-600 mb-1">Result</label><input wire:model.defer="result" class="w-full rounded-md border-gray-300 text-sm" /></div>
+        <form wire:submit="save" class="wm-table">
+            <div class="flex items-center justify-between px-6 py-4" style="background:linear-gradient(180deg,#2b3238,#171c20);border-radius:16px 16px 0 0;">
+                <h2 class="text-lg font-semibold text-white">New rinse-water row</h2>
             </div>
-            <div class="px-5 pb-5"><x-primary-button type="submit">Save WM010</x-primary-button></div>
+
+            <div class="p-6 grid gap-4 md:grid-cols-3">
+                <div><label class="mb-1 block text-sm text-slate-600">Date</label><input type="date" wire:model.defer="tested_date" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Section</label><select wire:model.defer="section" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"><option value="cleaning_chemicals">Cleaning chemicals</option><option value="sulphites">Sulphites</option><option value="chemical_titration">Chemical titration check</option></select></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Operator name</label><input wire:model.defer="operator_name" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Equipment</label><input wire:model.defer="equipment" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Reading</label><input type="number" step="0.001" wire:model.defer="reading" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Reading unit</label><input wire:model.defer="reading_unit" placeholder="pH or mg/Ltr" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Pass / Fail</label><select wire:model.defer="pass_or_fail" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"><option value="Pass">Pass</option><option value="Fail">Fail</option></select></div>
+                <div class="md:col-span-2"><label class="mb-1 block text-sm text-slate-600">Action taken if failed</label><input wire:model.defer="action_taken_if_failed" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Chemical used</label><input wire:model.defer="chemical_used" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Target</label><input wire:model.defer="target" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+                <div><label class="mb-1 block text-sm text-slate-600">Result</label><input wire:model.defer="result" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" /></div>
+            </div>
+
+            <div class="px-6 pb-6"><button type="submit" class="wm-btn-dark">Save WM010</button></div>
         </form>
 
-        <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mt-6">
-            <div style="background:#2d3f8f;" class="px-4 py-2 text-sm font-semibold text-white">Recent WM010 entries</div>
-            <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
-                <thead><tr style="background:#2d3f8f;color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-3 py-2 text-left">Date</th><th class="px-3 py-2 text-left">Section</th><th class="px-3 py-2 text-left">Equipment</th><th class="px-3 py-2 text-left">Reading</th><th class="px-3 py-2 text-left">Pass/Fail</th><th class="px-3 py-2 text-left">Operator</th></tr></thead>
-                <tbody class="divide-y divide-slate-100">
-                @forelse ($this->recent as $row)
-                    <tr>
-                        <td class="px-3 py-2">{{ $row->tested_date?->toDateString() }}</td>
-                        <td class="px-3 py-2">{{ \Illuminate\Support\Str::headline((string) $row->section) }}</td>
-                        <td class="px-3 py-2">{{ $row->equipment ?? '—' }}</td>
-                        <td class="px-3 py-2">{{ $row->reading !== null ? $row->reading.' '.($row->reading_unit ?? '') : '—' }}</td>
-                        <td class="px-3 py-2">{{ $row->pass_or_fail ?? '—' }}</td>
-                        <td class="px-3 py-2">{{ $row->operator_name ?? '—' }}</td>
-                    </tr>
-                @empty
-                    <tr><td colspan="6" class="px-3 py-3 text-slate-500">No entries yet.</td></tr>
-                @endforelse
-                </tbody>
-            </table>
+        <div class="wm-table">
+            <div class="flex items-center justify-between px-6 py-4" style="background:linear-gradient(180deg,#2b3238,#171c20);border-radius:16px 16px 0 0;">
+                <h3 class="text-lg font-semibold text-white">Recent WM010 entries</h3>
             </div>
-        </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead>
+                        <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
+                            <th class="px-4 py-3">Date</th>
+                            <th class="px-4 py-3">Section</th>
+                            <th class="px-4 py-3">Equipment</th>
+                            <th class="px-4 py-3">Reading</th>
+                            <th class="px-4 py-3">Pass/Fail</th>
+                            <th class="px-4 py-3">Operator</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse ($this->recent as $row)
+                            <tr>
+                                <td class="px-4 py-2">{{ $row->tested_date?->toDateString() }}</td>
+                                <td class="px-4 py-2">{{ \Illuminate\Support\Str::headline((string) $row->section) }}</td>
+                                <td class="px-4 py-2">{{ $row->equipment ?? '—' }}</td>
+                                <td class="px-4 py-2">{{ $row->reading !== null ? $row->reading.' '.($row->reading_unit ?? '') : '—' }}</td>
+                                <td class="px-4 py-2">{{ $row->pass_or_fail ?? '—' }}</td>
+                                <td class="px-4 py-2">{{ $row->operator_name ?? '—' }}</td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">No entries yet.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

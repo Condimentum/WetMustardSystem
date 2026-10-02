@@ -57,20 +57,15 @@ new class extends Component
     {
         return \Illuminate\Support\Str::lower((string) (auth()->user()->email ?? '')) === 'adrian.lacki@condimentum.co.uk';
     }
+
+    #[Computed]
+    public function isTestEnvironment(): bool
+    {
+        return app()->environment(['local', 'development', 'testing', 'staging']);
+    }
 }; ?>
 
 <div class="flex shrink-0 items-center gap-3">
-    @if ($this->canAccessSettings)
-        <a
-            href="{{ route('settings.admin') }}"
-            wire:navigate
-            aria-label="Settings"
-            class="relative flex h-12 w-12 shrink-0 aspect-square items-center justify-center overflow-hidden rounded-full shadow-md ring-[0.5px] transition hover:opacity-90 {{ request()->routeIs('settings.*') || request()->routeIs('reporting.*') || request()->routeIs('notifications.setup') || request()->routeIs('audit.*') ? 'ring-sky-700' : 'ring-white' }}"
-        >
-            <img src="{{ asset('settings-icon.jpg') }}" alt="" class="h-full w-full object-cover" />
-        </a>
-    @endif
-
     <div x-data="{ userMenuOpen: false }" class="relative shrink-0">
         <button
             @click="userMenuOpen = !userMenuOpen"
@@ -87,13 +82,24 @@ new class extends Component
         </button>
 
         <div x-show="userMenuOpen" x-transition style="display:none;" class="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-slate-200 bg-white py-2 text-left shadow-lg">
-            <div class="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
-                <div class="flex h-12 w-12 shrink-0 aspect-square items-center justify-center rounded-full text-base font-bold text-white" style="background:{{ $this->avatarColor }};">{{ $this->initials }}</div>
-                <div class="min-w-0">
-                    <div class="truncate text-sm font-semibold text-slate-900">{{ auth()->user()->name }}</div>
-                    <div class="truncate text-xs text-slate-500">{{ auth()->user()->email }}</div>
+            <div class="border-b border-slate-100 px-4 py-3">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-12 w-12 shrink-0 aspect-square items-center justify-center rounded-full text-base font-bold text-white" style="background:{{ $this->avatarColor }};">{{ $this->initials }}</div>
+                    <div class="min-w-0">
+                        <div class="truncate text-sm font-semibold text-slate-900">{{ auth()->user()->name }}</div>
+                        <div class="truncate text-xs text-slate-500">{{ auth()->user()->email }}</div>
+                    </div>
                 </div>
+                <span class="mt-2 inline-flex items-center rounded-full px-3 py-1 text-xs font-bold tracking-wide {{ $this->isTestEnvironment ? 'bg-amber-500 text-white' : 'bg-emerald-600 text-white' }}">
+                    {{ $this->isTestEnvironment ? 'Test DB' : 'Live DB' }}
+                </span>
             </div>
+
+            <a href="{{ route('profile') }}" wire:navigate class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">View account</a>
+
+            @if ($this->canAccessSettings)
+                <a href="{{ route('settings.admin') }}" wire:navigate class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Settings</a>
+            @endif
 
             <a href="{{ route('notifications.index') }}" wire:navigate class="flex items-center justify-between px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                 <span>Notifications</span>

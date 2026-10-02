@@ -28,9 +28,12 @@
         <x-loading-indicator />
 
         <div class="min-h-screen bg-gray-100">
-            <livewire:layout.navigation />
-
+            {{-- Account menu floats top-right on every page except the dashboard, which renders its own on the banner --}}
             @unless (request()->routeIs('dashboard'))
+                <div style="position:fixed;top:16px;right:16px;z-index:40;">
+                    <livewire:layout.user-menu />
+                </div>
+
                 <div style="background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 100%);border-bottom:1px solid #e2e8f0;">
                     <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
                         <a href="{{ route('dashboard') }}" wire:navigate style="display:inline-flex;align-items:center;gap:8px;padding:12px 0;color:#3730a3;font-size:13px;font-weight:800;letter-spacing:.02em;text-decoration:none;">
