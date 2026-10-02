@@ -41,6 +41,12 @@ return [
         'client_secret' => env('MICROSOFT_CLIENT_SECRET'),
         'redirect_uri' => env('MICROSOFT_REDIRECT_URI', rtrim((string) env('APP_URL'), '/').'/auth/microsoft/callback'),
         'scopes' => explode(' ', env('MICROSOFT_SCOPES', 'openid profile email User.Read')),
+        'operator_group_id' => env('MICROSOFT_OPERATOR_GROUP_ID'),
+        // Dedicated "CONDI_OperatorList" app registration (Graph application
+        // permissions, not the interactive login app) - keeps the group-read
+        // client credentials separate from the SSO login client.
+        'operator_client_id' => env('MICROSOFT_OPERATOR_CLIENT_ID'),
+        'operator_client_secret' => env('MICROSOFT_OPERATOR_CLIENT_SECRET'),
     ],
 
     'microsoft_mail' => [

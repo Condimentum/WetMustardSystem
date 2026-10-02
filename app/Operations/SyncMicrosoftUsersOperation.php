@@ -20,12 +20,14 @@ class SyncMicrosoftUsersOperation
     public function __invoke(): array
     {
         $tenantId = trim((string) config('services.microsoft.tenant_id'));
-        $clientId = trim((string) config('services.microsoft.client_id'));
-        $clientSecret = trim((string) config('services.microsoft.client_secret'));
+        // Dedicated "CONDI_OperatorList" app (Graph application permissions) -
+        // kept separate from the interactive login app's client id/secret.
+        $clientId = trim((string) config('services.microsoft.operator_client_id'));
+        $clientSecret = trim((string) config('services.microsoft.operator_client_secret'));
         $groupId = trim((string) (FeatureSettings::value('microsoft.operator_group_id', (string) config('services.microsoft.operator_group_id', '')) ?? ''));
 
         if ($tenantId === '' || $clientId === '' || $clientSecret === '') {
-            throw new RuntimeException('Microsoft sync is not configured. Set MICROSOFT_TENANT_ID, MICROSOFT_CLIENT_ID, and MICROSOFT_CLIENT_SECRET.');
+            throw new RuntimeException('Microsoft sync is not configured. Set MICROSOFT_TENANT_ID, MICROSOFT_OPERATOR_CLIENT_ID, and MICROSOFT_OPERATOR_CLIENT_SECRET.');
         }
 
         if ($groupId === '') {
