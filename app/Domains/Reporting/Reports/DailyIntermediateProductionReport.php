@@ -33,7 +33,7 @@ class DailyIntermediateProductionReport extends AbstractReport
 
     public function name(): string
     {
-        return 'Daily Wet Mustard - Manufacturing';
+        return 'Daily Intermediate Production';
     }
 
     public function generate(CarbonInterface $from, CarbonInterface $to): array
@@ -53,9 +53,11 @@ class DailyIntermediateProductionReport extends AbstractReport
             'row_count' => count($rows),
         ];
 
-        $attachment = $this->buildProductionDocumentAttachment($batches, $from, $to);
-        if ($attachment !== null) {
-            $payload['attachments'] = [$attachment];
+        if ($rows !== []) {
+            $attachment = $this->buildProductionDocumentAttachment($batches, $from, $to);
+            if ($attachment !== null) {
+                $payload['attachments'] = [$attachment];
+            }
         }
 
         return $payload;

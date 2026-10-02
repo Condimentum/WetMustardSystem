@@ -10,15 +10,13 @@ use App\Features\Batches\RejectBatchQaFeature;
 use App\Features\Batches\GetAvailableIngredientLotsFeature;
 use App\Features\Booking\BookFinishedGoodsFeature;
 use App\Domains\WinMan\Exceptions\WinManException;
-use App\Domains\WinMan\Jobs\FetchManufacturingOrderForDisplayJob;
+use App\Domains\WinMan\Jobs\FetchManufacturingOrderJob;
 use App\Domains\WinMan\Jobs\ListIssuedLotsForWorkInProgressJob;
 use App\Domains\WinMan\Support\WinManHealthCheck;
 use App\Operations\AllocateBomIngredientOperation;
 use App\Support\FeatureSettings;
 use App\Models\BatchRecord;
-use App\Models\LabelPrintLog;
 use App\Models\PaperworkRow;
-use App\Models\PalleconFill;
 use App\Models\User;
 use App\Models\WinManIssueLog;
 use Illuminate\Support\Carbon;
@@ -210,13 +208,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
     public function openAllocateModal(int $componentSnapshotId, string $materialCode, string $materialDescription, ?string $suggestedQty = null): void
     {
         $this->openBomAllocation($componentSnapshotId, $materialCode, $materialDescription, $suggestedQty);
-
-        // Read-only batches have nothing left to allocate - the scanner/manual
-        // entry modal would be dead weight, so "View" just expands the inline
-        // row of what was already issued, same as clicking the row itself.
-        if ($this->editable) {
-            $this->showAllocateModal = true;
-        }
+        $this->showAllocateModal = true;
     }
 
     public function closeAllocateModal(): void
@@ -416,36 +408,6 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         return User::query()
             ->orderBy('name')
             ->get(['id', 'name']);
-    }
-
-    /**
-     * Every label print attempt for this batch - either printed with this
-     * batch as the pallecon's primary (first-filled) batch, or printed for a
-     * pallecon this batch contributed a fill to. View-only history.
-     */
-    #[Computed]
-    public function labelPrintHistory()
-    {
-        $palleconIds = PalleconFill::query()
-            ->where('batch_record_id', $this->batch->id)
-            ->pluck('pallecon_id');
-
-        return LabelPrintLog::query()
-            ->where('batch_record_id', $this->batch->id)
-            ->when($palleconIds->isNotEmpty(), fn ($query) => $query->orWhereIn('pallecon_id', $palleconIds))
-            ->with('printedBy:id,name', 'pallecon:id,serial_number')
-            ->orderByDesc('printed_at')
-            ->get();
-    }
-
-    /** Every WinMan finished-goods booking attempt recorded for this batch. View-only history. */
-    #[Computed]
-    public function winmanBookingHistory()
-    {
-        return $this->batch->bookingLogs()
-            ->with('pallecon:id,serial_number')
-            ->orderByDesc('booking_date')
-            ->get();
     }
 
     public function getIngredientSignoffCompleteProperty(): bool
@@ -1218,7 +1180,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
         try {
             if ($winmanMo > 0) {
-                $moData = app(FetchManufacturingOrderForDisplayJob::class)($winmanMo);
+                $moData = app(FetchManufacturingOrderJob::class)($winmanMo);
 
                 if ($moData !== null) {
                     $fetchedDescription = trim((string) $moData->productDescription);
@@ -1388,30 +1350,24 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
     }
 
     .ingredient-signoff-submit--idle {
-        border: 1px solid #c9a24a;
-        background: linear-gradient(180deg, #4a2a78, #2c1650);
-        color: #f6e7b8;
-        box-shadow: 0 3px 8px rgba(44, 22, 80, .3), inset 0 1px 0 rgba(255, 255, 255, .15);
+        background: #1e293b;
     }
 
     .ingredient-signoff-submit--idle:hover {
-        filter: brightness(1.15);
+        background: #334155;
         transform: translateY(-1px);
     }
 
     .ingredient-signoff-submit--loading {
         min-width: 132px;
-        border: 1px solid #c9a24a;
-        background: linear-gradient(180deg, #4a2a78, #2c1650);
-        color: #f6e7b8;
+        background: #1e293b;
         transform: scaleX(0.82);
     }
 
     .ingredient-signoff-submit--success {
         min-width: 158px;
-        border: 1px solid #14464a;
-        background: #1f5c61;
-        box-shadow: 0 0 0 5px rgba(31, 92, 97, 0.14);
+        background: #059669;
+        box-shadow: 0 0 0 5px rgba(5, 150, 105, 0.12);
         animation: ingredient-signoff-success-settle 350ms ease-out;
     }
 
@@ -1472,20 +1428,107 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         @endif
 
         {{-- Header --}}
-        <x-mo-header
-            :system-type="$this->moWinManStatus ?? ''"
-            :mo-number="$batch->manufacturingOrder?->mo_number ?? '—'"
-            :product="$batch->manufacturingOrder?->winman_product_id ?? '—'"
-            :description="$this->moProductDescription ?? '—'"
-            date-label="Release Date"
-            :date-value="$this->moReleaseDate ?? ($batch->production_date?->format('d/m/Y') ?? '—')"
-            :planned="$this->moPlannedQuantity"
-            :made="$this->moQuantityMade"
-            :outstanding="$this->moQuantityOutstanding"
-            :batches="$this->moBatchCount"
-            :fmt="fn (float $v): string => $this->formatQty($v)"
-            style="margin-bottom:16px;"
-        />
+        @php
+            $moStatus = strtoupper(trim((string) ($this->moWinManStatus ?? '')));
+            $statusPill = match ($moStatus) {
+                'C', 'CANCELLED', 'CANCELED' => ['bg' => '#fef2f2', 'border' => '#fca5a5', 'color' => '#dc2626', 'dot' => '#dc2626', 'label' => 'Cancelled'],
+                'F' => ['bg' => '#eff6ff', 'border' => '#bfdbfe', 'color' => '#2563eb', 'dot' => '#2563eb', 'label' => 'Firm'],
+                'R' => ['bg' => '#fffbeb', 'border' => '#fcd34d', 'color' => '#b45309', 'dot' => '#f59e0b', 'label' => 'Released'],
+                'I' => ['bg' => '#ecfdf5', 'border' => '#86efac', 'color' => '#15803d', 'dot' => '#16a34a', 'label' => 'Issued'],
+                default => ['bg' => '#f3f4f6', 'border' => '#d1d5db', 'color' => '#4b5563', 'dot' => '#6b7280', 'label' => $moStatus !== '' ? $moStatus : 'Unknown'],
+            };
+        @endphp
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <div style="padding:28px 32px 0;">
+
+                <div style="display:flex;align-items:center;gap:18px;padding-bottom:22px;border-bottom:1px solid #e5e7eb;margin-bottom:22px;flex-wrap:wrap;">
+                    <div style="width:64px;height:64px;background:#ecfdf5;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:2px solid #86efac;overflow:hidden;">
+                        <img src="{{ asset('mustard.png') }}" alt="Mustard" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+                    </div>
+                    <div>
+                        <div style="font-size:1.5rem;font-weight:900;color:#1a1a2e;letter-spacing:-0.02em;line-height:1;">MANUFACTURING ORDER</div>
+                        <div style="font-size:0.78rem;font-weight:700;color:#9ca3af;letter-spacing:.15em;margin-top:4px;">DETAILS</div>
+                    </div>
+                    <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:0.78rem;font-weight:700;background:{{ $statusPill['bg'] }};border:1px solid {{ $statusPill['border'] }};color:{{ $statusPill['color'] }};">
+                        <span style="width:7px;height:7px;border-radius:50%;background:{{ $statusPill['dot'] }};display:inline-block;"></span>
+                        {{ $statusPill['label'] }}
+                    </span>
+                </div>
+
+                <div style="overflow:auto hidden;margin-bottom:26px;">
+                    <div style="display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:0;min-width:760px;">
+                        <div style="padding:0 20px 0 0;border-right:1px solid #e5e7eb;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+                                <div style="width:32px;height:32px;background:#ecfdf5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">&#128230;</div>
+                                <span style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">MO Number</span>
+                            </div>
+                            <div style="font-size:1.05rem;font-weight:800;color:#16a34a;">{{ $batch->manufacturingOrder?->mo_number ?? '—' }}</div>
+                        </div>
+
+                        <div style="padding:0 20px;border-right:1px solid #e5e7eb;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+                                <div style="width:32px;height:32px;background:#ecfdf5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">&#127981;</div>
+                                <span style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Product</span>
+                            </div>
+                            <div style="font-size:1.05rem;font-weight:800;color:#1a1a2e;">{{ $batch->manufacturingOrder?->winman_product_id ?? '—' }}</div>
+                        </div>
+
+                        <div style="padding:0 20px;border-right:1px solid #e5e7eb;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+                                <div style="width:32px;height:32px;background:#eff6ff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">&#128221;</div>
+                                <span style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Product Description</span>
+                            </div>
+                            <div style="font-size:0.95rem;font-weight:700;color:#1a1a2e;line-height:1.35;">{{ $this->moProductDescription ?? '—' }}</div>
+                        </div>
+
+                        <div style="padding:0 0 0 20px;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+                                <div style="width:32px;height:32px;background:#eff6ff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">&#128197;</div>
+                                <span style="font-size:0.72rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.05em;">Release Date</span>
+                            </div>
+                            <div style="font-size:1.05rem;font-weight:800;color:#1a1a2e;">{{ $this->moReleaseDate ?? ($batch->production_date?->format('d/m/Y') ?? '—') }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background:#2d3f8f;border-radius:10px;overflow:hidden;margin-bottom:20px;">
+                    <div style="padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.12);">
+                        <span style="font-size:0.75rem;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:.12em;">Quantities</span>
+                    </div>
+                    <div style="overflow:auto hidden;background:#f8fafc;">
+                        <div style="display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:0;min-width:700px;">
+                            <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
+                                <div style="width:44px;height:44px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#128230;</div>
+                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">On Order</div>
+                                <div style="font-size:1.3rem;font-weight:900;color:#f59e0b;">{{ $this->formatQty($this->moPlannedQuantity) }}</div>
+                            </div>
+
+                            <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
+                                <div style="width:44px;height:44px;background:#16a34a;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#9989;</div>
+                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Made</div>
+                                <div style="font-size:1.3rem;font-weight:900;color:#16a34a;">{{ $this->formatQty($this->moQuantityMade) }}</div>
+                            </div>
+
+                            <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
+                                <div style="width:44px;height:44px;background:#2563eb;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#128202;</div>
+                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Outstanding</div>
+                                <div style="font-size:1.3rem;font-weight:900;color:#2563eb;">{{ $this->formatQty($this->moQuantityOutstanding) }}</div>
+                            </div>
+
+                            <div style="padding:22px 16px;text-align:center;border-right:1px solid #e5e7eb;">
+                                <div style="width:44px;height:44px;background:#7c3aed;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:1.2rem;color:#fff;">&#128196;</div>
+                                <div style="font-size:0.65rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">Batches</div>
+                                <div style="font-size:1.3rem;font-weight:900;color:#7c3aed;">{{ $this->moBatchCount }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="padding:0 32px 18px;">
+                <a href="{{ route('manufacturing-orders.search') }}" wire:navigate style="font-size:0.88rem;color:#4f46e5;text-decoration:none;">&larr; MO Search</a>
+            </div>
+        </div>
 
         @unless ($this->editable)
             <div @class([
@@ -1535,12 +1578,12 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         @endunless
 
         {{-- Tabs --}}
-        <x-batch-allocation-styles />
-        <div class="ba-shell">
-            <div class="ba-tabs-wrap">
-                <nav class="ba-tabs">
+        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+            <div style="padding:0 14px;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);border-bottom:1px solid #dbe1ea;">
+                <nav style="display:flex;gap:8px;align-items:stretch;overflow:auto hidden;min-height:62px;">
                     @if ($this->workspaceUrl)
-                        <a href="{{ $this->workspaceUrl }}" wire:navigate class="ba-tab ba-tab--back">
+                        <a href="{{ $this->workspaceUrl }}" wire:navigate style="display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #cbd5e1;background:#fff;color:#334155;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;text-decoration:none;white-space:nowrap;">
+                            <span aria-hidden="true">&larr;</span>
                             <span>Back to Workspace</span>
                         </a>
                     @endif
@@ -1555,14 +1598,16 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
                     @foreach ($batchTabs as $key => $label)
                         @if ($key === 'packing')
-                            <a href="{{ route($this->packingRoute, $batch) }}" wire:navigate class="ba-tab">
+                            <a href="{{ route($this->packingRoute, $batch) }}" wire:navigate style="display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #cbd5e1;background:#fff;color:#334155;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;text-decoration:none;white-space:nowrap;">
+                                <span aria-hidden="true" style="font-size:14px;line-height:1;">&#129520;</span>
                                 <span>{{ $label }}</span>
                             </a>
                         @else
                             <button
                                 @click="tab = '{{ $key }}'"
-                                class="ba-tab"
-                                :class="tab === '{{ $key }}' && 'ba-tab--active'"
+                                :style="tab === '{{ $key }}'
+                                    ? 'display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #4f46e5;background:#4f46e5;color:#fff;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;box-shadow:0 4px 12px rgba(79,70,229,.24);white-space:nowrap;'
+                                    : 'display:inline-flex;align-self:stretch;align-items:center;gap:8px;padding:0 18px;border-radius:8px;border:2px solid #cbd5e1;background:#fff;color:#334155;font-size:14px;font-weight:800;letter-spacing:.01em;line-height:1;white-space:nowrap;'"
                                 type="button"
                             >
                                 <span>{{ $label }}</span>
@@ -1718,12 +1763,12 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                     @endif
 
                     <div>
-                        <button @click="tab = 'allocation'" class="ba-btn ba-btn--lg">Continue to Ingredient Allocation →</button>
+                        <button @click="tab = 'allocation'" class="inline-flex items-center rounded-full bg-indigo-600 text-white text-sm font-semibold px-4 py-2 hover:bg-indigo-500">Continue to Ingredient Allocation →</button>
                     </div>
                 </div>
 
                 {{-- Unified Allocation Workspace --}}
-                <div x-show="tab === 'allocation'" class="space-y-3" style="padding:14px;">
+                <div x-show="tab === 'allocation'" class="space-y-3">
 
                     @if ($winManDown)
                         <x-winman-offline-banner message="WinMan connection is currently unavailable. Scanned/entered lots are accepted without live verification and issues will be attempted when you allocate - double-check quantities carefully." />
@@ -1732,16 +1777,20 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                     @if ($batch->componentSnapshots->isEmpty())
                         <div style="background:#fff7ed;border:1px solid #fdba74;color:#9a3412;border-radius:12px;padding:12px 14px;font-size:14px;font-weight:600;">No component snapshot stored for this MO.</div>
                     @else
-                        <div class="ba-list">
-                            <div class="ba-grid ba-head">
-                                <div style="grid-area:badge;">Type</div>
-                                <div class="ba-prod">Product</div>
-                                <div class="ba-desc">Description</div>
-                                <div class="ba-out">Outstanding</div>
-                                <div class="ba-alloc">Allocated</div>
-                                <div class="ba-act"></div>
-                            </div>
-                            <div class="ba-rows">
+                        <div style="background:#fff;border:1px solid #dbe1ea;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.05);">
+                            <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
+                                    <tr>
+                                        <th class="px-3 py-2">Type</th>
+                                        <th class="px-3 py-2">Product</th>
+                                        <th class="px-3 py-2">Description</th>
+                                        <th class="px-3 py-2 text-right">Outstanding</th>
+                                        <th class="px-3 py-2 text-right">Allocated</th>
+                                        <th class="px-3 py-2 text-right"></th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
                                     @foreach ($batch->componentSnapshots as $bomLine)
                                         @php
                                             $componentCode = (string) $bomLine->winman_component_product_id;
@@ -1840,56 +1889,36 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
                                             $allocatedLotCount = $allocatedPreviewRows->count();
                                         @endphp
-                                        @php
-                                            $itemType = strtoupper(trim((string) $bomLine->item_type));
-                                            // Shield metal: gold for the made item, silver for components, bronze otherwise.
-                                            $shield = match ($itemType) {
-                                                'M' => ['#fbe7a1', '#d4a93e', '#8a6420', '#5a3f10'],
-                                                'C' => ['#f4f5f7', '#b8bdc6', '#6b7280', '#374151'],
-                                                default => ['#f1d2ae', '#b9814a', '#7a4e24', '#4a2e12'],
-                                            };
-                                            $isOpenRow = $activeBomComponentSnapshotId === (int) $bomLine->id;
-                                        @endphp
-                                        <div
+                                        <tr
                                             wire:click="toggleBomAllocationRow({{ $bomLine->id }}, @js($componentCode), @js((string) $bomLine->component_description), @js($outstandingForBatchDisplay))"
-                                            @class(['ba-row ba-grid', 'ba-row--open' => $isOpenRow])>
-                                            <svg class="ba-badge" viewBox="0 0 40 46" role="img" aria-label="Type {{ $bomLine->item_type }}">
-                                                <defs>
-                                                    <linearGradient id="ba-shield-{{ $bomLine->id }}" x1="0" y1="0" x2="1" y2="1">
-                                                        <stop offset="0" stop-color="{{ $shield[0] }}"/>
-                                                        <stop offset=".55" stop-color="{{ $shield[1] }}"/>
-                                                        <stop offset="1" stop-color="{{ $shield[2] }}"/>
-                                                    </linearGradient>
-                                                </defs>
-                                                <path d="M20 2 L37 8 V22 C37 33 29 41 20 44 C11 41 3 33 3 22 V8 Z" fill="url(#ba-shield-{{ $bomLine->id }})" stroke="{{ $shield[3] }}" stroke-width="1.5"/>
-                                                <path d="M20 6 L33 10.5 V22 C33 31 27 37.5 20 40 C13 37.5 7 31 7 22 V10.5 Z" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1"/>
-                                                <text x="20" y="28.5" text-anchor="middle" font-family="Georgia, serif" font-size="17" font-weight="700" fill="{{ $shield[3] }}">{{ $bomLine->item_type }}</text>
-                                            </svg>
-                                            <div class="ba-prod" data-label="Product">{{ $componentCode }}</div>
-                                            <div class="ba-desc">{{ $bomLine->component_description }}</div>
-                                            <div class="ba-out" data-label="Outstanding">{{ $outstandingForBatchDisplay }}</div>
-                                            <div class="ba-alloc" data-label="Allocated">
-                                                {{ $allocatedQtyDisplay }}
+                                            class="cursor-pointer hover:bg-indigo-50/40 transition-colors">
+                                            <td class="px-3 py-2">{{ $bomLine->item_type }}</td>
+                                            <td class="px-3 py-2 text-gray-500">{{ $componentCode }}</td>
+                                            <td class="px-3 py-2">{{ $bomLine->component_description }}</td>
+                                            <td class="px-3 py-2 text-right">{{ $outstandingForBatchDisplay }}</td>
+                                            <td class="px-3 py-2 text-right">
+                                                <div class="font-medium">{{ $allocatedQtyDisplay }}</div>
                                                 @if ($allocatedLotCount > 0)
-                                                    <small>{{ $allocatedLotCount }} lot{{ $allocatedLotCount === 1 ? '' : 's' }}</small>
+                                                    <div class="text-xs text-gray-500">{{ $allocatedLotCount }} lot{{ $allocatedLotCount === 1 ? '' : 's' }}</div>
                                                 @endif
-                                            </div>
-                                            <div class="ba-act">
+                                            </td>
+                                            <td class="px-3 py-2 text-right">
                                                 <button
                                                     wire:click.stop="openAllocateModal({{ $bomLine->id }}, @js($componentCode), @js((string) $bomLine->component_description), @js($outstandingForBatchDisplay))"
                                                     type="button"
-                                                    class="ba-btn">
-                                                    {{ $itemType === 'C' && $this->editable ? 'Allocate' : 'View' }}
+                                                    class="inline-flex items-center px-2.5 py-1.5 rounded-md text-xs font-semibold border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100">
+                                                    {{ strtoupper((string) $bomLine->item_type) === 'C' && $this->editable ? 'Allocate' : 'View' }}
                                                 </button>
-                                            </div>
-                                        </div>
+                                            </td>
+                                        </tr>
 
-                                        @if ($isOpenRow)
-                                            <div class="ba-detail">
-                                                    <div class="ba-detail-title">{{ $activeBomMaterialCode }} - {{ $activeBomMaterialDescription }}</div>
+                                        @if ($activeBomComponentSnapshotId === (int) $bomLine->id)
+                                            <tr class="bg-indigo-50/40">
+                                                <td colspan="6" class="px-3 py-3 space-y-3">
+                                                    <div class="text-sm font-semibold text-indigo-900">{{ $activeBomMaterialCode }} - {{ $activeBomMaterialDescription }}</div>
 
                                                     @if ($activeBomMessage)
-                                                        <div class="ba-detail-msg">{{ $activeBomMessage }}</div>
+                                                        <div class="text-xs text-indigo-700">{{ $activeBomMessage }}</div>
                                                     @endif
 
                                                     @php
@@ -1912,52 +1941,65 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                         }
                                                     @endphp
 
-                                                    <div class="ba-lots">
-                                                        <div class="ba-lots-grid ba-lots-head">
-                                                            <div>Allocated Lot</div>
-                                                            <div>Supplier Lot</div>
-                                                            <div class="ba-num">Qty</div>
-                                                            <div>UOM</div>
-                                                            <div>WinMan</div>
+                                                    <div class="border border-indigo-100 rounded-lg overflow-hidden bg-white">
+                                                        <div class="overflow-x-auto">
+                                                        <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                                            <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
+                                                                <tr>
+                                                                    <th class="px-3 py-2">Allocated Lot</th>
+                                                                    <th class="px-3 py-2">Supplier Lot</th>
+                                                                    <th class="px-3 py-2 text-right">Qty</th>
+                                                                    <th class="px-3 py-2">UOM</th>
+                                                                    <th class="px-3 py-2">WinMan</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody class="divide-y divide-gray-100">
+                                                                @forelse ($expandedRows as $row)
+                                                                    <tr>
+                                                                        <td class="px-3 py-2">{{ $row['lot_number'] }}</td>
+                                                                        <td class="px-3 py-2">{{ $row['supplier_lot_number'] }}</td>
+                                                                        <td class="px-3 py-2 text-right">{{ rtrim(rtrim((string) $row['quantity'], '0'), '.') }}</td>
+                                                                        <td class="px-3 py-2">{{ $row['uom'] }}</td>
+                                                                        <td class="px-3 py-2">
+                                                                            @if ($row['issue_status'] === 'success')
+                                                                                <span class="text-green-700">Issued</span>
+                                                                            @elseif ($row['issue_status'] === 'rejected')
+                                                                                <span class="text-amber-700" title="{{ $row['error_message'] }}">Rejected</span>
+                                                                            @elseif ($row['issue_status'] === 'failed')
+                                                                                <span class="text-red-700" title="{{ $row['error_message'] }}">Failed</span>
+                                                                            @else
+                                                                                <span class="text-gray-500">-</span>
+                                                                            @endif
+                                                                        </td>
+                                                                    </tr>
+                                                                @empty
+                                                                    <tr>
+                                                                        <td colspan="5" class="px-3 py-4 text-center text-gray-500">No allocations recorded yet for this BOM line.</td>
+                                                                    </tr>
+                                                                @endforelse
+                                                            </tbody>
+                                                        </table>
                                                         </div>
-                                                        @forelse ($expandedRows as $row)
-                                                            <div class="ba-lots-grid">
-                                                                <div>{{ $row['lot_number'] }}</div>
-                                                                <div>{{ $row['supplier_lot_number'] }}</div>
-                                                                <div class="ba-num">{{ rtrim(rtrim((string) $row['quantity'], '0'), '.') }}</div>
-                                                                <div>{{ $row['uom'] }}</div>
-                                                                <div>
-                                                                    @if ($row['issue_status'] === 'success')
-                                                                        <span class="text-green-700">Issued</span>
-                                                                    @elseif ($row['issue_status'] === 'rejected')
-                                                                        <span class="text-amber-700" title="{{ $row['error_message'] }}">Rejected</span>
-                                                                    @elseif ($row['issue_status'] === 'failed')
-                                                                        <span class="text-red-700" title="{{ $row['error_message'] }}">Failed</span>
-                                                                    @else
-                                                                        <span class="text-gray-500">-</span>
-                                                                    @endif
-                                                                </div>
-                                                            </div>
-                                                        @empty
-                                                            <div style="padding:16px 14px;text-align:center;color:#8a7a5c;">No allocations recorded yet for this BOM line.</div>
-                                                        @endforelse
                                                     </div>
-                                            </div>
+                                                </td>
+                                            </tr>
                                         @endif
                                     @endforeach
+                                </tbody>
+                            </table>
                             </div>
                         </div>
                     @endif
 
                     @if ($this->packingMode === 'pallecon')
-                        <div class="ba-foot">
-                            <button @click="tab = 'signoff'" type="button" class="ba-btn ba-btn--lg">Continue to Ingredients Sign Off →</button>
+                        <div class="px-6 pb-6">
+                            <button @click="tab = 'signoff'" type="button" class="inline-flex items-center rounded-full bg-indigo-600 text-white text-sm font-semibold px-4 py-2 hover:bg-indigo-500">Continue to Ingredients Sign Off →</button>
                         </div>
                     @endif
                 </div>
 
                 @if ($this->packingMode === 'pallecon')
-                    <div x-show="tab === 'signoff'" class="bs-wrap" style="padding:14px;">
+                    <div x-show="tab === 'signoff'" class="space-y-6 p-6">
                         @php
                             $packingSignoffRows = $batch->ingredientLots
                                 ->sortBy([
@@ -1969,27 +2011,26 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                 ->values();
                         @endphp
 
-                        <div class="bs-card">
-                            <div class="bs-head">
-                                <h3 class="bs-title">Ingredients Sign Off</h3>
-                                <p class="bs-sub">Complete this tab before moving to Pallecon Packing.</p>
+                        <div class="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden">
+                            <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);">
+                                <h3 class="text-sm font-semibold text-slate-700">Ingredients Sign Off</h3>
+                                <p class="text-xs text-slate-500 mt-1">Complete this tab before moving to Pallecon Packing.</p>
                             </div>
 
-                            <div class="bs-body">
+                            <div class="p-4">
                                 @if ($packingSignoffRows->isEmpty())
-                                    <p class="bs-empty">No ingredient lots allocated yet. Complete Ingredient Allocation first.</p>
+                                    <p class="text-sm text-slate-500">No ingredient lots allocated yet. Complete Ingredient Allocation first.</p>
                                 @else
-                                    @php
-                                        $submittedSignoff = $this->paperworkIngredientSignoff;
-                                        // Badges must reflect the ACTUAL lot signatures, not stale paperwork names.
-                                        $signoffTruthComplete = $this->ingredientSignoffComplete;
-                                        $fallbackWeigher = $batch->ingredientLots->first(fn ($lot) => $lot->weighed_by !== null)?->weighedBy?->name;
-                                        $fallbackTipper = $batch->ingredientLots->first(fn ($lot) => $lot->tipped_by !== null)?->tippedBy?->name;
-                                    @endphp
-
-                                    @if ($this->editable || $signoffTruthComplete)
-                                        <div>
-                                            <div class="bs-roles">
+                                    @if ($this->editable)
+                                        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 mb-4">
+                                            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;">
+                                                @php
+                                                    $submittedSignoff = $this->paperworkIngredientSignoff;
+                                                    // Badges must reflect the ACTUAL lot signatures, not stale paperwork names.
+                                                    $signoffTruthComplete = $this->ingredientSignoffComplete;
+                                                    $fallbackWeigher = $batch->ingredientLots->first(fn ($lot) => $lot->weighed_by !== null)?->weighedBy?->name;
+                                                    $fallbackTipper = $batch->ingredientLots->first(fn ($lot) => $lot->tipped_by !== null)?->tippedBy?->name;
+                                                @endphp
                                                 @foreach ([
                                                     'powdersWeighedOperatorId' => ['label' => 'Powders Weighed', 'class' => '', 'submitted_key' => 'powders'],
                                                     'liquidsWeighedOperatorId' => ['label' => 'Liquids Weighed', 'class' => '', 'submitted_key' => 'liquids'],
@@ -2001,16 +2042,18 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                             $submittedName = (string) ($signoff['submitted_key'] === 'tipping' ? $fallbackTipper : $fallbackWeigher);
                                                         }
                                                     @endphp
-                                                    <div class="bs-role {{ $signoff['class'] }}">
-                                                        <label class="bs-role-label">{{ $signoff['label'] }}</label>
+                                                    <div class="{{ $signoff['class'] }}">
+                                                        <label class="block text-xs text-slate-600 mb-1">{{ $signoff['label'] }}</label>
                                                         @if ($signoffTruthComplete)
-                                                            <div class="bs-done">
-                                                                <span class="bs-done-check" aria-hidden="true">✓</span>
-                                                                <span>Submitted <span class="bs-done-name">{{ $submittedName }}</span></span>
+                                                            <div class="flex min-h-[38px] items-center rounded-md border border-emerald-300 bg-emerald-50 px-3 text-sm text-emerald-800 shadow-sm">
+                                                                <span class="flex items-center gap-2 font-semibold">
+                                                                    <span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-xs text-white" aria-hidden="true">✓</span>
+                                                                    Submitted <span class="font-normal text-emerald-700">{{ $submittedName }}</span>
+                                                                </span>
                                                             </div>
                                                         @else
                                                             {{-- Keep the dropdowns editable right up to Submit - no intermediate "Selected" step. --}}
-                                                            <select wire:model="{{ $field }}" class="bs-select">
+                                                            <select wire:model="{{ $field }}" class="w-full rounded-md border-gray-300 text-sm shadow-sm">
                                                                 <option value="">Select operator</option>
                                                                 @foreach ($this->signoffOperators as $operator)
                                                                     <option value="{{ $operator->id }}" @selected((string) $this->{$field} === (string) $operator->id)>{{ $operator->name }}</option>
@@ -2021,43 +2064,43 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                 @endforeach
                                             </div>
 
-                                            @if ($this->editable)
-                                                <div class="bs-actions" x-data="{
-                                                    state: 'idle',
-                                                    successTimer: null,
-                                                    submit() { this.state = 'loading'; },
-                                                    failed() { this.state = 'idle'; },
-                                                    submitted() {
-                                                        this.state = 'success';
-                                                        clearTimeout(this.successTimer);
-                                                        this.successTimer = setTimeout(() => { this.state = 'idle'; }, 1700);
-                                                    },
-                                                }" x-on:ingredient-signoff-submitted.window="submitted()" x-on:ingredient-signoff-failed.window="failed()">
-                                                    @if ($signoffTruthComplete)
-                                                        <button type="button" wire:click="resetIngredientSignoff" wire:loading.attr="disabled" class="bs-btn-ghost" title="Reset clears the saved sign-off so operators can be reselected; the reset and resubmission are both audited.">Reset sign-off</button>
-                                                    @else
-                                                        <button type="button" wire:click="applyBulkIngredientSignoff" @click="submit()" wire:loading.attr="disabled" wire:target="applyBulkIngredientSignoff" class="ingredient-signoff-submit inline-flex h-10 min-w-[220px] items-center justify-center overflow-hidden rounded-md px-4 text-sm font-semibold text-white" x-bind:class="state === 'success' ? 'ingredient-signoff-submit--success' : (state === 'loading' ? 'ingredient-signoff-submit--loading' : 'ingredient-signoff-submit--idle')">
-                                                            <span x-show="state === 'idle'" x-transition.opacity.duration.150ms>Submit Ingredients Sign Off</span>
-                                                            <span x-cloak x-show="state === 'loading'" x-transition.opacity.duration.150ms class="flex items-center gap-2">
-                                                                <span class="ingredient-signoff-spinner"></span>
-                                                                Submitting
-                                                            </span>
-                                                            <span x-cloak x-show="state === 'success'" x-transition.opacity.duration.150ms class="flex items-center gap-2">
-                                                                <span class="ingredient-signoff-check" aria-hidden="true">✓</span>
-                                                                Submitted
-                                                            </span>
-                                                        </button>
-                                                    @endif
-                                                </div>
-                                            @endif
+                                            <div class="mt-3 flex items-center justify-end gap-3" x-data="{
+                                                state: 'idle',
+                                                successTimer: null,
+                                                submit() { this.state = 'loading'; },
+                                                failed() { this.state = 'idle'; },
+                                                submitted() {
+                                                    this.state = 'success';
+                                                    clearTimeout(this.successTimer);
+                                                    this.successTimer = setTimeout(() => { this.state = 'idle'; }, 1700);
+                                                },
+                                            }" x-on:ingredient-signoff-submitted.window="submitted()" x-on:ingredient-signoff-failed.window="failed()">
+                                                @if ($signoffTruthComplete)
+                                                    <button type="button" wire:click="resetIngredientSignoff" wire:loading.attr="disabled" class="inline-flex h-10 items-center rounded-md border border-amber-300 bg-amber-50 px-4 text-sm font-semibold text-amber-800 hover:bg-amber-100" title="Reset clears the saved sign-off so operators can be reselected; the reset and resubmission are both audited.">Reset sign-off</button>
+                                                @else
+                                                    <button type="button" wire:click="applyBulkIngredientSignoff" @click="submit()" wire:loading.attr="disabled" wire:target="applyBulkIngredientSignoff" class="ingredient-signoff-submit inline-flex h-10 min-w-[220px] items-center justify-center overflow-hidden rounded-md px-4 text-sm font-semibold text-white" x-bind:class="state === 'success' ? 'ingredient-signoff-submit--success' : (state === 'loading' ? 'ingredient-signoff-submit--loading' : 'ingredient-signoff-submit--idle')">
+                                                        <span x-show="state === 'idle'" x-transition.opacity.duration.150ms>Submit Ingredients Sign Off</span>
+                                                        <span x-cloak x-show="state === 'loading'" x-transition.opacity.duration.150ms class="flex items-center gap-2">
+                                                            <span class="ingredient-signoff-spinner"></span>
+                                                            Submitting
+                                                        </span>
+                                                        <span x-cloak x-show="state === 'success'" x-transition.opacity.duration.150ms class="flex items-center gap-2">
+                                                            <span class="ingredient-signoff-check" aria-hidden="true">✓</span>
+                                                            Submitted
+                                                        </span>
+                                                    </button>
+                                                @endif
+                                            </div>
                                         </div>
                                     @endif
 
-                                    <div class="bs-foot">
+                                    <div class="mt-4 flex flex-col items-end gap-2">
                                         @if (! $this->ingredientSignoffComplete)
-                                            <div class="bs-warn">
-                                                <span class="bs-warn-icon" aria-hidden="true">!</span>
-                                                <span>Make sure you signed off all ingredients before completing batch.</span>
+                                            <div class="w-full rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900" style="animation:ingredient-signoff-pulse 1.7s ease-in-out infinite;">
+                                                <div class="flex items-center gap-3">
+                                                    <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-base font-black text-white" aria-hidden="true">!</span>
+                                                    <span class="text-sm font-bold">Make sure you signed off all ingredients before completing batch.</span>
+                                                </div>
                                             </div>
                                         @endif
 
@@ -2066,11 +2109,11 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                                 type="button"
                                                 wire:click="complete"
                                                 @disabled(! $this->ingredientSignoffComplete)
-                                                class="ba-btn ba-btn--lg"
+                                                class="inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold {{ $this->ingredientSignoffComplete ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-slate-200 text-slate-500 cursor-not-allowed' }}"
                                             >
                                                 Complete Batch &amp; Return to MO →
                                             </button>
-                                            <p class="bs-note">Pallecon filling, WinMan booking and labels happen in the Pallecon Workspace on the MO screen.</p>
+                                            <p class="text-xs text-slate-500">Pallecon filling, WinMan booking and labels happen in the Pallecon Workspace on the MO screen.</p>
                                         @endif
                                     </div>
                                 @endif
@@ -2496,128 +2539,5 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
             </div>
         </div>
-
-        @php
-            $labelPrintHistory = $this->labelPrintHistory;
-            $winmanBookingHistory = $this->winmanBookingHistory;
-        @endphp
-
-        @if ($labelPrintHistory->isNotEmpty() || $winmanBookingHistory->isNotEmpty())
-            <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden" x-data="{ expandedLabel: null }">
-                <div style="padding:14px 18px;border-bottom:1px solid #dbe1ea;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);">
-                    <div class="text-base font-semibold text-gray-800">Label &amp; WinMan History</div>
-                    <p class="text-xs text-slate-500 mt-1">View only - what was printed for this batch's pallecon(s) and what was sent to WinMan when finished goods were booked.</p>
-                </div>
-
-                <div class="p-4 md:p-6 space-y-6">
-                    @if ($labelPrintHistory->isNotEmpty())
-                        <div>
-                            <h3 class="text-sm font-semibold text-slate-700 mb-2">Labels Printed</h3>
-                            <div class="border border-slate-200 rounded-lg overflow-hidden">
-                                <div class="overflow-x-auto">
-                                <table class="min-w-full divide-y divide-gray-200 text-sm">
-                                    <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
-                                        <tr>
-                                            <th class="px-3 py-2">Printed</th>
-                                            <th class="px-3 py-2">Pallecon</th>
-                                            <th class="px-3 py-2 text-right">Weight (kg)</th>
-                                            <th class="px-3 py-2">Status</th>
-                                            <th class="px-3 py-2">Printed By</th>
-                                            <th class="px-3 py-2 text-right"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-gray-100">
-                                        @foreach ($labelPrintHistory as $log)
-                                            <tr class="cursor-pointer hover:bg-indigo-50/40" @click="expandedLabel = expandedLabel === {{ $log->id }} ? null : {{ $log->id }}">
-                                                <td class="px-3 py-2 whitespace-nowrap">{{ $log->printed_at?->format('d/m/Y H:i') }}</td>
-                                                <td class="px-3 py-2">{{ $log->pallecon?->serial_number ?? '—' }}</td>
-                                                <td class="px-3 py-2 text-right">{{ $log->fill_weight !== null ? rtrim(rtrim((string) $log->fill_weight, '0'), '.') : '—' }}</td>
-                                                <td class="px-3 py-2">
-                                                    @if ($log->status === \App\Models\LabelPrintLog::STATUS_SUCCESS)
-                                                        <span class="text-green-700 font-semibold">Printed</span>
-                                                    @else
-                                                        <span class="text-red-700 font-semibold" title="{{ $log->error_message }}">Failed</span>
-                                                    @endif
-                                                </td>
-                                                <td class="px-3 py-2">{{ $log->printedBy?->name ?? '—' }}</td>
-                                                <td class="px-3 py-2 text-right text-xs text-indigo-600">Details</td>
-                                            </tr>
-                                            <tr x-show="expandedLabel === {{ $log->id }}" class="bg-indigo-50/40">
-                                                <td colspan="6" class="px-3 py-3">
-                                                    @if ($log->status !== \App\Models\LabelPrintLog::STATUS_SUCCESS && $log->error_message)
-                                                        <div class="text-xs text-red-700 mb-2">{{ $log->error_message }}</div>
-                                                    @endif
-                                                    @if (is_array($log->label_data) && $log->label_data !== [])
-                                                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-1 text-xs">
-                                                            @foreach ($log->label_data as $field => $value)
-                                                                @if ($value !== null && $value !== '')
-                                                                    <div>
-                                                                        <span class="text-slate-400">{{ $field }}:</span>
-                                                                        <span class="text-slate-700">{{ is_scalar($value) ? $value : json_encode($value) }}</span>
-                                                                    </div>
-                                                                @endif
-                                                            @endforeach
-                                                        </div>
-                                                    @else
-                                                        <div class="text-xs text-slate-400">No label data recorded for this print.</div>
-                                                    @endif
-                                                </td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                                </div>
-                            </div>
-                        </div>
-                    @endif
-
-                    @if ($winmanBookingHistory->isNotEmpty())
-                        <div>
-                            <h3 class="text-sm font-semibold text-slate-700 mb-2">Sent to WinMan</h3>
-                            <div class="border border-slate-200 rounded-lg overflow-hidden">
-                                <div class="overflow-x-auto">
-                                <table class="min-w-full divide-y divide-gray-200 text-sm">
-                                    <thead class="text-left text-xs text-slate-500 uppercase bg-slate-50">
-                                        <tr>
-                                            <th class="px-3 py-2">Booked</th>
-                                            <th class="px-3 py-2">Pallecon</th>
-                                            <th class="px-3 py-2">Lot Number</th>
-                                            <th class="px-3 py-2 text-right">Qty (kg)</th>
-                                            <th class="px-3 py-2 text-right">Qty (TU)</th>
-                                            <th class="px-3 py-2">Inventory ID</th>
-                                            <th class="px-3 py-2">Status</th>
-                                            <th class="px-3 py-2">Booked By</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-gray-100">
-                                        @foreach ($winmanBookingHistory as $log)
-                                            <tr>
-                                                <td class="px-3 py-2 whitespace-nowrap">{{ $log->booking_date?->format('d/m/Y H:i') }}</td>
-                                                <td class="px-3 py-2">{{ $log->pallecon?->serial_number ?? '—' }}</td>
-                                                <td class="px-3 py-2 font-mono text-xs">{{ $log->lot_number ?? '—' }}</td>
-                                                <td class="px-3 py-2 text-right">{{ $log->quantity_booked_kg !== null ? rtrim(rtrim((string) $log->quantity_booked_kg, '0'), '.') : '—' }}</td>
-                                                <td class="px-3 py-2 text-right">{{ $log->quantity_booked_traded_units !== null ? rtrim(rtrim((string) $log->quantity_booked_traded_units, '0'), '.') : '—' }}</td>
-                                                <td class="px-3 py-2">{{ $log->winman_inventory_id ?? '—' }}</td>
-                                                <td class="px-3 py-2">
-                                                    @if ($log->booking_status === \App\Models\WinManBookingLog::STATUS_SUCCESS)
-                                                        <span class="text-green-700 font-semibold">Success</span>
-                                                    @elseif ($log->booking_status === \App\Models\WinManBookingLog::STATUS_REJECTED)
-                                                        <span class="text-amber-700 font-semibold" title="{{ $log->error_message }}">Rejected</span>
-                                                    @else
-                                                        <span class="text-red-700 font-semibold" title="{{ $log->error_message }}">Failed</span>
-                                                    @endif
-                                                </td>
-                                                <td class="px-3 py-2">{{ $log->booking_user ?? '—' }}</td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                                </div>
-                            </div>
-                        </div>
-                    @endif
-                </div>
-            </div>
-        @endif
     </div>
 </div>
