@@ -35,7 +35,7 @@
 
     .wm-action { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
     .wm-link { color: #1f3f4f; font-size: .88rem; font-weight: 600; text-align: center; text-decoration: underline; text-underline-offset: 3px; }
-    .wm-btn-continue { display: inline-flex; padding: 8px 22px; border-radius: 999px; border: 1px solid #7a5520; background: linear-gradient(180deg, #b88d4f, #8c6427); color: #fff; font-size: .88rem; font-weight: 700; text-decoration: none; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 2px 5px rgba(90, 60, 20, .35); }
+    .wm-btn-continue { display: inline-flex; align-items: center; padding: 12px 22px; border-radius: 999px; border: 1px solid #7a5520; background: linear-gradient(180deg, #b88d4f, #8c6427); color: #fff; font-size: .88rem; font-weight: 700; text-decoration: none; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 2px 5px rgba(90, 60, 20, .35); }
     .wm-btn-continue:hover { filter: brightness(1.07); }
 
     .wm-info { position: relative; display: inline-flex; color: #6b7280; cursor: help; outline: none; }
@@ -51,7 +51,7 @@
     .wm-btn-dark:disabled { opacity: .6; }
     .wm-plus { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(180deg, #e0b85a, #b8892f); color: #1b1f23; font-size: 15px; font-weight: 900; line-height: 1; }
 
-    .wm-table { margin-top: 14px; border: 1px solid #e6dcc5; border-radius: 16px; background: #fffdf8; box-shadow: 0 3px 10px rgba(110, 85, 35, .08); }
+    .wm-table { margin-top: 14px; border: 1px solid #e6dcc5; border-radius: 16px; background: #fffdf8; box-shadow: 0 3px 10px rgba(110, 85, 35, .08); overflow: hidden; }
     .wm-table .wm-head { padding: 14px 20px; border-bottom: 1px solid #ebe2cd; }
     .wm-prow { padding: 14px 20px; font-size: .95rem; color: #1f2a33; }
     .wm-prow + .wm-prow { border-top: 1px solid #efe7d4; }

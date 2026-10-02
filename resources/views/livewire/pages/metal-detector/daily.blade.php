@@ -149,9 +149,8 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
     }
 }; ?>
 
-<x-mo-workspace-styles />
-
 <div class="py-8">
+    <x-mo-workspace-styles />
     <div class="wm-page max-w-5xl mx-auto space-y-6">
 
         <section class="wm-card wm-card--gear-tr">
@@ -345,7 +344,7 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
                         wire:click="previousPage"
                         type="button"
                         @disabled($this->todayChecks->onFirstPage())
-                        class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        class="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
                     </button>
@@ -368,7 +367,7 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
                             wire:click="gotoPage({{ $page }})"
                             type="button"
                             @class([
-                                'flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium transition',
+                                'flex h-11 w-11 items-center justify-center rounded-lg text-sm font-medium transition',
                                 'bg-slate-900 text-white' => $page === $current,
                                 'text-slate-600 hover:bg-slate-50' => $page !== $current,
                             ])
@@ -379,7 +378,7 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
                         wire:click="nextPage"
                         type="button"
                         @disabled(! $this->todayChecks->hasMorePages())
-                        class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        class="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
                     </button>

@@ -95,8 +95,6 @@ new class extends Component
                 </div>
             </div>
 
-            <a href="{{ route('profile') }}" wire:navigate class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">View account</a>
-
             <a href="{{ route('notifications.index') }}" wire:navigate class="flex items-center justify-between px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                 <span>Notifications</span>
                 @if ($this->openNotificationsCount > 0)

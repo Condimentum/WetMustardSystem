@@ -7,9 +7,8 @@ use Livewire\Volt\Component;
 new #[Layout('layouts.app')] #[Title('Quality & Lab Testing')] class extends Component {
 }; ?>
 
-<x-mo-workspace-styles />
-
 <div class="py-8">
+    <x-mo-workspace-styles />
     <div class="wm-page max-w-5xl mx-auto space-y-6">
         <section class="wm-card wm-card--gear-tr">
             <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">

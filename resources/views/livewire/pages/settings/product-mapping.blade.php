@@ -264,25 +264,14 @@ new #[Layout('layouts.app')] #[Title('Product Mapping')] class extends Component
 }; ?>
 
 <div class="py-8">
-    <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
-        <div>
-            <h2 class="text-xl font-semibold text-slate-800">Product Mapping</h2>
-            <p class="mt-1 text-sm text-slate-600">Stored WinMan structure-to-recipe mapping snapshot for classifications 29 and 30, structure type C. Sync stores which products map to which recipes for later reference.</p>
-        </div>
+    <x-mo-workspace-styles />
+    <div class="wm-page max-w-7xl mx-auto space-y-6">
+        <section class="wm-card wm-card--gear-tr">
+            <h1 class="wm-title">Product Mapping</h1>
+            <p class="wm-sub" style="margin-top:4px;">Stored WinMan structure-to-recipe mapping snapshot for classifications 29 and 30, structure type C. Sync stores which products map to which recipes for later reference.</p>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
-            <div class="flex flex-wrap items-center gap-2">
-                <a href="{{ route('settings.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.admin') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">General</a>
-                <a href="{{ route('settings.recipes') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.recipes') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Recipes</a>
-                <a href="{{ route('settings.product-mapping') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.product-mapping') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Product Mapping</a>
-                <a href="{{ route('settings.operator-sync') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.operator-sync') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Operator Sync</a>
-                <a href="{{ route('settings.documents') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.documents') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Documents</a>
-                <a href="{{ route('reporting.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('reporting.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Reporting</a>
-                <a href="{{ route('notifications.setup') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.setup') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Notifications Setup</a>
-                <a href="{{ route('audit.index') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.index') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Audit</a>
-                <a href="{{ route('audit.errors') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.errors') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Error Log</a>
-            </div>
-        </div>
+            <x-settings-subnav />
+        </section>
 
         @if ($error)
             <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ $error }}</div>
@@ -296,26 +285,27 @@ new #[Layout('layouts.app')] #[Title('Product Mapping')] class extends Component
             <div class="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">{{ $info }}</div>
         @endif
 
-        <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div class="border-b border-slate-200 px-4 py-3">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                        <h3 class="font-medium text-slate-900">Resolved Product to Recipe Mapping</h3>
-                        <p class="mt-1 text-sm text-slate-600">This summary resolves each stored structure ProductId to its recipe ProductId for later reference.</p>
-                        <p class="mt-1 text-xs text-slate-500">
-                            @if ($lastSyncedAt)
-                                Last synced: {{ $lastSyncedAt }}
-                            @else
-                                No sync has been stored yet.
-                            @endif
-                        </p>
-                    </div>
-                    <x-primary-button type="button" wire:click="syncMappings">Sync from WinMan</x-primary-button>
+        <section class="wm-card wm-card--gear-bl">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 class="wm-title" style="font-size:1.05rem;">Resolved Product to Recipe Mapping</h2>
+                    <p class="wm-sub" style="margin-top:4px;">This summary resolves each stored structure ProductId to its recipe ProductId for later reference.</p>
+                    <p class="wm-sub">
+                        @if ($lastSyncedAt)
+                            Last synced: {{ $lastSyncedAt }}
+                        @else
+                            No sync has been stored yet.
+                        @endif
+                    </p>
                 </div>
+                <button type="button" wire:click="syncMappings" class="wm-btn-dark">Sync from WinMan</button>
             </div>
+
+            <div class="wm-table" style="margin-top:14px;">
+            <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
-                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    <tr>
+                <thead>
+                    <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
                         <th class="px-3 py-3">Structure ProductId</th>
                         <th class="px-3 py-3">Product Description</th>
                         <th class="px-3 py-3">Unit Of Measure</th>
@@ -343,7 +333,9 @@ new #[Layout('layouts.app')] #[Title('Product Mapping')] class extends Component
                     @endforelse
                 </tbody>
             </table>
-        </div>
+            </div>
+            </div>
+        </section>
 
     </div>
 </div>

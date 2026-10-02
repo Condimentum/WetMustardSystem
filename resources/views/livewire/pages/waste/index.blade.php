@@ -92,9 +92,8 @@ new #[Layout('layouts.app')] #[Title('Waste / Scrap')] class extends Component {
     }
 }; ?>
 
-<x-mo-workspace-styles />
-
 <div class="py-8">
+    <x-mo-workspace-styles />
     <div class="wm-page max-w-5xl mx-auto space-y-6">
 
         <section class="wm-card wm-card--gear-tr">

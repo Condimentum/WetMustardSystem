@@ -24,9 +24,8 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
     }
 }; ?>
 
-<x-mo-workspace-styles />
-
 <div class="py-8">
+    <x-mo-workspace-styles />
     <div class="wm-page max-w-5xl mx-auto space-y-6">
         @php
             $checkCount = collect($this->todayStatus)->count();

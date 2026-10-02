@@ -96,37 +96,28 @@ new #[Layout('layouts.app')] #[Title('Notifications Setup')] class extends Compo
 }; ?>
 
 <div class="py-8">
-    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <x-mo-workspace-styles />
+    <div class="wm-page max-w-7xl mx-auto space-y-6">
 
-        <div>
-            <h2 class="text-xl font-semibold text-gray-800">Notifications Setup</h2>
-            <p class="text-sm text-gray-500">Configure alert rules and email recipients. Operators see the raised alerts on the <a href="{{ route('notifications.index') }}" wire:navigate class="text-indigo-600 hover:underline">Notifications</a> page.</p>
-        </div>
+        <section class="wm-card wm-card--gear-tr">
+            <h1 class="wm-title">Notifications Setup</h1>
+            <p class="wm-sub" style="margin-top:4px;">Configure alert rules and email recipients. Operators see the raised alerts on the <a href="{{ route('notifications.index') }}" wire:navigate class="text-indigo-600 hover:underline">Notifications</a> page.</p>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
-            <div class="flex flex-wrap items-center gap-2">
-                <a href="{{ route('settings.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.admin') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">General</a>
-                <a href="{{ route('settings.recipes') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.recipes') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Recipes</a>
-                <a href="{{ route('settings.product-mapping') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.product-mapping') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Product Mapping</a>
-                <a href="{{ route('settings.operator-sync') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.operator-sync') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Operator Sync</a>
-                <a href="{{ route('settings.documents') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.documents') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Documents</a>
-                <a href="{{ route('reporting.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('reporting.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Reporting</a>
-                <a href="{{ route('notifications.setup') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.setup') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Notifications Setup</a>
-                <a href="{{ route('audit.index') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.index') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Audit</a>
-                <a href="{{ route('audit.errors') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.errors') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Error Log</a>
-            </div>
-        </div>
+            <x-settings-subnav />
+        </section>
 
         @if ($flash)
             <div class="bg-green-50 border border-green-200 text-green-800 text-sm rounded-lg px-4 py-3">{{ $flash }}</div>
         @endif
 
         {{-- Rules --}}
-        <div class="bg-white shadow-sm rounded-lg overflow-hidden">
+        <section class="wm-card wm-card--gear-bl">
+            <h2 class="wm-title" style="font-size:1.05rem;">Rules</h2>
+            <div class="wm-table" style="margin-top:14px;">
             <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50 text-left text-xs text-gray-500 uppercase">
-                    <tr><th class="px-4 py-3">Rule</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">Severity</th><th class="px-4 py-3">Threshold</th><th class="px-4 py-3">Cooldown</th><th class="px-4 py-3">Enabled</th><th class="px-4 py-3"></th></tr>
+                <thead>
+                    <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Rule</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">Severity</th><th class="px-4 py-3">Threshold</th><th class="px-4 py-3">Cooldown</th><th class="px-4 py-3">Enabled</th><th class="px-4 py-3"></th></tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     @foreach ($this->rules as $rule)
@@ -140,7 +131,7 @@ new #[Layout('layouts.app')] #[Title('Notifications Setup')] class extends Compo
                                 <td class="px-4 py-2"><input wire:model="editCondition" class="border-gray-300 rounded-md text-sm w-20" placeholder="hrs" /></td>
                                 <td class="px-4 py-2"><input type="number" wire:model="editCooldown" class="border-gray-300 rounded-md text-sm w-20" /></td>
                                 <td class="px-4 py-2"></td>
-                                <td class="px-4 py-2 text-right"><x-primary-button wire:click="saveRule">Save</x-primary-button></td>
+                                <td class="px-4 py-2 text-right"><button type="button" wire:click="saveRule" class="wm-btn-dark">Save</button></td>
                             @else
                                 <td class="px-4 py-2">
                                     <span @class(['px-2 py-0.5 rounded-full text-xs font-medium', 'bg-red-100 text-red-800' => $rule->severity === 'critical', 'bg-amber-100 text-amber-800' => $rule->severity === 'warning', 'bg-gray-100 text-gray-700' => $rule->severity === 'info'])>{{ $rule->severity }}</span>
@@ -157,12 +148,13 @@ new #[Layout('layouts.app')] #[Title('Notifications Setup')] class extends Compo
                 </tbody>
             </table>
             </div>
-        </div>
+            </div>
+        </section>
 
         {{-- Recipients --}}
-        <div class="bg-white shadow-sm rounded-lg p-6 space-y-4">
-            <h3 class="font-medium text-gray-800">Alert Recipients</h3>
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+        <section class="wm-card wm-card--gear-tr">
+            <h2 class="wm-title" style="font-size:1.05rem;">Alert Recipients</h2>
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end" style="margin-top:14px;">
                 <div>
                     <label class="block text-xs text-gray-600 mb-1">Rule</label>
                     <select wire:model="recipient.rule_key" class="w-full border-gray-300 rounded-md text-sm">
@@ -193,25 +185,27 @@ new #[Layout('layouts.app')] #[Title('Notifications Setup')] class extends Compo
                     </div>
                 @endif
                 <div><label class="block text-xs text-gray-600 mb-1">Name</label><input wire:model="recipient.recipient_name" class="w-full border-gray-300 rounded-md text-sm" /></div>
-                <x-primary-button wire:click="addRecipient">Add</x-primary-button>
+                <button type="button" wire:click="addRecipient" class="wm-btn-dark">Add</button>
             </div>
 
+            <div class="wm-table" style="margin-top:14px;">
             <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="text-left text-xs text-gray-500 uppercase"><tr><th class="py-2">Rule</th><th class="py-2">Recipient</th><th class="py-2"></th></tr></thead>
+                <thead><tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Rule</th><th class="px-4 py-3">Recipient</th><th class="px-4 py-3"></th></tr></thead>
                 <tbody class="divide-y divide-gray-100">
                     @forelse ($this->recipients as $r)
                         <tr>
-                            <td class="py-2">{{ $r->rule_key ?? 'All rules' }}</td>
-                            <td class="py-2">{{ $r->recipient_type === 'role' ? 'Role: '.$r->role_key : $r->recipient_email }}</td>
-                            <td class="py-2 text-right"><button wire:click="removeRecipient({{ $r->id }})" class="text-red-600 hover:underline">Remove</button></td>
+                            <td class="px-4 py-2">{{ $r->rule_key ?? 'All rules' }}</td>
+                            <td class="px-4 py-2">{{ $r->recipient_type === 'role' ? 'Role: '.$r->role_key : $r->recipient_email }}</td>
+                            <td class="px-4 py-2 text-right"><button wire:click="removeRecipient({{ $r->id }})" class="text-red-600 hover:underline">Remove</button></td>
                         </tr>
                     @empty
-                        <tr><td colspan="3" class="py-4 text-center text-gray-500">No recipients configured.</td></tr>
+                        <tr><td colspan="3" class="px-4 py-6 text-center text-gray-500">No recipients configured.</td></tr>
                     @endforelse
                 </tbody>
             </table>
             </div>
-        </div>
+            </div>
+        </section>
     </div>
 </div>

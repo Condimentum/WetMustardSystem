@@ -9,7 +9,7 @@ class ExchangeMicrosoftCodeForTokenJob
 {
     public function __invoke(string $code): array
     {
-        $response = Http::asForm()->post(
+        $response = Http::asForm()->timeout(15)->connectTimeout(5)->post(
             'https://login.microsoftonline.com/'.config('services.microsoft.tenant_id').'/oauth2/v2.0/token',
             [
                 'grant_type' => 'authorization_code',

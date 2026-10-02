@@ -157,23 +157,14 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
 }; ?>
 
 <div class="py-8">
-    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <x-mo-workspace-styles />
+    <div class="wm-page max-w-7xl mx-auto space-y-6">
 
-        <h2 class="text-xl font-semibold text-gray-800">Reporting Admin</h2>
+        <section class="wm-card wm-card--gear-tr">
+            <h1 class="wm-title">Reporting Admin</h1>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
-            <div class="flex flex-wrap items-center gap-2">
-                <a href="{{ route('settings.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.admin') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">General</a>
-                <a href="{{ route('settings.recipes') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.recipes') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Recipes</a>
-                <a href="{{ route('settings.product-mapping') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.product-mapping') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Product Mapping</a>
-                <a href="{{ route('settings.operator-sync') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.operator-sync') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Operator Sync</a>
-                <a href="{{ route('settings.documents') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.documents') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Documents</a>
-                <a href="{{ route('reporting.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('reporting.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Reporting</a>
-                <a href="{{ route('notifications.setup') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.setup') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Notifications Setup</a>
-                <a href="{{ route('audit.index') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.index') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Audit</a>
-                <a href="{{ route('audit.errors') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.errors') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Error Log</a>
-            </div>
-        </div>
+            <x-settings-subnav />
+        </section>
 
         @if ($flash)
             <div @class([
@@ -185,18 +176,20 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
         @endif
 
         {{-- Send Now range --}}
-        <div class="bg-white shadow-sm rounded-lg p-4 flex flex-wrap items-end gap-3">
+        <section class="wm-card wm-card--gear-bl" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;">
             <div><label class="block text-xs text-gray-600 mb-1">Send Now — from</label><input type="date" wire:model="dateFrom" class="border-gray-300 rounded-md shadow-sm text-sm" /></div>
             <div><label class="block text-xs text-gray-600 mb-1">to</label><input type="date" wire:model="dateTo" class="border-gray-300 rounded-md shadow-sm text-sm" /></div>
             <span class="text-xs text-gray-400">Preview-only range. Row Send now uses each report's configured offsets.</span>
-        </div>
+        </section>
 
         {{-- Reports --}}
-        <div class="bg-white shadow-sm rounded-lg overflow-hidden">
+        <section class="wm-card wm-card--gear-tr">
+            <h2 class="wm-title" style="font-size:1.05rem;">Reports</h2>
+            <div class="wm-table" style="margin-top:14px;">
             <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50 text-left text-xs text-gray-500 uppercase">
-                    <tr><th class="px-4 py-3">Report</th><th class="px-4 py-3">Schedule</th><th class="px-4 py-3">Offsets</th><th class="px-4 py-3">Enabled</th><th class="px-4 py-3"></th></tr>
+                <thead>
+                    <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Report</th><th class="px-4 py-3">Schedule</th><th class="px-4 py-3">Offsets</th><th class="px-4 py-3">Enabled</th><th class="px-4 py-3"></th></tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     @foreach ($this->configs as $config)
@@ -211,7 +204,7 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
                                     </div>
                                 </td>
                                 <td class="px-4 py-2"></td>
-                                <td class="px-4 py-2 text-right"><x-primary-button wire:click="saveEdit">Save</x-primary-button></td>
+                                <td class="px-4 py-2 text-right"><button type="button" wire:click="saveEdit" class="wm-btn-dark">Save</button></td>
                             @else
                                 <td class="px-4 py-2">{{ $config->schedule_time ?? '—' }}</td>
                                 <td class="px-4 py-2 text-gray-500">{{ $config->date_offset_from_days }} … {{ $config->date_offset_to_days }}</td>
@@ -230,12 +223,13 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
                 </tbody>
             </table>
             </div>
-        </div>
+            </div>
+        </section>
 
         {{-- Recipients --}}
-        <div class="bg-white shadow-sm rounded-lg p-6 space-y-4">
-            <h3 class="font-medium text-gray-800">Recipients</h3>
-            <div class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+        <section class="wm-card wm-card--gear-bl">
+            <h2 class="wm-title" style="font-size:1.05rem;">Recipients</h2>
+            <div class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end" style="margin-top:14px;">
                 <div>
                     <label class="block text-xs text-gray-600 mb-1">Report</label>
                     <select wire:model="recipient.report_key" class="w-full border-gray-300 rounded-md text-sm">
@@ -269,34 +263,37 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
                 @endif
                 <div><label class="block text-xs text-gray-600 mb-1">Name</label><input wire:model="recipient.recipient_name" class="w-full border-gray-300 rounded-md text-sm" /></div>
                 <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model="recipient.is_cc" class="rounded border-gray-300"> CC</label>
-                <x-primary-button wire:click="addRecipient">Add</x-primary-button>
+                <button type="button" wire:click="addRecipient" class="wm-btn-dark">Add</button>
             </div>
 
+            <div class="wm-table" style="margin-top:14px;">
             <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="text-left text-xs text-gray-500 uppercase"><tr><th class="py-2">Scope</th><th class="py-2">Recipient</th><th class="py-2">To/CC</th><th class="py-2"></th></tr></thead>
+                <thead><tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Scope</th><th class="px-4 py-3">Recipient</th><th class="px-4 py-3">To/CC</th><th class="px-4 py-3"></th></tr></thead>
                 <tbody class="divide-y divide-gray-100">
                     @forelse ($this->recipients as $r)
                         <tr>
-                            <td class="py-2">{{ $r->report_key ?? 'Global' }}</td>
-                            <td class="py-2">{{ $r->recipient_type === 'role' ? 'Role: '.$r->role_key : $r->recipient_email }}</td>
-                            <td class="py-2">{{ $r->is_cc ? 'CC' : 'To' }}</td>
-                            <td class="py-2 text-right"><button wire:click="removeRecipient({{ $r->id }})" class="text-red-600 hover:underline">Remove</button></td>
+                            <td class="px-4 py-2">{{ $r->report_key ?? 'Global' }}</td>
+                            <td class="px-4 py-2">{{ $r->recipient_type === 'role' ? 'Role: '.$r->role_key : $r->recipient_email }}</td>
+                            <td class="px-4 py-2">{{ $r->is_cc ? 'CC' : 'To' }}</td>
+                            <td class="px-4 py-2 text-right"><button wire:click="removeRecipient({{ $r->id }})" class="text-red-600 hover:underline">Remove</button></td>
                         </tr>
                     @empty
-                        <tr><td colspan="4" class="py-4 text-center text-gray-500">No recipients configured.</td></tr>
+                        <tr><td colspan="4" class="px-4 py-6 text-center text-gray-500">No recipients configured.</td></tr>
                     @endforelse
                 </tbody>
             </table>
             </div>
-        </div>
+            </div>
+        </section>
 
         {{-- Send log --}}
-        <div class="bg-white shadow-sm rounded-lg overflow-hidden">
-            <div class="px-4 py-3 border-b border-gray-100 font-medium text-gray-800">Recent send log</div>
+        <section class="wm-card wm-card--gear-tr">
+            <h2 class="wm-title" style="font-size:1.05rem;">Recent send log</h2>
+            <div class="wm-table" style="margin-top:14px;">
             <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50 text-left text-xs text-gray-500 uppercase"><tr><th class="px-4 py-3">Report</th><th class="px-4 py-3">Trigger</th><th class="px-4 py-3">Range</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Rows</th><th class="px-4 py-3">When</th></tr></thead>
+                <thead><tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Report</th><th class="px-4 py-3">Trigger</th><th class="px-4 py-3">Range</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Rows</th><th class="px-4 py-3">When</th></tr></thead>
                 <tbody class="divide-y divide-gray-100">
                     @forelse ($this->sendLogs as $log)
                         <tr>
@@ -313,6 +310,7 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
                 </tbody>
             </table>
             </div>
-        </div>
+            </div>
+        </section>
     </div>
 </div>

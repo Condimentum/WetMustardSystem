@@ -664,23 +664,14 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
 }; ?>
 
 <div class="py-8">
-    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-        <h2 class="text-xl font-semibold text-gray-800">Documents</h2>
-        <p class="text-sm text-gray-600">Manage controlled document metadata and issue/change history used in generated paperwork.</p>
+    <x-mo-workspace-styles />
+    <div class="wm-page max-w-7xl mx-auto space-y-6">
+        <section class="wm-card wm-card--gear-tr">
+            <h1 class="wm-title">Documents</h1>
+            <p class="wm-sub" style="margin-top:4px;">Manage controlled document metadata and issue/change history used in generated paperwork.</p>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
-            <div class="flex flex-wrap items-center gap-2">
-                <a href="{{ route('settings.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.admin') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">General</a>
-                <a href="{{ route('settings.recipes') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.recipes') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Recipes</a>
-                <a href="{{ route('settings.product-mapping') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.product-mapping') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Product Mapping</a>
-                <a href="{{ route('settings.operator-sync') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.operator-sync') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Operator Sync</a>
-                <a href="{{ route('settings.documents') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.documents') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Documents</a>
-                <a href="{{ route('reporting.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('reporting.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Reporting</a>
-                <a href="{{ route('notifications.setup') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.setup') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Notifications Setup</a>
-                <a href="{{ route('audit.index') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.index') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Audit</a>
-                <a href="{{ route('audit.errors') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.errors') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Error Log</a>
-            </div>
-        </div>
+            <x-settings-subnav />
+        </section>
 
         @if ($flash)
             <div @class([
@@ -690,9 +681,9 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
             ])>{{ $flash }}</div>
         @endif
 
-        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-2">
-                <div class="font-medium text-gray-800">Document List</div>
+        <section class="wm-card wm-card--gear-bl">
+            <div class="flex items-center justify-between gap-2">
+                <h2 class="wm-title" style="font-size:1.05rem;">Document List</h2>
                 <div class="flex items-center gap-2">
                     <select wire:model.live="moduleFilter" class="rounded-md border-gray-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500">
                         <option value="">All categories</option>
@@ -700,9 +691,10 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                             <option value="{{ $moduleOption }}">{{ $moduleOption }}</option>
                         @endforeach
                     </select>
-                    <x-primary-button type="button" wire:click="createDocument">New document</x-primary-button>
+                    <button type="button" wire:click="createDocument" class="wm-btn-dark">New document</button>
                 </div>
             </div>
+            <div class="wm-table" style="margin-top:14px;">
             <div class="max-h-[560px] overflow-y-auto divide-y divide-gray-100">
                 @php
                     $currentModuleHeader = null;
@@ -736,7 +728,8 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                     <div class="px-5 py-6 text-sm text-gray-500">No documents created yet.</div>
                 @endforelse
             </div>
-        </div>
+            </div>
+        </section>
 
         @if ($documentModalOpen)
             <div class="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6">

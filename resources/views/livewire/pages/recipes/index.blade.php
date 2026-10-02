@@ -473,25 +473,14 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
 }; ?>
 
 <div class="py-8">
-    <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
-        <div>
-            <h2 class="text-xl font-semibold text-slate-800">Recipes</h2>
-            <p class="mt-1 text-sm text-slate-600">Live WinMan recipe structures for mustard products (classification 30, structure type C). This replaces static batch-card handling.</p>
-        </div>
+    <x-mo-workspace-styles />
+    <div class="wm-page max-w-7xl mx-auto space-y-6">
+        <section class="wm-card wm-card--gear-tr">
+            <h1 class="wm-title">Recipes</h1>
+            <p class="wm-sub" style="margin-top:4px;">Live WinMan recipe structures for mustard products (classification 30, structure type C). This replaces static batch-card handling.</p>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
-            <div class="flex flex-wrap items-center gap-2">
-                <a href="{{ route('settings.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.admin') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">General</a>
-                <a href="{{ route('settings.recipes') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.recipes') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Recipes</a>
-                <a href="{{ route('settings.product-mapping') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.product-mapping') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Product Mapping</a>
-                <a href="{{ route('settings.operator-sync') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.operator-sync') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Operator Sync</a>
-                <a href="{{ route('settings.documents') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('settings.documents') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Documents</a>
-                <a href="{{ route('reporting.admin') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('reporting.*') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Reporting</a>
-                <a href="{{ route('notifications.setup') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('notifications.setup') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Notifications Setup</a>
-                <a href="{{ route('audit.index') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.index') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Audit</a>
-                <a href="{{ route('audit.errors') }}" wire:navigate class="inline-flex items-center rounded-md px-3 py-2 text-sm font-medium {{ request()->routeIs('audit.errors') ? 'bg-sky-700 text-white' : 'text-slate-700 hover:bg-sky-50 hover:text-sky-700' }}">Error Log</a>
-            </div>
-        </div>
+            <x-settings-subnav />
+        </section>
 
         @if ($error)
             <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ $error }}</div>
@@ -505,32 +494,23 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
             <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{{ $info }}</div>
         @endif
 
-        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div class="flex items-center justify-between bg-slate-900 px-6 py-4">
-                <h3 class="text-lg font-semibold text-white">Recipe Structure Search</h3>
-                <svg class="h-6 w-6 text-white/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.3-4.3" />
-                    <circle cx="11" cy="11" r="6.5" />
-                </svg>
+        <section class="wm-card wm-card--gear-bl">
+            <div class="flex items-center justify-between">
+                <h2 class="wm-title" style="font-size:1.05rem;">Recipe Structure Search</h2>
             </div>
 
-            <div class="flex items-center justify-end p-5">
-                <x-primary-button type="button" wire:click="refreshRecipes" class="!rounded-lg !px-5 !py-2.5">Refresh WinMan Data</x-primary-button>
+            <div class="flex items-center justify-end" style="margin-top:10px;">
+                <button type="button" wire:click="refreshRecipes" class="wm-btn-dark">Refresh WinMan Data</button>
             </div>
-        </div>
+        </section>
 
-        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div class="flex items-center justify-between bg-slate-900 px-6 py-4">
-                <h3 class="text-lg font-semibold text-white">Recipe List</h3>
-                <svg class="h-6 w-6 text-white/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-                    <rect x="3.5" y="5" width="17" height="15" rx="2" />
-                    <path stroke-linecap="round" d="M3.5 9.5h17" />
-                </svg>
-            </div>
+        <section class="wm-card wm-card--gear-tr">
+            <h2 class="wm-title" style="font-size:1.05rem;">Recipe List</h2>
+            <div class="wm-table" style="margin-top:14px;">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    <tr>
+                    <thead>
+                    <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
                         <th class="px-3 py-3">Structure ID</th>
                         <th class="px-3 py-3">Recipe ID</th>
                         <th class="px-3 py-3">Recipe Description</th>
@@ -555,17 +535,18 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
                     </tbody>
                 </table>
             </div>
-        </div>
+            </div>
+        </section>
 
         @if ($showRecipeModal)
             <div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-2 sm:p-4">
-                <div class="my-2 flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl lg:max-w-4xl">
-                    <div class="flex items-start justify-between bg-slate-900 px-4 py-3 sm:px-5 sm:py-4">
+                <div class="my-2 flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#e9dfc8] bg-[#fffdf7] shadow-xl lg:max-w-4xl">
+                    <div class="flex items-start justify-between px-4 py-3 sm:px-5 sm:py-4" style="background:linear-gradient(180deg,#2b3238,#171c20);">
                         <div>
-                            <h3 class="text-lg font-semibold text-white">Recipe Card - {{ $selectedRecipeCode }}</h3>
+                            <h3 class="wm-title" style="font-size:1.1rem;color:#fff;">Recipe Card - {{ $selectedRecipeCode }}</h3>
                             <p class="mt-1 text-sm text-white/80">{{ $selectedRecipeDescription !== '' ? $selectedRecipeDescription : 'Store additional recipe document details.' }}</p>
                         </div>
-                        <button type="button" wire:click="closeRecipeModal" class="rounded-md px-2 py-1 text-sm text-white/80 hover:bg-white/10 hover:text-white">Close</button>
+                        <button type="button" wire:click="closeRecipeModal" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-sm text-white/80 hover:bg-white/10 hover:text-white">Close</button>
                     </div>
 
                     <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
@@ -575,56 +556,56 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
 
                         <div class="grid gap-4 md:grid-cols-2">
                             <div>
-                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Batch Sizes (kg)</label>
+                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#6b5d42]">Batch Sizes (kg)</label>
                                 <div class="space-y-2">
                                     @foreach ($batchSizeInputs as $index => $value)
                                         <div class="flex items-center gap-2">
-                                            <input type="number" step="0.001" min="0.001" wire:model.defer="batchSizeInputs.{{ $index }}" class="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500" placeholder="e.g. 500" />
-                                            <button type="button" wire:click="removeBatchSizeInput({{ $index }})" class="inline-flex items-center rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">Remove</button>
+                                            <input type="number" step="0.001" min="0.001" wire:model.defer="batchSizeInputs.{{ $index }}" class="w-full rounded-md border-[#e6dcc5] text-sm shadow-sm focus:border-[#c9a24a] focus:ring-[#c9a24a]" placeholder="e.g. 500" />
+                                            <button type="button" wire:click="removeBatchSizeInput({{ $index }})" class="inline-flex items-center rounded-md border border-[#e6dcc5] px-2 py-1 text-xs font-medium text-[#1f3f4f] hover:bg-[#fdf6e3]">Remove</button>
                                         </div>
                                     @endforeach
                                 </div>
                                 <div class="mt-2 flex items-center gap-2">
-                                    <button type="button" wire:click="addBatchSizeInput" class="inline-flex items-center rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">Add batch size</button>
-                                    <span class="text-xs text-slate-500">Up to 20 sizes.</span>
+                                    <button type="button" wire:click="addBatchSizeInput" class="inline-flex items-center rounded-md border border-[#e6dcc5] px-2.5 py-1.5 text-xs font-medium text-[#1f3f4f] hover:bg-[#fdf6e3]">Add batch size</button>
+                                    <span class="text-xs text-[#9a8b6d]">Up to 20 sizes.</span>
                                 </div>
-                                <div class="mt-1 text-xs text-slate-500">Manufacturing Orders will ask the operator to choose when multiple sizes are configured.</div>
+                                <div class="mt-1 text-xs text-[#9a8b6d]">Manufacturing Orders will ask the operator to choose when multiple sizes are configured.</div>
                                 @error('batchSizeInputs')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
                                 @error('batchSizeInputs.*')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
                             </div>
                             <div>
-                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">PLC Recipe Number</label>
-                                <input type="text" wire:model.defer="plcRecipeNumber" class="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500" />
+                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#6b5d42]">PLC Recipe Number</label>
+                                <input type="text" wire:model.defer="plcRecipeNumber" class="w-full rounded-md border-[#e6dcc5] text-sm shadow-sm focus:border-[#c9a24a] focus:ring-[#c9a24a]" />
                                 @error('plcRecipeNumber')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
                             </div>
                             <div>
-                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Document Reference (e.g. WM023)</label>
-                                <input type="text" wire:model.defer="documentReference" class="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500" placeholder="WM023" />
+                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#6b5d42]">Document Reference (e.g. WM023)</label>
+                                <input type="text" wire:model.defer="documentReference" class="w-full rounded-md border-[#e6dcc5] text-sm shadow-sm focus:border-[#c9a24a] focus:ring-[#c9a24a]" placeholder="WM023" />
                                 @error('documentReference')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
                             </div>
                             <div>
-                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Revision No</label>
-                                <input type="text" wire:model.defer="revisionNo" class="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500" />
+                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#6b5d42]">Revision No</label>
+                                <input type="text" wire:model.defer="revisionNo" class="w-full rounded-md border-[#e6dcc5] text-sm shadow-sm focus:border-[#c9a24a] focus:ring-[#c9a24a]" />
                                 @error('revisionNo')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
                             </div>
                             <div>
-                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Issue Date</label>
-                                <input type="date" wire:model.defer="issueDate" class="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500" />
+                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#6b5d42]">Issue Date</label>
+                                <input type="date" wire:model.defer="issueDate" class="w-full rounded-md border-[#e6dcc5] text-sm shadow-sm focus:border-[#c9a24a] focus:ring-[#c9a24a]" />
                                 @error('issueDate')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
                             </div>
                         </div>
 
                         <div>
-                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-600">Reason for Issue</label>
-                            <textarea wire:model.defer="reasonForIssue" rows="3" class="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500"></textarea>
+                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#6b5d42]">Reason for Issue</label>
+                            <textarea wire:model.defer="reasonForIssue" rows="3" class="w-full rounded-md border-[#e6dcc5] text-sm shadow-sm focus:border-[#c9a24a] focus:ring-[#c9a24a]"></textarea>
                             @error('reasonForIssue')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
                         </div>
 
-                        <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">Ingredients (Recipe)</div>
+                        <div class="rounded-lg border border-[#ebe2cd] bg-[#fffdf8] p-3">
+                            <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-[#6b5d42]">Ingredients (Recipe)</div>
                             <div class="hidden max-h-72 overflow-auto md:block">
-                                <table class="min-w-full divide-y divide-slate-200 text-xs">
-                                    <thead class="bg-white text-left uppercase tracking-wide text-slate-500">
+                                <table class="min-w-full divide-y divide-[#ebe2cd] text-xs">
+                                    <thead class="bg-[#fffdf7] text-left uppercase tracking-wide text-[#9a8b6d]">
                                         <tr>
                                             <th class="px-2 py-2">Material Code</th>
                                             <th class="px-2 py-2">Description</th>
@@ -633,7 +614,7 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
                                             <th class="px-2 py-2">UoM</th>
                                         </tr>
                                     </thead>
-                                    <tbody class="divide-y divide-slate-100 bg-white text-slate-700">
+                                    <tbody class="divide-y divide-[#efe7d4] bg-[#fffdf7] text-[#1f2a33]">
                                         @forelse ($selectedRecipeComponents as $component)
                                             <tr>
                                                 <td class="whitespace-nowrap px-2 py-2 align-top">{{ $component['material_code'] }}</td>
@@ -644,7 +625,7 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
                                             </tr>
                                         @empty
                                             <tr>
-                                                <td colspan="5" class="px-2 py-3 text-center text-slate-500">No recipe ingredients found for this recipe.</td>
+                                                <td colspan="5" class="px-2 py-3 text-center text-[#9a8b6d]">No recipe ingredients found for this recipe.</td>
                                             </tr>
                                         @endforelse
                                     </tbody>
@@ -653,45 +634,45 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
 
                             <div class="mt-3 space-y-2 md:hidden">
                                 @forelse ($selectedRecipeComponents as $component)
-                                    <div class="rounded-md border border-slate-200 bg-white p-2">
-                                        <div class="text-xs font-semibold text-slate-700">{{ $component['material_code'] }} - {{ $component['material_description'] }}</div>
-                                        <div class="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-600">
+                                    <div class="rounded-md border border-[#ebe2cd] bg-[#fffdf7] p-2">
+                                        <div class="text-xs font-semibold text-[#1f2a33]">{{ $component['material_code'] }} - {{ $component['material_description'] }}</div>
+                                        <div class="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-[#6b5d42]">
                                             <div>Required Qty: {{ $component['required_quantity'] !== null ? number_format((float) $component['required_quantity'], 3, '.', '') : '—' }}</div>
                                             <div>%: {{ $component['percentage'] !== null ? number_format((float) $component['percentage'], 3, '.', '') : '—' }}</div>
                                             <div>UoM: {{ $component['uom'] !== '' ? $component['uom'] : 'KG' }}</div>
                                         </div>
                                     </div>
                                 @empty
-                                    <div class="rounded-md border border-slate-200 bg-white px-2 py-3 text-center text-xs text-slate-500">No recipe ingredients found for this recipe.</div>
+                                    <div class="rounded-md border border-[#ebe2cd] bg-[#fffdf7] px-2 py-3 text-center text-xs text-[#9a8b6d]">No recipe ingredients found for this recipe.</div>
                                 @endforelse
                             </div>
                         </div>
 
                         <div>
                             <div class="mb-1 flex items-center justify-between gap-2">
-                                <label class="block text-xs font-semibold uppercase tracking-wide text-slate-600">Steps Involved</label>
-                                <button type="button" wire:click="addStepInput" class="inline-flex items-center rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">Add step</button>
+                                <label class="block text-xs font-semibold uppercase tracking-wide text-[#6b5d42]">Steps Involved</label>
+                                <button type="button" wire:click="addStepInput" class="inline-flex items-center rounded-md border border-[#e6dcc5] px-2 py-1 text-xs font-medium text-[#1f3f4f] hover:bg-[#fdf6e3]">Add step</button>
                             </div>
 
                             <div class="space-y-2">
                                 @foreach ($stepInputs as $index => $step)
                                     <div class="flex items-center gap-2">
-                                        <div class="w-12 shrink-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-semibold text-slate-600">{{ $index + 1 }}</div>
-                                        <input type="text" wire:model.defer="stepInputs.{{ $index }}" class="w-full rounded-md border-slate-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500" placeholder="Enter step {{ $index + 1 }}" />
-                                        <button type="button" wire:click="removeStepInput({{ $index }})" class="inline-flex items-center rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">Remove</button>
+                                        <div class="w-12 shrink-0 rounded-md border border-[#ebe2cd] bg-[#fdf6e3] px-2 py-2 text-center text-xs font-semibold text-[#6b5d42]">{{ $index + 1 }}</div>
+                                        <input type="text" wire:model.defer="stepInputs.{{ $index }}" class="w-full rounded-md border-[#e6dcc5] text-sm shadow-sm focus:border-[#c9a24a] focus:ring-[#c9a24a]" placeholder="Enter step {{ $index + 1 }}" />
+                                        <button type="button" wire:click="removeStepInput({{ $index }})" class="inline-flex items-center rounded-md border border-[#e6dcc5] px-2 py-1 text-xs font-medium text-[#1f3f4f] hover:bg-[#fdf6e3]">Remove</button>
                                     </div>
                                 @endforeach
                             </div>
 
-                            <div class="mt-1 text-xs text-slate-500">Add each step on its own line item.</div>
+                            <div class="mt-1 text-xs text-[#9a8b6d]">Add each step on its own line item.</div>
                             @error('stepInputs')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
                             @error('stepInputs.*')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
                         </div>
                     </div>
 
-                    <div class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:px-5 sm:py-4">
-                        <x-secondary-button type="button" wire:click="closeRecipeModal">Cancel</x-secondary-button>
-                        <x-primary-button type="button" wire:click="saveRecipeModal">Save Recipe Card</x-primary-button>
+                    <div class="flex flex-wrap items-center justify-end gap-2 border-t border-[#e6dcc5] bg-[#fffdf7] px-4 py-3 sm:px-5 sm:py-4">
+                        <button type="button" wire:click="closeRecipeModal" class="inline-flex items-center rounded-md border border-[#e6dcc5] px-4 py-2 text-sm font-medium text-[#1f3f4f] hover:bg-[#fdf6e3]">Cancel</button>
+                        <button type="button" wire:click="saveRecipeModal" class="wm-btn-dark">Save Recipe Card</button>
                     </div>
                 </div>
             </div>

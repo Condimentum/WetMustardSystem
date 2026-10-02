@@ -12,6 +12,7 @@ class FetchMicrosoftUserProfileJob
     {
         $response = Http::withToken($accessToken)
             ->acceptJson()
+            ->timeout(15)->connectTimeout(5)
             ->get('https://graph.microsoft.com/v1.0/me', [
                 '$select' => 'displayName,mail,userPrincipalName',
             ]);

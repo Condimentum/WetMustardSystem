@@ -1,0 +1,22 @@
+{
+    "name": "Wet Mustard Booking System",
+    "short_name": "WetMustard",
+    "start_url": "/WetMustardSystem/public/dashboard",
+    "scope": "/WetMustardSystem/public/",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#f8f4ea",
+    "theme_color": "#1c2552",
+    "icons": [
+        {
+            "src": "/WetMustardSystem/public/wet-mustard-booking-icon.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/WetMustardSystem/public/wet-mustard-booking-icon.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

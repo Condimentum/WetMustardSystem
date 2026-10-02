@@ -5,3 +5,26 @@
 [x-cloak] {
     display: none !important;
 }
+
+/* Tablet/touch usability: iOS Safari auto-zooms the page when focusing any
+   input/select/textarea rendered below 16px — override Tailwind's text-sm
+   (14px) default specifically on form controls so the page never jumps. */
+@media (max-width: 1024px) {
+    input, select, textarea {
+        font-size: 16px;
+    }
+}
+
+/* Smooth momentum scrolling for horizontally-scrollable tables on touch devices,
+   and safe-area padding so content isn't obscured by a tablet's home indicator
+   in standalone/landscape mode (viewport-fit=cover). */
+.overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+}
+
+body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+}
+

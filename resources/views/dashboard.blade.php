@@ -46,10 +46,10 @@
 
     <div class="py-8">
         <div class="dash">
+            <div class="dash-banner-avatar">
+                <livewire:layout.user-menu />
+            </div>
             <div class="dash-banner">
-                <div class="dash-banner-avatar">
-                    <livewire:layout.user-menu />
-                </div>
                 <span class="dash-logo">
                     <img src="{{ asset('wet-mustard-booking-icon.png') }}" alt="Wet Mustard Booking System" />
                 </span>
