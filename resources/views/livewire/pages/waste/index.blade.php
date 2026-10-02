@@ -98,8 +98,8 @@ new #[Layout('layouts.app')] #[Title('Waste / Scrap')] class extends Component {
 
         <section class="wm-card wm-card--gear-tr">
             <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-                <span style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #c9a24a;overflow:hidden;flex-shrink:0;background:#fffdf7;">
-                    <x-menu-tile-icon icon="waste" class="h-6 w-6" style="color:#8c6427;" />
+                <span class="wml-medal">
+                    <img src="{{ asset('images/dashboard/waste.png') }}" alt="" />
                 </span>
                 <div>
                     <h1 class="wm-title">Waste / Scrap</h1>

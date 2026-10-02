@@ -37,10 +37,8 @@ new #[Layout('layouts.app')] #[Title('Notifications')] class extends Component {
 
         <section class="wm-card wm-card--gear-tr">
             <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
-                <span style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #c9a24a;overflow:hidden;flex-shrink:0;background:#fffdf7;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#1f3f4f" stroke-width="1.6" style="width:28px;height:28px;">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9" />
-                    </svg>
+                <span class="wml-medal">
+                    <img src="{{ asset('images/dashboard/bell.png') }}" alt="" />
                 </span>
 
                 <div>

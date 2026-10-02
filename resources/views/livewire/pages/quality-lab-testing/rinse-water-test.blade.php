@@ -75,8 +75,8 @@ new #[Layout('layouts.app')] #[Title('WM010 Rinse Water Test')] class extends Co
 
         <section class="wm-card wm-card--gear-tr">
             <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">
-                <span style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #c9a24a;overflow:hidden;flex-shrink:0;background:#fffdf7;">
-                    <img src="{{ asset('lab-testing-icon.png') }}" alt="Rinse Water Test" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+                <span class="wml-medal">
+                    <img src="{{ asset('images/dashboard/microscope.png') }}" alt="Rinse Water Test" />
                 </span>
 
                 <div>

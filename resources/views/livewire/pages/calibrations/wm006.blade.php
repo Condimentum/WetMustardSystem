@@ -66,8 +66,8 @@ new #[Layout('layouts.app')] #[Title('WM006 Viscosity Meter Autozero Check')] cl
 
         <section class="wm-card wm-card--gear-tr">
             <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-                <span style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #c9a24a;overflow:hidden;flex-shrink:0;background:#fffdf7;">
-                    <img src="{{ asset('calibration-icon.png') }}" alt="WM006" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+                <span class="wml-medal">
+                    <img src="{{ asset('images/dashboard/wrench.png') }}" alt="WM006" />
                 </span>
                 <div>
                     <h1 class="wm-title">WM006 Viscosity Meter Autozero Check</h1>
