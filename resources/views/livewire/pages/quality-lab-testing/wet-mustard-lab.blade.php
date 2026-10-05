@@ -164,7 +164,6 @@ new #[Layout('layouts.app')] #[Title('WM005 Wet Mustard Lab Testing')] class ext
                     <div class="wm-sub" style="text-transform:uppercase;letter-spacing:.1em;">Analytical Checks Per Produced Batch</div>
                 </div>
 
-                <a href="{{ route('quality.lab-testing') }}" wire:navigate class="wm-link" style="margin-left:auto;">Back to Quality &amp; Lab Testing</a>
             </div>
         </section>
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\FactoryPerformance\Jobs\FetchShiftDayJob;
 use App\Models\LabScaleCalibration;
 use App\Models\ProductionScaleCalibration;
 use App\Models\SaltMeterCalibration;
@@ -15,14 +16,18 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
     {
         $today = now()->toDateString();
 
+        $shiftRow = app(FetchShiftDayJob::class)((int) config('fpt.manufacturing_department_id'), $today);
+
         return [
             'wm001' => LabScaleCalibration::query()->whereDate('checked_date', $today)->exists(),
             'wm002' => SaltMeterCalibration::query()->whereDate('checked_date', $today)->exists(),
             'wm006' => ViscosityMeterAutozeroCheck::query()->whereDate('checked_date', $today)->exists(),
             'wm013' => ProductionScaleCalibration::query()->whereDate('checked_date', $today)->exists(),
+            'record_shift_data' => (bool) $shiftRow?->IsSubmitted,
         ];
     }
 }; ?>
+
 
 <div class="py-8">
     <x-mo-workspace-styles />
@@ -36,6 +41,7 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
                 ['key' => 'wm002', 'code' => 'WM002', 'label' => 'Daily Salt Meter Calibration', 'route' => 'calibrations.wm002'],
                 ['key' => 'wm006', 'code' => 'WM006', 'label' => 'Viscosity Meter Autozero Check', 'route' => 'calibrations.wm006'],
                 ['key' => 'wm013', 'code' => 'WM013', 'label' => 'Production Scales Daily Calibration', 'route' => 'calibrations.wm013'],
+                ['key' => 'record_shift_data', 'code' => 'Record Shift Data', 'label' => 'Wet Mustard - Manufacturing shift & downtime log', 'route' => 'calibrations.record-shift-data'],
             ];
         @endphp
 
@@ -51,15 +57,14 @@ new #[Layout('layouts.app')] #[Title('Daily Calibrations')] class extends Compon
                 </div>
 
                 <span class="wm-pill" style="margin-left:auto;background:linear-gradient(180deg,#2b6f86,#1d4f61);">{{ $completedTodayCount }} of {{ $checkCount }} completed today</span>
-                <a href="{{ route('dashboard') }}" wire:navigate class="wm-link">Back to Main Menu</a>
             </div>
 
             <div class="wm-rows">
                 @foreach ($tiles as $tile)
                     <a href="{{ route($tile['route']) }}" wire:navigate class="wm-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;text-decoration:none;--wm-strip: {{ $this->todayStatus[$tile['key']] ? '#3aa33a' : '#c9a24a' }};">
                         <div>
-                            <div class="wm-ref-text">{{ $tile['code'] }}</div>
-                            <div class="wm-sub">{{ $tile['label'] }}</div>
+                            <div class="wm-ref-text" style="font-size:1.05rem;">{{ $tile['label'] }}</div>
+                            <div class="wm-sub">{{ $tile['code'] }}</div>
                         </div>
                         <span class="wm-pill" style="background:{{ $this->todayStatus[$tile['key']] ? 'linear-gradient(180deg,#3aa33a,#1d6b24)' : 'linear-gradient(180deg,#9a8b6d,#6b5d42)' }};">{{ $this->todayStatus[$tile['key']] ? 'Done' : 'Pending' }}</span>
                     </a>

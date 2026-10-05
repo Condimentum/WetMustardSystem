@@ -4,8 +4,6 @@
     .pw-hero-icon { flex: none; display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 50%; border: 3px solid #c9a24a; background: radial-gradient(circle at 35% 30%, #ffffff, #efe6d0 75%); box-shadow: inset 0 0 0 2px #e6d4a3, 0 3px 8px rgba(0, 0, 0, .18); }
     .pw-hero-icon img { width: 70%; height: 70%; object-fit: contain; }
     .pw-hero-text { flex: 1 1 220px; min-width: 0; }
-    .pw-back { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border: 1px solid #c9a24a; border-radius: 999px; background: linear-gradient(180deg, #fffdf7, #f6ecd2); color: #6b4e14; font-size: .82rem; font-weight: 700; text-decoration: none; }
-    .pw-back:hover { background: #f3e5bf; }
     .pw-stats { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
     .pw-stat { flex: 1 1 150px; min-width: 0; padding: 10px 14px; border: 1px solid rgba(214, 202, 176, .9); border-radius: 12px; background: linear-gradient(180deg, rgba(255, 255, 255, .85), rgba(247, 243, 233, .7)); box-shadow: 0 3px 8px rgba(110, 85, 35, .08), inset 0 1px 0 #fff; }
     .pw-stat-label { font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #5b5140; }

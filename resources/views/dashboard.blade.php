@@ -2,12 +2,13 @@
     <style>
         @font-face { font-family: 'Libre Baskerville'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('{{ asset('fonts/libre-baskerville-latin.woff2') }}') format('woff2'); }
 
-        .dash { position: relative; max-width: 42rem; margin: 0 auto; padding: 18px; border-radius: 24px;
+        .dash { position: relative; max-width: 1400px; margin: 0 auto; padding: 18px; border-radius: 24px;
             background-color: #f8f4ea;
             background-image: linear-gradient(rgba(248, 244, 234, .82), rgba(248, 244, 234, .82)), url('{{ asset('gear-graphic.png') }}'), url('{{ asset('workspace-bg.png') }}?v={{ filemtime(public_path('workspace-bg.png')) }}');
             background-repeat: no-repeat, no-repeat, no-repeat;
             background-position: 0 0, right -40px top -30px, center;
-            background-size: auto, 280px, cover; }
+            background-size: auto, 280px, cover;
+            box-shadow: 0 8px 24px rgba(80, 60, 20, .18); }
 
         .dash-banner { position: relative; overflow: hidden; display: flex; align-items: center; gap: 18px; min-height: 150px; margin-bottom: 18px; padding: 24px 26px; border-radius: 20px; box-shadow: 0 8px 22px rgba(80, 60, 20, .22);
             background: url('{{ asset('dashboard-header-bg.png') }}?v={{ filemtime(public_path('dashboard-header-bg.png')) }}') center / cover no-repeat; }
@@ -48,7 +49,7 @@
         }
     </style>
 
-    <div class="py-8">
+    <div class="py-1 -mx-4 sm:-mx-6 lg:-mx-8 -mt-6">
         <div class="dash">
             <div class="dash-banner-avatar">
                 <livewire:layout.user-menu />

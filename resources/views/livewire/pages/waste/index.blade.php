@@ -105,7 +105,6 @@ new #[Layout('layouts.app')] #[Title('Waste / Scrap')] class extends Component {
                     <h1 class="wm-title">Waste / Scrap</h1>
                     <div class="wm-sub">Log spilled, damaged, disposed or lost material with a reason.</div>
                 </div>
-                <a href="{{ route('dashboard') }}" wire:navigate class="wm-link" style="margin-left:auto;">Back to Main Menu</a>
             </div>
         </section>
 

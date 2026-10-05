@@ -146,6 +146,27 @@ return [
             ] : [],
         ],
 
+        // Factory Performance Tracker: separate PHP app, same SQL Server host,
+        // its own database. Reuses the main app's DB_* creds/host by default
+        // (same login already has access) so no new .env secret is required.
+        'fpt' => [
+            'driver' => 'sqlsrv',
+            'host' => env('FPT_DB_HOST', env('DB_HOST', 'condi-sql1')),
+            'port' => env('FPT_DB_PORT', env('DB_PORT', '1433')),
+            'database' => env('FPT_DB_DATABASE', 'CONDI_FactoryPerformanceTracker'),
+            'username' => env('FPT_DB_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('FPT_DB_PASSWORD', env('DB_PASSWORD', '')),
+            'charset' => env('FPT_DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'encrypt' => env('FPT_DB_ENCRYPT', env('DB_ENCRYPT', 'no')),
+            'trust_server_certificate' => env('FPT_DB_TRUST_SERVER_CERTIFICATE', env('DB_TRUST_SERVER_CERTIFICATE', 'true')),
+            'login_timeout' => env('FPT_DB_LOGIN_TIMEOUT', 10),
+            'options' => defined('PDO::SQLSRV_ATTR_QUERY_TIMEOUT') ? [
+                PDO::SQLSRV_ATTR_QUERY_TIMEOUT => (int) env('FPT_DB_QUERY_TIMEOUT', 30),
+            ] : [],
+        ],
+
     ],
 
     /*

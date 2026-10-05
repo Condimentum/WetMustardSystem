@@ -21,7 +21,6 @@ new #[Layout('layouts.app')] #[Title('Quality & Lab Testing')] class extends Com
                     <div class="wm-sub" style="text-transform:uppercase;letter-spacing:.1em;">WM005 &middot; WM010 Check Sheets</div>
                 </div>
 
-                <a href="{{ route('dashboard') }}" wire:navigate class="wm-link" style="margin-left:auto;">Back to Main Menu</a>
             </div>
 
             <div class="wm-rows">

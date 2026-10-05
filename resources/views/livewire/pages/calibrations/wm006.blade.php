@@ -73,7 +73,6 @@ new #[Layout('layouts.app')] #[Title('WM006 Viscosity Meter Autozero Check')] cl
                     <h1 class="wm-title">WM006 Viscosity Meter Autozero Check</h1>
                     <div class="wm-sub" style="text-transform:uppercase;letter-spacing:.1em;">Daily completion check</div>
                 </div>
-                <a href="{{ route('calibrations.daily') }}" wire:navigate class="wm-link" style="margin-left:auto;">Back to Daily Calibrations</a>
             </div>
         </section>
 

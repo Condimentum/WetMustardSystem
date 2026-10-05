@@ -87,6 +87,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Volt::route('calibrations/wm013', 'pages.calibrations.wm013')
         ->name('calibrations.wm013');
 
+    Volt::route('calibrations/record-shift-data', 'pages.calibrations.record-shift-data')
+        ->name('calibrations.record-shift-data');
+
     Volt::route('quality/lab-testing', 'pages.quality-lab-testing.index')
         ->name('quality.lab-testing');
 

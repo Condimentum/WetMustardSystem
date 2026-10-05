@@ -94,7 +94,6 @@ new #[Layout('layouts.app')] #[Title('WM013 Production Scales Daily Calibration'
                     <h1 class="wm-title">WM013 Production Scales Daily Calibration</h1>
                     <div class="wm-sub" style="text-transform:uppercase;letter-spacing:.1em;">Powder &middot; Pallecon &middot; Bucket Filler Scales</div>
                 </div>
-                <a href="{{ route('calibrations.daily') }}" wire:navigate class="wm-link" style="margin-left:auto;">Back to Daily Calibrations</a>
             </div>
         </section>
 

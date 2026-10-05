@@ -75,7 +75,6 @@ new #[Layout('layouts.app')] #[Title('WM002 Daily Salt Meter Calibration')] clas
                     <h1 class="wm-title">WM002 Daily Salt Meter Calibration</h1>
                     <div class="wm-sub" style="text-transform:uppercase;letter-spacing:.1em;">Target 100 &plusmn; 2 mg/l</div>
                 </div>
-                <a href="{{ route('calibrations.daily') }}" wire:navigate class="wm-link" style="margin-left:auto;">Back to Daily Calibrations</a>
             </div>
         </section>
 

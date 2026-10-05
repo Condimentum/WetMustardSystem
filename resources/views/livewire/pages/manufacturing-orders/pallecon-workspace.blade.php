@@ -540,7 +540,6 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
                     <div class="wml-title">PALLECON WORKSPACE</div>
                     <div class="wml-sub">{{ $localOrder?->mo_number ?? $winmanMo }}</div>
                 </div>
-                <a href="{{ route('dashboard') }}" wire:navigate class="pw-back">Back to Main Menu</a>
             </div>
             <div class="pw-stats">
                 <div class="pw-stat"><div class="pw-stat-label">MO</div><div class="pw-stat-value" style="color:#1f5130;">{{ $localOrder?->mo_number ?? $winmanMo }}</div></div>

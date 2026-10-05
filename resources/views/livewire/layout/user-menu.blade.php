@@ -37,13 +37,10 @@ new class extends Component
     }
 
     #[Computed]
-    public function avatarColor(): string
+    public function avatarImage(): ?string
     {
-        // Deterministic Teams-style palette pick per user, so the same person always gets the same colour.
-        $palette = ['#c0392b', '#8e44ad', '#2980b9', '#16a085', '#d35400', '#2c3e50', '#27ae60', '#7f8c8d'];
-        $seed = crc32((string) (auth()->id() ?? auth()->user()->email ?? ''));
-
-        return $palette[$seed % count($palette)];
+        // Gold bust medallion; falls back to initials until the image is placed in public/.
+        return is_file(public_path('images/dashboard/bust.png')) ? asset('images/dashboard/bust.png') : null;
     }
 
     #[Computed]
@@ -71,11 +68,16 @@ new class extends Component
             @click="userMenuOpen = !userMenuOpen"
             @click.outside="userMenuOpen = false"
             type="button"
-            class="relative flex h-12 w-12 shrink-0 aspect-square items-center justify-center rounded-full text-base font-bold text-white shadow-md ring-2 ring-white transition hover:opacity-90"
-            style="background:{{ $this->avatarColor }};"
+            class="relative h-14 w-14 shrink-0 aspect-square text-lg transition hover:brightness-110"
             aria-label="Account menu"
         >
-            {{ $this->initials }}
+            <span class="wm-avatar-medal h-full w-full">
+                @if ($this->avatarImage)
+                    <img src="{{ $this->avatarImage }}" alt="" />
+                @else
+                    {{ $this->initials }}
+                @endif
+            </span>
             @if ($this->openNotificationsCount > 0)
                 <span class="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white ring-2 ring-white">{{ $this->openNotificationsCount > 9 ? '9+' : $this->openNotificationsCount }}</span>
             @endif
@@ -84,7 +86,13 @@ new class extends Component
         <div x-show="userMenuOpen" x-transition style="display:none;" class="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-slate-200 bg-white py-2 text-left shadow-lg">
             <div class="border-b border-slate-100 px-4 py-3">
                 <div class="flex items-center gap-3">
-                    <div class="flex h-12 w-12 shrink-0 aspect-square items-center justify-center rounded-full text-base font-bold text-white" style="background:{{ $this->avatarColor }};">{{ $this->initials }}</div>
+                    <div class="wm-avatar-medal h-12 w-12 shrink-0 aspect-square text-base">
+                        @if ($this->avatarImage)
+                            <img src="{{ $this->avatarImage }}" alt="" />
+                        @else
+                            {{ $this->initials }}
+                        @endif
+                    </div>
                     <div class="min-w-0">
                         <div class="truncate text-sm font-semibold text-slate-900">{{ auth()->user()->name }}</div>
                         <div class="truncate text-xs text-slate-500">{{ auth()->user()->email }}</div>

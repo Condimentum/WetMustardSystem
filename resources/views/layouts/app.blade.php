@@ -23,26 +23,28 @@
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         @livewireStyles
+
+        {{-- Cream/gear backdrop behind every page's content, so no plain-gray background shows around the edges --}}
+        <style>
+            .min-h-screen.bg-gray-100 {
+                background-color: #f8f4ea;
+                background-image: url('{{ asset('gear-graphic.png') }}'), url('{{ asset('workspace-bg.png') }}?v={{ filemtime(public_path('workspace-bg.png')) }}');
+                background-repeat: no-repeat, no-repeat;
+                background-position: right -40px top -30px, center;
+                background-size: 280px, cover;
+                background-attachment: fixed;
+            }
+        </style>
     </head>
     <body class="font-sans antialiased">
         <x-loading-indicator />
 
         <div class="min-h-screen bg-gray-100">
-            {{-- Account menu floats top-right on every page except the dashboard, which renders its own on the banner --}}
+            {{-- Account menu only shows on the dashboard banner; other pages just get the go-back button --}}
             @unless (request()->routeIs('dashboard'))
-                <div style="position:fixed;top:16px;right:16px;z-index:40;">
-                    <livewire:layout.user-menu />
-                </div>
-
-                <div style="background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 100%);border-bottom:1px solid #e2e8f0;">
-                    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-                        <a href="{{ route('dashboard') }}" wire:navigate style="display:inline-flex;align-items:center;gap:8px;padding:12px 0;color:#3730a3;font-size:13px;font-weight:800;letter-spacing:.02em;text-decoration:none;">
-                            <svg style="width:16px;height:16px;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-                            </svg>
-                            Main Menu
-                        </a>
-                    </div>
+                {{-- Scrolls with the page; pulled down past main's/page's own padding so it straddles the card's top border --}}
+                <div style="display:flex;justify-content:center;padding-top:0;position:relative;z-index:30;margin-bottom:-96px;">
+                    <x-go-back-button :href="route('dashboard')" label="Main Menu" />
                 </div>
             @endunless
 

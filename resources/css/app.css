@@ -28,3 +28,60 @@ body {
     padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* App-wide "go back" control: navy/gold rectangular badge, matching the dashboard medal colours. */
+.wm-go-back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    padding: 8px 18px;
+    border: 2px solid #c9a24a;
+    border-radius: 10px;
+    background: radial-gradient(circle at 35% 30%, #3a4686, #1c2552 70%);
+    color: #f3d98a;
+    font-size: .78rem;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    text-decoration: none;
+    box-shadow: inset 0 0 0 2px #7a5f22, inset 0 1px 0 rgba(255, 255, 255, .15), 0 3px 8px rgba(0, 0, 0, .25);
+    transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+
+.wm-go-back:hover {
+    filter: brightness(1.12);
+    transform: translateY(-1px);
+}
+
+.wm-go-back:active {
+    transform: translateY(0);
+    filter: brightness(.95);
+}
+
+.wm-go-back:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 2px;
+}
+
+/* Account avatar: navy medallion with gold frame, matching the dashboard medals. */
+.wm-avatar-medal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    overflow: hidden;
+    border-radius: 50%;
+    border: 3px solid #c9a24a;
+    background: radial-gradient(circle at 35% 30%, #3a4686, #1c2552 70%);
+    color: #f3d98a;
+    font-weight: 800;
+    box-shadow: inset 0 0 0 2px #7a5f22, inset 0 4px 10px rgba(0, 0, 0, .35), 0 3px 8px rgba(0, 0, 0, .25);
+}
+
+.wm-avatar-medal img {
+    width: 84%;
+    height: 84%;
+    margin-top: 12%;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .35));
+}

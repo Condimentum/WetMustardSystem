@@ -46,7 +46,6 @@ new #[Layout('layouts.app')] #[Title('Notifications')] class extends Component {
                     <div class="wm-sub" style="text-transform:uppercase;letter-spacing:.1em;">Alerts Raised Across Checks &amp; Production</div>
                 </div>
 
-                <a href="{{ route('dashboard') }}" wire:navigate class="wm-link" style="margin-left:auto;">Back to Main Menu</a>
             </div>
 
             <div class="wm-table" style="margin-top:18px;">

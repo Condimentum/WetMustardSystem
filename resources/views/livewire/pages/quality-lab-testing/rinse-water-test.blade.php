@@ -84,7 +84,6 @@ new #[Layout('layouts.app')] #[Title('WM010 Rinse Water Test')] class extends Co
                     <div class="wm-sub" style="text-transform:uppercase;letter-spacing:.1em;">Cleaning Chemicals &middot; Sulphites &middot; Titration</div>
                 </div>
 
-                <a href="{{ route('quality.lab-testing') }}" wire:navigate class="wm-link" style="margin-left:auto;">Back to Quality &amp; Lab Testing</a>
             </div>
         </section>
 
