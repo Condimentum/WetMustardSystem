@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Batch\Jobs\ExtractBatchCardMetadataJob;
 use App\Domains\WinMan\Support\WinManConnection;
 use App\Models\Recipe;
 use App\Models\RecipeCard;
@@ -8,9 +9,13 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\Volt\Component;
+use Livewire\WithFileUploads;
 
 new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
+    use WithFileUploads;
+
     /** @var array<int, array<string, mixed>> */
     public array $rows = [];
 
@@ -44,6 +49,10 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
 
     /** @var array<int, string> */
     public array $stepInputs = [''];
+
+    public ?TemporaryUploadedFile $recipePdfUpload = null;
+
+    public ?string $recipeExtractInfo = null;
 
     /** @var array<int, array<string, mixed>> */
     public array $selectedRecipeComponents = [];
@@ -174,6 +183,8 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
     {
         $this->resetValidation();
         $this->modalFlash = null;
+        $this->recipePdfUpload = null;
+        $this->recipeExtractInfo = null;
 
         if (! $this->recipeCardsTableExists()) {
             $this->error = 'Recipe card metadata is not available yet. Run: php artisan migrate';
@@ -215,6 +226,70 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
         $this->selectedRecipeComponents = $this->loadRecipeIngredientsForDisplay($recipeCode);
 
         $this->showRecipeModal = true;
+    }
+
+    public function updatedRecipePdfUpload(): void
+    {
+        $this->recipeExtractInfo = null;
+
+        if (! $this->recipePdfUpload instanceof TemporaryUploadedFile) {
+            return;
+        }
+
+        try {
+            $this->validate(['recipePdfUpload' => ['file', 'mimes:pdf', 'max:15360']]);
+        } catch (ValidationException $e) {
+            $this->recipePdfUpload = null;
+
+            throw $e;
+        }
+
+        $tempPath = $this->recipePdfUpload->getRealPath();
+        if (! is_string($tempPath) || trim($tempPath) === '') {
+            $this->recipeExtractInfo = 'PDF selected, but could not be read for extraction - enter the details manually.';
+
+            return;
+        }
+
+        $result = app(ExtractBatchCardMetadataJob::class)($tempPath);
+        $metadata = (array) ($result['metadata'] ?? []);
+
+        if (($metadata['document_code'] ?? null) && $this->documentReference === '') {
+            $this->documentReference = (string) $metadata['document_code'];
+        }
+
+        if (($metadata['plc_recipe_number'] ?? null) && $this->plcRecipeNumber === '') {
+            $this->plcRecipeNumber = (string) $metadata['plc_recipe_number'];
+        }
+
+        if (($metadata['revision'] ?? null) && $this->revisionNo === '') {
+            $this->revisionNo = (string) $metadata['revision'];
+        }
+
+        if (($metadata['issue_date'] ?? null) && $this->issueDate === '') {
+            $this->issueDate = (string) $metadata['issue_date'];
+        }
+
+        if (($metadata['reason_for_issue'] ?? null) && $this->reasonForIssue === '') {
+            $this->reasonForIssue = (string) $metadata['reason_for_issue'];
+        }
+
+        $extractedSteps = array_values(array_filter(array_map(
+            static fn ($step): string => trim((string) ($step['title'] ?? '')),
+            (array) ($metadata['process_steps'] ?? []),
+        ), static fn (string $title): bool => $title !== ''));
+
+        if ($extractedSteps !== [] && $this->stepInputs === ['']) {
+            $this->stepInputs = $extractedSteps;
+        }
+
+        if (($metadata['extract_error'] ?? null) !== null) {
+            $this->recipeExtractInfo = 'PDF uploaded, but text extraction failed - enter the details manually.';
+
+            return;
+        }
+
+        $this->recipeExtractInfo = 'PDF scanned - review the pre-filled fields below before saving.';
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -546,13 +621,30 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
                             <h3 class="wm-title" style="font-size:1.1rem;color:#fff;">Recipe Card - {{ $selectedRecipeCode }}</h3>
                             <p class="mt-1 text-sm text-white/80">{{ $selectedRecipeDescription !== '' ? $selectedRecipeDescription : 'Store additional recipe document details.' }}</p>
                         </div>
-                        <button type="button" wire:click="closeRecipeModal" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-sm text-white/80 hover:bg-white/10 hover:text-white">Close</button>
+                        <div class="flex shrink-0 items-center gap-1">
+                            <label class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-md text-white/80 hover:bg-white/10 hover:text-white" title="Upload metadata from PDF">
+                                <input type="file" wire:model="recipePdfUpload" accept="application/pdf" class="hidden" />
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0 4 4m-4-4-4 4" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                                </svg>
+                            </label>
+                            <button type="button" wire:click="closeRecipeModal" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-sm text-white/80 hover:bg-white/10 hover:text-white">Close</button>
+                        </div>
                     </div>
 
                     <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
                         @if ($modalFlash)
                             <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{{ $modalFlash }}</div>
                         @endif
+
+                        <div wire:loading wire:target="recipePdfUpload" class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">Scanning PDF...</div>
+
+                        @if ($recipeExtractInfo)
+                            <div class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">{{ $recipeExtractInfo }}</div>
+                        @endif
+
+                        @error('recipePdfUpload') <div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{{ $message }}</div> @enderror
 
                         <div class="grid gap-4 md:grid-cols-2">
                             <div>

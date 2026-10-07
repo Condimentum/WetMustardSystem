@@ -5,13 +5,15 @@
     resources/js/app.js), as a fresh page load - not a browser-history pop, so
     it can never land back on a login/OAuth callback page. Falls back to
     $href when no previous app page is known (e.g. the very first page after
-    signing in).
+    signing in). Set :useStack="false" to always go straight to $href instead
+    (e.g. Settings sub-pages should always return to the Main Menu, not to
+    whatever other Settings sub-page was visited before).
 --}}
-@props(['href', 'label' => 'Go back'])
+@props(['href', 'label' => 'Go back', 'useStack' => true])
 
 <a
     href="{{ $href }}"
-    data-go-back
+    @if ($useStack) data-go-back @endif
     aria-label="{{ $label }}"
     title="{{ $label }}"
     {{ $attributes->merge(['class' => 'wm-go-back']) }}

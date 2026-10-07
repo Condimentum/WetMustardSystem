@@ -44,7 +44,12 @@
             @unless (request()->routeIs('dashboard'))
                 {{-- Scrolls with the page; pulled down past main's/page's own padding so it straddles the card's top border --}}
                 <div style="display:flex;justify-content:center;padding-top:0;position:relative;z-index:30;margin-bottom:-96px;">
-                    <x-go-back-button :href="route('dashboard')" label="Main Menu" />
+                    {{-- Settings tool area always returns straight to the Main Menu, never to another Settings sub-page --}}
+                    <x-go-back-button
+                        :href="route('dashboard')"
+                        label="Main Menu"
+                        :use-stack="! request()->routeIs(['settings.*', 'reporting.admin', 'notifications.setup', 'audit.*'])"
+                    />
                 </div>
             @endunless
 
