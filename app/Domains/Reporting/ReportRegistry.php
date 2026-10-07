@@ -21,6 +21,7 @@ use App\Domains\Reporting\Reports\QaApprovalQueueReport;
 use App\Domains\Reporting\Reports\TraceabilityExceptionsReport;
 use App\Domains\Reporting\Reports\Wm005WetMustardLabTestingReport;
 use App\Domains\Reporting\Reports\Wm010RinseWaterTestReport;
+use App\Domains\Reporting\Support\DocumentSources;
 use App\Models\DocumentReference;
 
 /**
@@ -93,6 +94,10 @@ class ReportRegistry
         $document = DocumentReference::query()->where('code', $code)->first();
 
         if ($document === null || empty($document->trigger_material_codes)) {
+            return null;
+        }
+
+        if (app(DocumentSources::class)->linkFor($document)['type'] !== DocumentSources::TYPE_MATERIAL_TRIGGER) {
             return null;
         }
 

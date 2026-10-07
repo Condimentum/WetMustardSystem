@@ -3,7 +3,7 @@
 namespace App\Domains\Reporting\Reports;
 
 use App\Domains\Reporting\Support\DocumentSetup;
-use App\Models\DocumentReference;
+use App\Domains\Reporting\Support\DocumentSources;
 use App\Models\DocumentReferenceChange;
 use App\Models\Wm010RinseWaterTestEntry;
 use Carbon\CarbonInterface;
@@ -62,7 +62,7 @@ class Wm010RinseWaterTestReport extends AbstractReport
     {
         $rows = $this->queryRows($from, $to)->all();
 
-        $document = DocumentReference::query()->where('code', 'WM010')->first();
+        $document = app(DocumentSources::class)->documentForProgram('wm010_rinse_water');
         $setup = app(DocumentSetup::class)->resolveForDocument($document, 'WM010');
         $changes = collect();
         if ($document !== null && Schema::hasTable('document_reference_changes')) {

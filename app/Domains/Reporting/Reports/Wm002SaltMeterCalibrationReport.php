@@ -29,35 +29,18 @@ class Wm002SaltMeterCalibrationReport extends CalibrationSheetReport
         return 'WM002 Daily Salt Meter Calibration';
     }
 
-    protected function sheetHeaders(): array
+    protected function sourceKey(): string
     {
-        return ['Date', 'Reading (mg/l)', 'Pass/Fail', 'Operator Name', 'Deviation / Action'];
+        return 'wm002_salt_meter';
     }
 
-    protected function sheetInstructions(): array
-    {
-        return [
-            'Target reading is 100 +/- 2 mg/l.',
-            'If out of tolerance, check pipette, tip, and re-inject chloride solution before adjusting meter.',
-            'Inform QA if target cannot be achieved and record action taken.',
-        ];
-    }
-
-    protected function sheetRows(CarbonInterface $from, CarbonInterface $to): array
+    protected function sheetRecords(CarbonInterface $from, CarbonInterface $to): iterable
     {
         return SaltMeterCalibration::query()
             ->whereDate('checked_date', '>=', $from->toDateString())
             ->whereDate('checked_date', '<=', $to->toDateString())
             ->orderBy('checked_date')
             ->orderBy('id')
-            ->get()
-            ->map(fn (SaltMeterCalibration $row): array => [
-                $row->checked_date?->toDateString() ?? '—',
-                number_format((float) $row->reading, 3, '.', ''),
-                $row->passed ? 'Pass' : 'Fail',
-                (string) $row->operator_name,
-                (string) ($row->deviation_reason ?? '—'),
-            ])
-            ->all();
+            ->get();
     }
 }

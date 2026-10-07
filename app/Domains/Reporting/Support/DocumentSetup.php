@@ -8,10 +8,18 @@ use Illuminate\Support\Facades\Schema;
 
 class DocumentSetup
 {
-    /** @return array<string, mixed> */
-    public function defaultsForCode(?string $documentCode): array
+    public function __construct(private readonly DocumentSources $sources)
+    {
+    }
+
+    /**
+     * @param  string|null  $sourceKey  DocumentSources key; inferred from the code prefix when omitted.
+     * @return array<string, mixed>
+     */
+    public function defaultsForCode(?string $documentCode, ?string $sourceKey = null): array
     {
         $code = strtoupper(trim((string) $documentCode));
+        $sourceKey ??= $this->sources->programKeyForCode($code);
 
         return [
             'orientation' => $this->defaultOrientation($code),
@@ -26,32 +34,36 @@ class DocumentSetup
             'line_height' => 1.25,
             'show_logo' => true,
             'show_ccp_block' => true,
-            'ccp_message' => $this->defaultCcpMessageForCode($code),
+            'ccp_message' => $this->defaultCcpMessageForCode($code) ?: implode("\n", $this->sources->defaultInstructions($sourceKey)),
             'show_qa_signoff' => true,
             'show_issue_history' => true,
-            'columns' => $this->defaultColumnsForCode($code),
+            'columns' => $this->sources->defaultColumns($sourceKey),
         ];
     }
 
-    /** @return array<string, mixed> */
-    public function resolveForDocument(?DocumentReference $document, ?string $fallbackCode = null): array
+    /**
+     * @param  string|null  $sourceKey  DocumentSources key; resolved from the document's link when omitted.
+     * @return array<string, mixed>
+     */
+    public function resolveForDocument(?DocumentReference $document, ?string $fallbackCode = null, ?string $sourceKey = null): array
     {
         $documentCode = $document?->code ?? $fallbackCode;
-        $defaults = $this->defaultsForCode($documentCode);
+        $sourceKey ??= $this->sources->sourceKeyFor($document, $fallbackCode);
+        $defaults = $this->defaultsForCode($documentCode, $sourceKey);
 
         $stored = [];
         if ($document !== null) {
             $stored = $this->extractStoredSettings($document);
         }
 
-        return $this->normalize($documentCode, array_merge($defaults, $stored));
+        return $this->normalize($documentCode, array_merge($defaults, $stored), $sourceKey);
     }
 
     /** @param array<string, mixed> $settings */
     /** @return array<string, mixed> */
-    public function normalize(?string $documentCode, array $settings): array
+    public function normalize(?string $documentCode, array $settings, ?string $sourceKey = null): array
     {
-        $defaults = $this->defaultsForCode($documentCode);
+        $defaults = $this->defaultsForCode($documentCode, $sourceKey);
 
         return [
             'orientation' => in_array(($settings['orientation'] ?? null), ['portrait', 'landscape'], true)
@@ -68,7 +80,8 @@ class DocumentSetup
             'line_height' => $this->number($settings['line_height'] ?? null, 1, 2, (float) $defaults['line_height']),
             'show_logo' => (bool) ($settings['show_logo'] ?? $defaults['show_logo']),
             'show_ccp_block' => (bool) ($settings['show_ccp_block'] ?? $defaults['show_ccp_block']),
-            'ccp_message' => trim((string) ($settings['ccp_message'] ?? $defaults['ccp_message'] ?? '')),
+            // Blank falls back to the default text; untick show_ccp_block to hide the block instead.
+            'ccp_message' => trim((string) ($settings['ccp_message'] ?? '')) ?: trim((string) ($defaults['ccp_message'] ?? '')),
             'show_qa_signoff' => (bool) ($settings['show_qa_signoff'] ?? $defaults['show_qa_signoff']),
             'show_issue_history' => (bool) ($settings['show_issue_history'] ?? $defaults['show_issue_history']),
             'columns' => $this->normalizeColumns(
@@ -150,72 +163,6 @@ class DocumentSetup
         }
 
         return '';
-    }
-
-    /** @return array<int, array<string, mixed>> */
-    private function defaultColumnsForCode(string $code): array
-    {
-        if (str_starts_with($code, 'WM004')) {
-            return [
-                ['key' => 'mo_number', 'label' => 'MO Number', 'visible' => true, 'width' => 8],
-                ['key' => 'ticket_number', 'label' => 'Ticket Number', 'visible' => true, 'width' => 9],
-                ['key' => 'serial_number', 'label' => 'Serial Number', 'visible' => true, 'width' => 10],
-                ['key' => 'top_seal_number', 'label' => 'Top Seal Number', 'visible' => true, 'width' => 8],
-                ['key' => 'bottom_seal_number', 'label' => 'Bottom Seal Number', 'visible' => true, 'width' => 8],
-                ['key' => 'liner_number', 'label' => 'Liner Number', 'visible' => true, 'width' => 7],
-                ['key' => 'liner_batch_code', 'label' => 'Liner Batch Code', 'visible' => true, 'width' => 8],
-                ['key' => 'fill_weight', 'label' => 'Fill Weight', 'visible' => true, 'width' => 7],
-                ['key' => 'start_time', 'label' => 'Start Time', 'visible' => true, 'width' => 8],
-                ['key' => 'finish_time', 'label' => 'Finish Time', 'visible' => true, 'width' => 8],
-                ['key' => 'checked_by', 'label' => 'Checked By', 'visible' => true, 'width' => 9],
-                ['key' => 'checked_at', 'label' => 'Checked At', 'visible' => true, 'width' => 8],
-            ];
-        }
-
-        if (str_starts_with($code, 'WM003')) {
-            return [
-                ['key' => 'date_used', 'label' => 'Date Used', 'visible' => true, 'width' => 16],
-                ['key' => 'supplier_production_date', 'label' => 'Supplier Production Date', 'visible' => true, 'width' => 18],
-                ['key' => 'best_before_date', 'label' => 'Best Before Date', 'visible' => true, 'width' => 16],
-                ['key' => 'batch_no', 'label' => 'Batch No.', 'visible' => true, 'width' => 16],
-                ['key' => 'time_on', 'label' => 'Time On', 'visible' => true, 'width' => 12],
-                ['key' => 'operator_name', 'label' => 'Operator Name', 'visible' => true, 'width' => 22],
-            ];
-        }
-
-        if (str_starts_with($code, 'WM005')) {
-            return [
-                ['key' => 'tested_date', 'label' => 'Date', 'visible' => true, 'width' => 6],
-                ['key' => 'tested_time', 'label' => 'Time', 'visible' => true, 'width' => 4],
-                ['key' => 'mo_number', 'label' => 'MO Number', 'visible' => true, 'width' => 8],
-                ['key' => 'batch_number', 'label' => 'Batch Number', 'visible' => true, 'width' => 8],
-                ['key' => 'ph', 'label' => 'pH', 'visible' => true, 'width' => 10],
-                ['key' => 'acidity_acetic', 'label' => 'Acidity (as acetic)', 'visible' => true, 'width' => 10],
-                ['key' => 'acidity_citric', 'label' => 'Acidity (as citric)', 'visible' => true, 'width' => 5],
-                ['key' => 'salt', 'label' => 'Salt', 'visible' => true, 'width' => 12],
-                ['key' => 'viscosity_brookfield', 'label' => 'Viscosity (Brookfield)', 'visible' => true, 'width' => 11],
-                ['key' => 'viscosity_bostwick', 'label' => 'Viscosity (Bostwick)', 'visible' => true, 'width' => 5],
-                ['key' => 'aw', 'label' => 'aW', 'visible' => true, 'width' => 5],
-                ['key' => 'solids', 'label' => 'Solids', 'visible' => true, 'width' => 10],
-                ['key' => 'appearance', 'label' => 'Appearance', 'visible' => true, 'width' => 10],
-                ['key' => 'tested_by', 'label' => 'Test by (Print name)', 'visible' => true, 'width' => 11],
-            ];
-        }
-
-        if (str_starts_with($code, 'WM010')) {
-            return [
-                ['key' => 'section', 'label' => 'Section', 'visible' => true, 'width' => 18],
-                ['key' => 'equipment', 'label' => 'Equipment', 'visible' => true, 'width' => 18],
-                ['key' => 'reading', 'label' => 'Reading', 'visible' => true, 'width' => 12],
-                ['key' => 'target', 'label' => 'Target', 'visible' => true, 'width' => 10],
-                ['key' => 'result', 'label' => 'Result', 'visible' => true, 'width' => 10],
-                ['key' => 'pass_or_fail', 'label' => 'Pass / Fail', 'visible' => true, 'width' => 10],
-                ['key' => 'action_taken_if_failed', 'label' => 'Action if Failed', 'visible' => true, 'width' => 12],
-                ['key' => 'operator_name', 'label' => 'Operator Name', 'visible' => true, 'width' => 10],
-            ];
-        }
-
-        return [];
     }
 
     /** @return array<string, mixed> */

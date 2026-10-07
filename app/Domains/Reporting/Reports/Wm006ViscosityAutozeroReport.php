@@ -29,33 +29,18 @@ class Wm006ViscosityAutozeroReport extends CalibrationSheetReport
         return 'WM006 Viscosity Meter Autozero Check Complete';
     }
 
-    protected function sheetHeaders(): array
+    protected function sourceKey(): string
     {
-        return ['Date', 'Complete Y/N', 'Operator Name', 'Deviation / Action'];
+        return 'wm006_viscosity_autozero';
     }
 
-    protected function sheetInstructions(): array
-    {
-        return [
-            'Follow instructions on COP WMUS004 to autozero viscosity meter.',
-            'If check is not complete, inform QA and record reason/action.',
-        ];
-    }
-
-    protected function sheetRows(CarbonInterface $from, CarbonInterface $to): array
+    protected function sheetRecords(CarbonInterface $from, CarbonInterface $to): iterable
     {
         return ViscosityMeterAutozeroCheck::query()
             ->whereDate('checked_date', '>=', $from->toDateString())
             ->whereDate('checked_date', '<=', $to->toDateString())
             ->orderBy('checked_date')
             ->orderBy('id')
-            ->get()
-            ->map(fn (ViscosityMeterAutozeroCheck $row): array => [
-                $row->checked_date?->toDateString() ?? '—',
-                $row->complete ? 'Yes' : 'No',
-                (string) $row->operator_name,
-                (string) ($row->deviation_reason ?? '—'),
-            ])
-            ->all();
+            ->get();
     }
 }

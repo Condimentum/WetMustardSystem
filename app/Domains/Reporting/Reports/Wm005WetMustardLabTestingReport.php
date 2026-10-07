@@ -3,7 +3,7 @@
 namespace App\Domains\Reporting\Reports;
 
 use App\Domains\Reporting\Support\DocumentSetup;
-use App\Models\DocumentReference;
+use App\Domains\Reporting\Support\DocumentSources;
 use App\Models\DocumentReferenceChange;
 use App\Models\Wm005LabTestingEntry;
 use Carbon\CarbonInterface;
@@ -63,7 +63,7 @@ class Wm005WetMustardLabTestingReport extends AbstractReport
     {
         $rows = $this->queryRows($from, $to)->all();
 
-        $document = DocumentReference::query()->where('code', 'WM005')->first();
+        $document = app(DocumentSources::class)->documentForProgram('wm005_lab_testing');
         $setup = app(DocumentSetup::class)->resolveForDocument($document, 'WM005');
         $changes = collect();
         if ($document !== null && Schema::hasTable('document_reference_changes')) {

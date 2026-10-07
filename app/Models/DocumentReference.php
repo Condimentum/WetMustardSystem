@@ -19,6 +19,8 @@ class DocumentReference extends Model
         'version',
         'issue_date',
         'module',
+        'source_type',
+        'program_key',
         'trigger_material_codes',
         'status',
     ];
