@@ -37,7 +37,7 @@ class DocumentSourcesTest extends TestCase
         $triggerDocument = DocumentReference::create(['code' => 'WM012', 'title' => 'Buckets', 'trigger_material_codes' => ['90010012'], 'status' => 'Active']);
         $unlinkedDocument = DocumentReference::create(['code' => 'WM099', 'title' => 'Reference only', 'status' => 'Active']);
 
-        $this->assertSame(['type' => DocumentSources::TYPE_PROGRAM, 'program_key' => 'wm002_salt_meter'], $sources->linkFor($programDocument));
+        $this->assertSame(['type' => DocumentSources::TYPE_PROGRAM, 'program_key' => 'wm002_salt_meter', 'recipe_code' => null], $sources->linkFor($programDocument));
         $this->assertSame(DocumentSources::TYPE_MATERIAL_TRIGGER, $sources->linkFor($triggerDocument)['type']);
         $this->assertNull($sources->linkFor($unlinkedDocument)['type']);
     }

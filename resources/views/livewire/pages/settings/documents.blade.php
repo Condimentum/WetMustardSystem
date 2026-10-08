@@ -1,11 +1,13 @@
 <?php
 
 use App\Domains\Batch\Jobs\ExtractBatchCardMetadataJob;
+use App\Domains\Reporting\Support\BatchCardBuilder;
 use App\Domains\Reporting\Support\DocumentSetup;
 use App\Domains\Reporting\Support\DocumentSources;
 use App\Models\DocumentLayoutSetting;
 use App\Models\DocumentReference;
 use App\Models\DocumentReferenceChange;
+use App\Models\RecipeCard;
 use App\Models\ReportConfig;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -24,6 +26,8 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
         'Pallecons Processing',
         'Lab Testing',
         'Bucketing',
+        'Recipe Card',
+        'Metal Detection',
     ];
 
     public bool $documentModalOpen = false;
@@ -39,9 +43,18 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
     public string $reason_for_change = '';
     public string $trigger_material_codes = '';
 
-    /** "program", "material_trigger" or "none" - see DocumentSources. */
+    /** "program", "material_trigger", "recipe" or "none" - see DocumentSources. */
     public string $source_type = DocumentSources::TYPE_NONE;
     public string $program_key = '';
+    public string $recipe_code = '';
+
+    /** Linked recipe's ingredients/steps for the batch card preview (read by the preview via $wire). */
+    public array $recipe_preview = [];
+
+    /** Batch size (kg) the preview scales the recipe to, for recipes with several sizes. */
+    public string $preview_batch_size = '';
+
+    private ?string $previousSourceType = null;
 
     public string $moduleFilter = '';
 
@@ -69,6 +82,10 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
     public string $setup_ccp_message = '';
     public bool $setup_show_qa_signoff = true;
     public bool $setup_show_issue_history = true;
+    public bool $setup_show_steps = true;
+    public bool $setup_show_process_settings = true;
+    public string $setup_footnote = '';
+    public string $setup_batch_area_percent = '54';
 
     /** @var array<int, array<string, mixed>> */
     public array $setup_columns = [];
@@ -90,22 +107,43 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
         }
 
         $code = strtoupper(trim((string) $value));
-        $programKey = app(DocumentSources::class)->programKeyForCode($code);
-        if ($programKey !== null && $this->source_type !== DocumentSources::TYPE_MATERIAL_TRIGGER) {
-            $this->source_type = DocumentSources::TYPE_PROGRAM;
-            $this->program_key = $programKey;
+        $link = app(DocumentSources::class)->linkFor(null, $code);
+        if ($link['type'] !== null && $this->source_type !== DocumentSources::TYPE_MATERIAL_TRIGGER) {
+            $this->source_type = $link['type'];
+            $this->program_key = (string) ($link['program_key'] ?? '');
+            $this->recipe_code = (string) ($link['recipe_code'] ?? '');
         }
 
         $this->loadDocumentSetup(null, $code);
+        $this->refreshRecipePreview();
+    }
+
+    public function updatingSourceType(): void
+    {
+        $this->previousSourceType = $this->source_type;
     }
 
     public function updatedSourceType(): void
     {
+        $sources = app(DocumentSources::class);
+
         if ($this->source_type === DocumentSources::TYPE_PROGRAM && $this->program_key === '') {
-            $this->program_key = (string) (app(DocumentSources::class)->programKeyForCode($this->code) ?? '');
+            $this->program_key = (string) ($sources->programKeyForCode($this->code) ?? '');
         }
 
-        $this->fillColumnsFromSourceWhenEmpty();
+        if ($this->source_type === DocumentSources::TYPE_RECIPE && $this->recipe_code === '') {
+            $this->recipe_code = (string) ($sources->recipeCodeForDocumentCode($this->code) ?? '');
+        }
+
+        // A batch card is laid out differently from a list sheet, so switching to or from one starts from that layout's defaults.
+        $recipeSwitch = ($this->previousSourceType === DocumentSources::TYPE_RECIPE) !== ($this->source_type === DocumentSources::TYPE_RECIPE);
+        if ($recipeSwitch) {
+            $this->applySetup(app(DocumentSetup::class)->defaultsForCode($this->code, $this->currentSourceKey()));
+        } else {
+            $this->fillColumnsFromSourceWhenEmpty();
+        }
+
+        $this->refreshRecipePreview();
     }
 
     public function updatedProgramKey(): void
@@ -113,10 +151,34 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
         $this->fillColumnsFromSourceWhenEmpty();
     }
 
+    public function updatedRecipeCode(): void
+    {
+        $this->preview_batch_size = '';
+        $this->refreshRecipePreview();
+    }
+
+    public function updatedPreviewBatchSize(): void
+    {
+        $this->refreshRecipePreview();
+    }
+
     #[Computed]
     public function programOptions(): array
     {
         return app(DocumentSources::class)->programs();
+    }
+
+    #[Computed]
+    public function recipeOptions(): array
+    {
+        return app(DocumentSources::class)->recipeOptions();
+    }
+
+    private function refreshRecipePreview(): void
+    {
+        $this->recipe_preview = $this->source_type === DocumentSources::TYPE_RECIPE && $this->recipe_code !== ''
+            ? app(BatchCardBuilder::class)->recipePreview($this->recipe_code, is_numeric($this->preview_batch_size) ? (float) $this->preview_batch_size : null)
+            : [];
     }
 
     private function currentSourceKey(): ?string
@@ -137,6 +199,8 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
         $link = app(DocumentSources::class)->linkFor($document, $fallbackCode);
         $this->source_type = $link['type'] ?? DocumentSources::TYPE_NONE;
         $this->program_key = (string) ($link['program_key'] ?? '');
+        $this->recipe_code = (string) ($link['recipe_code'] ?? '');
+        $this->refreshRecipePreview();
     }
 
     #[Computed]
@@ -466,11 +530,13 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
             'module' => ['nullable', 'string', 'max:255'],
             'issued_by' => ['nullable', 'string', 'max:255'],
             'reason_for_change' => ['nullable', 'string', 'max:1000'],
-            'source_type' => ['required', 'in:'.DocumentSources::TYPE_PROGRAM.','.DocumentSources::TYPE_MATERIAL_TRIGGER.','.DocumentSources::TYPE_NONE],
+            'source_type' => ['required', 'in:'.implode(',', [DocumentSources::TYPE_PROGRAM, DocumentSources::TYPE_MATERIAL_TRIGGER, DocumentSources::TYPE_RECIPE, DocumentSources::TYPE_NONE])],
             'program_key' => ['nullable', 'required_if:source_type,'.DocumentSources::TYPE_PROGRAM, 'in:'.implode(',', array_keys($this->programOptions))],
+            'recipe_code' => ['nullable', 'required_if:source_type,'.DocumentSources::TYPE_RECIPE, 'in:'.implode(',', array_keys($this->recipeOptions))],
             'trigger_material_codes' => ['nullable', 'required_if:source_type,'.DocumentSources::TYPE_MATERIAL_TRIGGER, 'string', 'max:1000'],
         ], [
             'program_key.required_if' => 'Choose the program this document is filled from.',
+            'recipe_code.required_if' => 'Choose the recipe this batch card is for.',
             'trigger_material_codes.required_if' => 'Enter at least one trigger material code.',
         ]);
 
@@ -536,7 +602,17 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
             $attributes['program_key'] = $validated['source_type'] === DocumentSources::TYPE_PROGRAM ? $validated['program_key'] : null;
         }
 
+        $isRecipeCard = $validated['source_type'] === DocumentSources::TYPE_RECIPE;
+        if (app(DocumentSources::class)->hasRecipeColumn()) {
+            $attributes['recipe_code'] = $isRecipeCard ? $validated['recipe_code'] : null;
+        }
+
         $document = DocumentReference::query()->updateOrCreate(['id' => $this->editingDocumentId], $attributes);
+
+        if ($isRecipeCard) {
+            // Keep the recipe card's WM code in step with the document it's linked to.
+            RecipeCard::query()->where('recipe_code', $validated['recipe_code'])->update(['document_reference' => $normalizedCode]);
+        }
 
         if ($isUpdate && $existing !== null && $existing->code !== $normalizedCode) {
             ReportConfig::query()->where('report_key', 'doc_'.$existing->code)->delete();
@@ -555,7 +631,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                     'updated_by' => auth()->id(),
                 ],
             );
-        } elseif ($validated['source_type'] === DocumentSources::TYPE_PROGRAM && app(DocumentSources::class)->isTableBacked($validated['program_key'])) {
+        } elseif ($isRecipeCard || ($validated['source_type'] === DocumentSources::TYPE_PROGRAM && app(DocumentSources::class)->isTableBacked($validated['program_key']))) {
             // Created disabled (and never re-enabled here) so it can't duplicate an existing emailed report;
             // switch it on and pick recipients in Reporting Admin.
             $scheduledReport = ReportConfig::query()->firstOrCreate(
@@ -732,6 +808,10 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
         $this->setup_ccp_message = (string) ($setup['ccp_message'] ?? '');
         $this->setup_show_qa_signoff = (bool) ($setup['show_qa_signoff'] ?? true);
         $this->setup_show_issue_history = (bool) ($setup['show_issue_history'] ?? true);
+        $this->setup_show_steps = (bool) ($setup['show_steps'] ?? true);
+        $this->setup_show_process_settings = (bool) ($setup['show_process_settings'] ?? true);
+        $this->setup_footnote = (string) ($setup['footnote'] ?? '');
+        $this->setup_batch_area_percent = (string) ($setup['batch_area_percent'] ?? 54);
         $this->setup_columns = collect(is_array($setup['columns'] ?? null) ? $setup['columns'] : [])
             ->map(function ($column): array {
                 return [
@@ -764,6 +844,10 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
             'ccp_message' => $this->setup_ccp_message,
             'show_qa_signoff' => $this->setup_show_qa_signoff,
             'show_issue_history' => $this->setup_show_issue_history,
+            'show_steps' => $this->setup_show_steps,
+            'show_process_settings' => $this->setup_show_process_settings,
+            'footnote' => $this->setup_footnote,
+            'batch_area_percent' => $this->setup_batch_area_percent,
             'columns' => $this->setup_columns,
         ];
 
@@ -943,9 +1027,10 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                 <div class="md:col-span-2 space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3">
                                     <div>
                                         <div class="block text-xs text-gray-600 mb-1">Data source</div>
-                                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                                             @foreach ([
                                                 \App\Domains\Reporting\Support\DocumentSources::TYPE_PROGRAM => ['Program driven', 'Filled from a program in the app'],
+                                                \App\Domains\Reporting\Support\DocumentSources::TYPE_RECIPE => ['Recipe batch card', 'Manufacturing batch card, one sheet per MO'],
                                                 \App\Domains\Reporting\Support\DocumentSources::TYPE_MATERIAL_TRIGGER => ['Material triggered', 'Generated when a material is issued to a batch'],
                                                 \App\Domains\Reporting\Support\DocumentSources::TYPE_NONE => ['Not linked', 'Reference document only'],
                                             ] as $sourceValue => [$sourceLabel, $sourceHint])
@@ -974,6 +1059,18 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                             @if ($program_key !== '' && ! $this->linkedProgramHasConfigurablePdf)
                                                 <p class="mt-1 text-xs text-amber-700">This program's generated PDF doesn't read the column settings below yet - they're saved, but only the editor and preview use them for now.</p>
                                             @endif
+                                        </div>
+                                    @elseif ($source_type === \App\Domains\Reporting\Support\DocumentSources::TYPE_RECIPE)
+                                        <div>
+                                            <label class="block text-xs text-gray-600 mb-1">Recipe</label>
+                                            <select wire:model.live="recipe_code" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                                                <option value="">Select a recipe...</option>
+                                                @foreach ($this->recipeOptions as $optionCode => $optionLabel)
+                                                    <option value="{{ $optionCode }}">{{ $optionLabel }}</option>
+                                                @endforeach
+                                            </select>
+                                            @error('recipe_code') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
+                                            <p class="mt-1 text-xs text-gray-500">Ingredients, steps and PLC number come from the recipe; revision, issue date and reason come from this document. Sent as one email per manufacturing (wet bulk) MO run.</p>
                                         </div>
                                     @elseif ($source_type === \App\Domains\Reporting\Support\DocumentSources::TYPE_MATERIAL_TRIGGER)
                                         <div>
@@ -1058,12 +1155,34 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                 </div>
                             </div>
 
+                            @php
+                                $isBatchCard = $source_type === \App\Domains\Reporting\Support\DocumentSources::TYPE_RECIPE;
+                            @endphp
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_logo" class="rounded border-gray-300 text-sky-600"> Show logo</label>
-                                <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_ccp_block" class="rounded border-gray-300 text-sky-600"> Show CCP block</label>
-                                <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_qa_signoff" class="rounded border-gray-300 text-sky-600"> Show QA signoff</label>
-                                <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_issue_history" class="rounded border-gray-300 text-sky-600"> Show document metadata</label>
+                                @unless ($isBatchCard)
+                                    <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_logo" class="rounded border-gray-300 text-sky-600"> Show logo</label>
+                                @endunless
+                                <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_ccp_block" class="rounded border-gray-300 text-sky-600"> {{ $isBatchCard ? 'Show HACCP / CCP line' : 'Show CCP block' }}</label>
+                                <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_qa_signoff" class="rounded border-gray-300 text-sky-600"> {{ $isBatchCard ? 'Show sign & date rows (weighed / tipping)' : 'Show QA signoff' }}</label>
+                                <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_issue_history" class="rounded border-gray-300 text-sky-600"> {{ $isBatchCard ? 'Show revision / issue date / reason' : 'Show document metadata' }}</label>
+                                @if ($isBatchCard)
+                                    <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_steps" class="rounded border-gray-300 text-sky-600"> Show recipe steps</label>
+                                    <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_process_settings" class="rounded border-gray-300 text-sky-600"> Show process settings (mill gap, P1 / P2 speed)</label>
+                                @endif
                             </div>
+
+                            @if ($isBatchCard)
+                                <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_12rem] gap-3">
+                                    <div>
+                                        <label class="block text-xs text-gray-600 mb-1">Footnote</label>
+                                        <textarea wire:model.defer="setup_footnote" rows="2" class="w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="Printed in red under the sheet"></textarea>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs text-gray-600 mb-1">Batch columns width (% of page)</label>
+                                        <input type="number" min="20" max="80" step="1" wire:model.defer="setup_batch_area_percent" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+                                    </div>
+                                </div>
+                            @endif
 
                             <div>
                                 <label class="block text-xs text-gray-600 mb-1">CCP / instruction message (one line per row)</label>
@@ -1180,6 +1299,22 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                             <div class="text-xs text-gray-500">Drag a column header to move it. Drag the edge between two headers to resize them.</div>
                                         </div>
 
+                                        <div x-show="isBatchCard && ! recipe.recipe_code" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">Choose the recipe under Data source to preview its ingredients and steps - sample values shown for now.</div>
+                                        <div x-show="isBatchCard && recipe.recipe_code && ! recipe.batch_size_kg" class="text-xs text-gray-600 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">The recipe card has no batch size, so quantities are shown per kg. The printed card uses each MO's batch size.</div>
+                                        <div x-show="isBatchCard && (recipe.batch_sizes || []).length > 1" class="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                                            <span>Preview batch size:</span>
+                                            <template x-for="size in (recipe.batch_sizes || [])" :key="size">
+                                                <button
+                                                    type="button"
+                                                    class="rounded-full border px-2.5 py-0.5"
+                                                    :class="Number(recipe.batch_size_kg) === Number(size) ? 'border-sky-500 bg-sky-50 text-sky-800' : 'border-gray-300 hover:bg-gray-50'"
+                                                    x-on:click="$wire.set('preview_batch_size', String(size))"
+                                                    x-text="`${size} kg`"
+                                                ></button>
+                                            </template>
+                                            <span class="text-gray-400">Each batch size prints on its own sheet.</span>
+                                        </div>
+
                                         <div x-show="hiddenCols.length > 0" class="flex flex-wrap items-center gap-1 text-xs">
                                             <span class="text-gray-500">Hidden:</span>
                                             <template x-for="hidden in hiddenCols" :key="hidden.index">
@@ -1193,6 +1328,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                     class="bg-white shadow relative"
                                                     :style="`width: ${page.w}px; height: ${page.h}px; transform: scale(${scale}); transform-origin: top left; box-sizing: border-box; padding: ${num('setup_margin_top', 20)}px ${num('setup_margin_right', 20)}px ${num('setup_margin_bottom', 20)}px ${num('setup_margin_left', 20)}px; font-family: 'DejaVu Sans', Arial, sans-serif; color: #111827; font-size: ${num('setup_base_font_size', 11)}px; line-height: ${num('setup_line_height', 1.25)};`"
                                                 >
+                                                    <div x-show="! isBatchCard">
                                                     <div class="flex items-center" style="padding: 4px 3px; margin-bottom: 12px;">
                                                         <div style="width: 180px; flex-shrink: 0;">
                                                             <img x-show="$wire.setup_show_logo" src="{{ asset('assets/condimentum-logo.png') }}" alt="Logo" style="width: 170px; height: auto;" />
@@ -1286,6 +1422,142 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                                 </tr>
                                                             </tbody>
                                                         </table>
+                                                    </div>
+                                                    </div>
+
+                                                    {{-- Recipe batch card: mirrors reports/recipe-batch-card.blade.php --}}
+                                                    <div x-show="isBatchCard" style="font-family: Arial, Helvetica, sans-serif; color: #111;">
+                                                        <div style="border-top: 1px solid #222; margin-bottom: 1px;"></div>
+                                                        <div style="text-align: center; font-size: 11px; font-weight: 700; color: #d70000; padding: 1px 0;">WET MUSTARD BATCHCARD</div>
+                                                        <div style="background: #ffcd00; border: 1px solid #222; text-align: center; font-size: 11px; font-weight: 700; padding: 2px 0;" x-text="batchCardTitle"></div>
+                                                        <div x-show="$wire.setup_show_ccp_block">
+                                                            <template x-for="(line, li) in ccpLines" :key="li">
+                                                                <div style="color: #d70000; font-size: 10px; font-weight: 700; text-align: center; margin-top: 1px;" x-text="line"></div>
+                                                            </template>
+                                                        </div>
+                                                        <div style="text-align: center; font-size: 12px; font-weight: 700; text-decoration: underline; margin: 3px 0 4px;">BATCH CARD &amp; PROCESS SHEET</div>
+
+                                                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 3px; font-size: 9px;">
+                                                            <tr>
+                                                                <td style="width: 28%; vertical-align: top;">
+                                                                    <table x-show="$wire.setup_show_issue_history" style="border-collapse: collapse;">
+                                                                        <tr><td style="font-weight: 700; width: 90px; padding: 2px 3px;">REVISION No.</td><td style="padding: 2px 3px;" x-text="String($wire.version || '').trim() || '—'"></td></tr>
+                                                                        <tr><td style="font-weight: 700; padding: 2px 3px;">ISSUE DATE:</td><td style="padding: 2px 3px;" x-text="issueDateSlashed"></td></tr>
+                                                                        <tr><td style="font-weight: 700; padding: 2px 3px; white-space: nowrap;">REASON FOR ISSUE:</td><td style="padding: 2px 3px;" x-text="String($wire.reason_for_change || '').trim() || '—'"></td></tr>
+                                                                    </table>
+                                                                </td>
+                                                                <td style="width: 40%; vertical-align: top;">
+                                                                    <table style="border-collapse: collapse;">
+                                                                        <tr><td style="font-weight: 700; width: 90px; padding: 2px 3px;">Recipe Code:</td><td style="padding: 2px 3px;" x-text="recipe.recipe_code || '—'"></td></tr>
+                                                                        <tr><td style="font-weight: 700; padding: 2px 3px; white-space: nowrap;">PLC Recipe Number:</td><td style="padding: 2px 3px;" x-text="recipe.plc_recipe_number || '—'"></td></tr>
+                                                                        <tr><td style="font-weight: 700; padding: 2px 3px;">Product:</td><td style="padding: 2px 3px;" x-text="recipe.description || '—'"></td></tr>
+                                                                    </table>
+                                                                </td>
+                                                                <td style="width: 32%; vertical-align: top;">
+                                                                    <table style="border-collapse: collapse;">
+                                                                        <tr><td style="font-weight: 700; width: 90px; padding: 2px 3px;">MO</td><td style="padding: 2px 3px;">MO00006170</td></tr>
+                                                                        <tr x-show="recipe.batch_size_kg"><td style="font-weight: 700; padding: 2px 3px;">Batch size:</td><td style="padding: 2px 3px;" x-text="`${Number(recipe.batch_size_kg)} kg`"></td></tr>
+                                                                    </table>
+                                                                </td>
+                                                            </tr>
+                                                        </table>
+
+                                                        <table x-ref="batchCardTable" :style="`width: 100%; border-collapse: collapse; table-layout: fixed; font-size: ${num('setup_base_font_size', 8)}px;`">
+                                                            <colgroup>
+                                                                <template x-for="item in visibleCols" :key="item.index">
+                                                                    <col :style="`width: ${ingredientWidth(item.col)}%;`" />
+                                                                </template>
+                                                                <template x-for="n in 8" :key="n">
+                                                                    <col :style="`width: ${batchArea / 8}%;`" />
+                                                                </template>
+                                                            </colgroup>
+                                                            <thead>
+                                                                <tr>
+                                                                    <template x-for="(item, vi) in visibleCols" :key="item.index">
+                                                                        <th
+                                                                            class="relative select-none"
+                                                                            :class="{
+                                                                                'cursor-grab': ! resizing,
+                                                                                'opacity-40': headFrom === vi,
+                                                                                'outline outline-2 outline-sky-500': headFrom !== null && headOver === vi && headFrom !== vi,
+                                                                            }"
+                                                                            :draggable="! resizing"
+                                                                            x-on:dragstart="headDragStart($event, vi)"
+                                                                            x-on:dragover.prevent="headOver = vi"
+                                                                            x-on:drop.prevent="headDrop(vi)"
+                                                                            x-on:dragend="headFrom = null; headOver = null"
+                                                                            :title="`${labelFor(item.col)} - ${fmt(Number(item.col.width) || 0)}%`"
+                                                                            :style="`border: 1px solid #222; padding: 2px 3px; background: ${headOver === vi && headFrom !== null ? '#e0f2fe' : '#f3f3f3'}; font-size: ${num('setup_table_header_font_size', 8)}px; text-transform: uppercase; text-align: ${isNumericKey(item.col.key) ? 'right' : 'left'}; overflow-wrap: anywhere;`"
+                                                                        >
+                                                                            <span x-text="labelFor(item.col)"></span>
+                                                                            <span
+                                                                                x-show="vi < visibleCols.length - 1"
+                                                                                class="absolute top-0 bottom-0 z-10 cursor-col-resize hover:bg-sky-400/60"
+                                                                                :class="resizing && resizing.vi === vi ? 'bg-sky-500/70' : ''"
+                                                                                style="right: -5px; width: 10px;"
+                                                                                draggable="false"
+                                                                                x-on:pointerdown.stop.prevent="startResize($event, vi, 'batchCardTable', (100 - batchArea) / 100)"
+                                                                            ></span>
+                                                                        </th>
+                                                                    </template>
+                                                                    <th colspan="8" :style="`border: 1px solid #222; padding: 2px 3px; background: #f3f3f3; text-align: center; font-size: ${num('setup_table_header_font_size', 8)}px;`">Batch Number</th>
+                                                                </tr>
+                                                                <tr>
+                                                                    <th :colspan="Math.max(1, visibleCols.length)" style="border: 1px solid #222; background: #f3f3f3;"></th>
+                                                                    <template x-for="n in 8" :key="n">
+                                                                        <th style="border: 1px solid #222; background: #f3f3f3; text-align: center; padding: 2px 0;" x-text="n"></th>
+                                                                    </template>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <template x-for="(component, ci) in recipeComponents" :key="ci">
+                                                                    <tr>
+                                                                        <template x-for="item in visibleCols" :key="item.index">
+                                                                            <td :style="`border: 1px solid #222; padding: 2px 3px; overflow-wrap: anywhere; text-align: ${isNumericKey(item.col.key) ? 'right' : 'left'};`" x-text="component[item.col.key] ?? ''"></td>
+                                                                        </template>
+                                                                        <template x-for="n in 8" :key="n">
+                                                                            <td style="border: 1px solid #222; text-align: center; font-size: 6px; font-weight: 700; white-space: pre-line;" x-text="n === 1 ? sampleMark : ''"></td>
+                                                                        </template>
+                                                                    </tr>
+                                                                </template>
+                                                                <tr>
+                                                                    <template x-for="(item, vi) in visibleCols" :key="item.index">
+                                                                        <td style="border: 1px solid #222; padding: 2px 3px; text-align: right; font-weight: 700;" x-text="totalCell(item.col.key, vi)"></td>
+                                                                    </template>
+                                                                    <template x-for="n in 8" :key="n"><td style="border: 1px solid #222;"></td></template>
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
+
+                                                        <table x-show="$wire.setup_show_steps" :style="`width: 100%; border-collapse: collapse; margin-top: 2px; font-size: ${num('setup_base_font_size', 8)}px;`">
+                                                            <template x-for="(step, si) in recipeSteps" :key="si">
+                                                                <tr>
+                                                                    <td style="border: 1px solid #222; padding: 1px 3px; width: 40px; font-weight: 700; background: #ededed; white-space: nowrap;" x-text="`STEP ${si + 1}`"></td>
+                                                                    <td style="border: 1px solid #222; padding: 1px 3px;" x-text="step"></td>
+                                                                </tr>
+                                                            </template>
+                                                        </table>
+
+                                                        <table :style="`width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 12px; font-size: ${num('setup_base_font_size', 8)}px;`">
+                                                            <colgroup>
+                                                                <col :style="`width: ${(100 - batchArea) * 0.2}%;`" />
+                                                                <col :style="`width: ${(100 - batchArea) * 0.55}%;`" />
+                                                                <col :style="`width: ${(100 - batchArea) * 0.25}%;`" />
+                                                                <template x-for="n in 8" :key="n"><col :style="`width: ${batchArea / 8}%;`" /></template>
+                                                            </colgroup>
+                                                            <template x-for="(row, ri) in signGridRows" :key="ri">
+                                                                <tr>
+                                                                    <td style="border: 1px solid #222; height: 20px; padding: 2px 3px; font-weight: 700; background: #e5e5e5;" x-text="row[0]"></td>
+                                                                    <td style="border: 1px solid #222; padding: 2px 3px;" x-text="row[1]"></td>
+                                                                    <td style="border: 1px solid #222; padding: 2px 3px; font-weight: 700; background: #e5e5e5; text-align: center; white-space: pre-line;" x-text="row[2]"></td>
+                                                                    <template x-for="n in 8" :key="n">
+                                                                        <td style="border: 1px solid #222; text-align: center; font-size: 6px; font-weight: 700; white-space: pre-line;" x-text="n === 1 ? row[3] : ''"></td>
+                                                                    </template>
+                                                                </tr>
+                                                            </template>
+                                                        </table>
+
+                                                        <div x-show="String($wire.setup_footnote || '').trim() !== ''" style="color: #d70000; font-size: 9px; font-weight: 700; text-align: center; margin-top: 4px;" x-text="$wire.setup_footnote"></div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1409,6 +1681,89 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                     .map((part) => String(part || '').trim())
                     .filter(Boolean)
                     .join(' - ') || 'Document title';
+            },
+
+            get isBatchCard() {
+                return this.$wire.source_type === 'recipe';
+            },
+
+            // Share of the page width taken by the 8 batch columns; ingredient columns split the rest.
+            get batchArea() {
+                return Math.min(80, Math.max(20, this.num('setup_batch_area_percent', 54)));
+            },
+
+            get recipe() {
+                return this.$wire.recipe_preview || {};
+            },
+
+            get recipeComponents() {
+                const components = this.recipe.components || [];
+                if (components.length > 0) {
+                    return components;
+                }
+
+                const sample = {};
+                this.visibleCols.forEach((item) => { sample[item.col.key] = this.sampleFor(item.col); });
+
+                return [sample, sample, sample];
+            },
+
+            get recipeSteps() {
+                const steps = this.recipe.steps || [];
+
+                return steps.length > 0 ? steps : ['Steps from the recipe settings appear here.'];
+            },
+
+            get batchCardTitle() {
+                const recipeLine = [this.recipe.recipe_code, this.recipe.description].filter(Boolean).join(' ');
+
+                return [String(this.$wire.code || '').trim(), recipeLine].filter(Boolean).join(' - ').toUpperCase() || 'WMXXX - RECIPE';
+            },
+
+            get issueDateSlashed() {
+                const match = String(this.$wire.issue_date || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+                return match ? `${match[3]}/${match[2]}/${match[1]}` : '—';
+            },
+
+            get sampleMark() {
+                return 'WEIGHTED\nTIPPED';
+            },
+
+            get signGridRows() {
+                const process = this.$wire.setup_show_process_settings
+                    ? [['MILL GAP SIZE USED', '—'], ['P1 SPEED USED', '—'], ['P2 SPEED USED', '—'], ['', '']]
+                    : [['', ''], ['', ''], ['', ''], ['', '']];
+                const sign = [['BATCH NUMBER', 'MO00006170\n265985']];
+                if (this.$wire.setup_show_qa_signoff) {
+                    sign.push(['SIGN & DATE\n(POWDERS WEIGHED):', 'AL\n12/08/2026'], ['SIGN & DATE\n(LIQUIDS WEIGHED):', 'AL\n12/08/2026'], ['SIGN & DATE\n(TIPPING BATCH):', 'AL\n12/08/2026']);
+                }
+                const count = Math.max(sign.length, this.$wire.setup_show_process_settings ? 3 : 1);
+
+                return Array.from({ length: count }, (_, i) => [
+                    process[i] ? process[i][0] : '',
+                    process[i] ? process[i][1] : '',
+                    sign[i] ? sign[i][0] : '',
+                    sign[i] ? sign[i][1] : '',
+                ]);
+            },
+
+            ingredientWidth(col) {
+                return ((Number(col.width) || 0) / (this.visibleTotal || 1)) * (100 - this.batchArea);
+            },
+
+            isNumericKey(key) {
+                return key === 'percent' || key === 'quantity';
+            },
+
+            // Mirrors the PDF: "Total" in the last text column before the first numeric one, then the totals.
+            totalCell(key, vi) {
+                const firstNumeric = this.visibleCols.findIndex((item) => this.isNumericKey(item.col.key));
+                if (firstNumeric > 0 && vi === firstNumeric - 1) {
+                    return 'Total';
+                }
+
+                return { percent: this.recipe.percent_total || '100.00', quantity: this.recipe.quantity_total || '', uom: 'KG' }[key] || '';
             },
 
             get issueDateDisplay() {
@@ -1577,7 +1932,8 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
             },
 
             // Trades width between a column and its right-hand neighbour so the total stays fixed.
-            startResize(event, vi) {
+            // areaFraction: share of the table the resizable columns span (the batch card's batch columns take the rest).
+            startResize(event, vi, tableRef = 'previewTable', areaFraction = 1) {
                 const visible = this.visibleCols;
                 const left = visible[vi];
                 const right = visible[vi + 1];
@@ -1585,7 +1941,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                     return;
                 }
 
-                const tableWidth = this.$refs.previewTable.getBoundingClientRect().width;
+                const tableWidth = this.$refs[tableRef].getBoundingClientRect().width * areaFraction;
                 const unitsPerPixel = (this.visibleTotal || 100) / tableWidth;
                 const startX = event.clientX;
                 const startLeft = Number(left.col.width) || 1;

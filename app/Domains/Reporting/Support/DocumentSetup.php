@@ -21,7 +21,7 @@ class DocumentSetup
         $code = strtoupper(trim((string) $documentCode));
         $sourceKey ??= $this->sources->programKeyForCode($code);
 
-        return [
+        $defaults = [
             'orientation' => $this->defaultOrientation($code),
             'paper_size' => 'A4',
             'margin_top' => 20,
@@ -38,7 +38,29 @@ class DocumentSetup
             'show_qa_signoff' => true,
             'show_issue_history' => true,
             'columns' => $this->sources->defaultColumns($sourceKey),
+            // Batch card only: steps, process settings rows, footnote and the width taken by the batch columns.
+            'show_steps' => true,
+            'show_process_settings' => true,
+            'footnote' => '',
+            'batch_area_percent' => 54,
         ];
+
+        if ($sourceKey === DocumentSources::RECIPE_BATCH_CARD) {
+            $defaults = array_merge($defaults, [
+                'orientation' => 'landscape',
+                'margin_top' => 30,
+                'margin_right' => 30,
+                'margin_bottom' => 30,
+                'margin_left' => 30,
+                'base_font_size' => 8,
+                'table_header_font_size' => 8,
+                'show_logo' => false,
+                'ccp_message' => "These records have been identified under HACCP as CCP's and must be completed correctly",
+                'footnote' => '*In the event of any change to the lot number of an ingredient, a new sheet must be initiated to ensure accurate tracking and documentation.*',
+            ]);
+        }
+
+        return $defaults;
     }
 
     /**
@@ -84,6 +106,10 @@ class DocumentSetup
             'ccp_message' => trim((string) ($settings['ccp_message'] ?? '')) ?: trim((string) ($defaults['ccp_message'] ?? '')),
             'show_qa_signoff' => (bool) ($settings['show_qa_signoff'] ?? $defaults['show_qa_signoff']),
             'show_issue_history' => (bool) ($settings['show_issue_history'] ?? $defaults['show_issue_history']),
+            'show_steps' => (bool) ($settings['show_steps'] ?? $defaults['show_steps']),
+            'show_process_settings' => (bool) ($settings['show_process_settings'] ?? $defaults['show_process_settings']),
+            'footnote' => trim((string) ($settings['footnote'] ?? $defaults['footnote'])),
+            'batch_area_percent' => $this->number($settings['batch_area_percent'] ?? null, 20, 80, (float) $defaults['batch_area_percent']),
             'columns' => $this->normalizeColumns(
                 is_array($settings['columns'] ?? null) ? $settings['columns'] : [],
                 is_array($defaults['columns']) ? $defaults['columns'] : []

@@ -7,6 +7,8 @@ use App\Models\LabScaleCalibration;
 use App\Models\ManufacturingOrder;
 use App\Models\MetalDetectorCheck;
 use App\Models\ProductionScaleCalibration;
+use App\Models\ProductMapping;
+use App\Models\RecipeCard;
 use App\Models\SaltMeterCalibration;
 use App\Models\ViscosityMeterAutozeroCheck;
 use App\Models\WinManIssueLog;
@@ -48,13 +50,21 @@ class DocumentSources
 
     public const TYPE_MATERIAL_TRIGGER = 'material_trigger';
 
+    /** A recipe's manufacturing batch card (one document per recipe, one sheet per MO). */
+    public const TYPE_RECIPE = 'recipe';
+
     /** Explicitly not linked (stored so the code-prefix fallback no longer applies). */
     public const TYPE_NONE = 'none';
 
     /** Source key used for material-triggered documents (programs use their own keys). */
     public const MATERIAL_TRIGGER = 'material_trigger';
 
+    /** Source key for recipe batch cards; its fields are the ingredient table columns. */
+    public const RECIPE_BATCH_CARD = 'recipe_batch_card';
+
     private static ?bool $hasSourceColumns = null;
+
+    private static ?bool $hasRecipeColumn = null;
 
     /**
      * Programs a document can be linked to, keyed by program key.
@@ -243,6 +253,16 @@ class DocumentSources
                 $this->field('operator_name', 'Operator Name', 15, 'Adrian Lacki', fn (ProductionScaleCalibration $row): string => (string) $row->operator_name),
                 $this->field('deviation_reason', 'Deviation / Action', 25, '—', fn (ProductionScaleCalibration $row): string => (string) ($row->deviation_reason ?? '—')),
             ],
+            // Ingredient table columns; widths are shares of the ingredient area (the batch columns sit beside it).
+            self::RECIPE_BATCH_CARD => [
+                $this->componentField('allergen_material', 'Allergen Material', 12, 'Mustard'),
+                $this->componentField('material_code', 'Material Code', 12, '10010016'),
+                $this->componentField('description', 'Description', 30, 'Spirit Vinegar 14%'),
+                $this->componentField('percent', '%', 9, '16.00'),
+                $this->componentField('quantity', 'Quantity', 12, '125.600'),
+                $this->componentField('uom', 'UOM', 7, 'KG'),
+                $this->componentField('lot_number', 'Lot Number', 18, '8000263-0010'),
+            ],
             self::MATERIAL_TRIGGER => [
                 $this->field('issue_date', 'Date/Time', 13, '2026-08-12 06:30', fn (WinManIssueLog $log): string => $log->issue_date?->format('Y-m-d H:i') ?? '—'),
                 $this->field('batch_number', 'Batch', 12, 'WM-24113', fn (WinManIssueLog $log): string => (string) ($log->batchRecord?->batch_number ?? '—')),
@@ -289,7 +309,7 @@ class DocumentSources
     public function sampleValues(): array
     {
         $samples = [];
-        foreach ([...array_keys($this->programs()), self::MATERIAL_TRIGGER] as $sourceKey) {
+        foreach ([...array_keys($this->programs()), self::MATERIAL_TRIGGER, self::RECIPE_BATCH_CARD] as $sourceKey) {
             foreach ($this->fields($sourceKey) as $field) {
                 $samples[$field['key']] ??= $field['sample'];
             }
@@ -320,43 +340,38 @@ class DocumentSources
     }
 
     /**
-     * The source type and program key a document is linked to. Documents saved
-     * before linking existed fall back to: material trigger when trigger codes
-     * are configured, otherwise the program whose code prefix matches.
+     * The source a document is linked to. Documents saved before linking
+     * existed fall back to: material trigger when trigger codes are set, the
+     * recipe whose recipe card names this document, else the program whose
+     * code prefix matches.
      *
-     * @return array{type: string|null, program_key: string|null}
+     * @return array{type: string|null, program_key: string|null, recipe_code: string|null}
      */
     public function linkFor(?DocumentReference $document, ?string $fallbackCode = null): array
     {
+        $none = ['type' => null, 'program_key' => null, 'recipe_code' => null];
         $storedType = $document?->getAttribute('source_type');
         $storedProgram = $document?->getAttribute('program_key');
+        $storedRecipe = trim((string) $document?->getAttribute('recipe_code'));
+        $code = strtoupper(trim((string) ($document?->code ?? $fallbackCode)));
 
-        if ($storedType === self::TYPE_MATERIAL_TRIGGER) {
-            return ['type' => self::TYPE_MATERIAL_TRIGGER, 'program_key' => null];
-        }
-
-        if ($storedType === self::TYPE_PROGRAM && $this->isProgram($storedProgram)) {
-            return ['type' => self::TYPE_PROGRAM, 'program_key' => $storedProgram];
-        }
-
-        if ($storedType === null && ! empty($document?->trigger_material_codes)) {
-            return ['type' => self::TYPE_MATERIAL_TRIGGER, 'program_key' => null];
-        }
-
-        if ($storedType === null) {
-            $programKey = $this->programKeyForCode($document?->code ?? $fallbackCode);
-            if ($programKey !== null) {
-                return ['type' => self::TYPE_PROGRAM, 'program_key' => $programKey];
-            }
-        }
-
-        return ['type' => null, 'program_key' => null];
+        return match (true) {
+            $storedType === self::TYPE_MATERIAL_TRIGGER => ['type' => self::TYPE_MATERIAL_TRIGGER] + $none,
+            $storedType === self::TYPE_PROGRAM && $this->isProgram($storedProgram) => ['type' => self::TYPE_PROGRAM, 'program_key' => $storedProgram] + $none,
+            $storedType === self::TYPE_RECIPE && $storedRecipe !== '' => ['type' => self::TYPE_RECIPE, 'recipe_code' => $storedRecipe] + $none,
+            $storedType !== null => $none,
+            ! empty($document?->trigger_material_codes) => ['type' => self::TYPE_MATERIAL_TRIGGER] + $none,
+            ($recipeCode = $this->recipeCodeForDocumentCode($code)) !== null => ['type' => self::TYPE_RECIPE, 'recipe_code' => $recipeCode] + $none,
+            ($programKey = $this->programKeyForCode($code)) !== null => ['type' => self::TYPE_PROGRAM, 'program_key' => $programKey] + $none,
+            default => $none,
+        };
     }
 
     public function sourceKey(?string $type, ?string $programKey): ?string
     {
         return match ($type) {
             self::TYPE_MATERIAL_TRIGGER => self::MATERIAL_TRIGGER,
+            self::TYPE_RECIPE => self::RECIPE_BATCH_CARD,
             self::TYPE_PROGRAM => $this->isProgram($programKey) ? $programKey : null,
             default => null,
         };
@@ -390,6 +405,55 @@ class DocumentSources
         $code = $this->programs()[$programKey]['code'] ?? null;
 
         return $code !== null ? DocumentReference::query()->where('code', $code)->first() : null;
+    }
+
+    /** The recipe whose recipe card names this document code (WM code), if any. */
+    public function recipeCodeForDocumentCode(?string $documentCode): ?string
+    {
+        $code = strtoupper(trim((string) $documentCode));
+        if ($code === '') {
+            return null;
+        }
+
+        try {
+            $recipeCode = RecipeCard::query()->whereRaw('UPPER(document_reference) = ?', [$code])->value('recipe_code');
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return filled($recipeCode) ? (string) $recipeCode : null;
+    }
+
+    /**
+     * Recipes with a recipe card, for the "Recipe driven" picker.
+     *
+     * @return array<string, string> recipe code => "code - description"
+     */
+    public function recipeOptions(): array
+    {
+        $codes = RecipeCard::query()->orderBy('recipe_code')->pluck('recipe_code')->map(fn ($code): string => (string) $code)->all();
+
+        $descriptions = ProductMapping::query()
+            ->whereIn('component_product_id', $codes)
+            ->whereNotNull('component_product_description')
+            ->pluck('component_product_description', 'component_product_id');
+
+        return collect($codes)
+            ->mapWithKeys(fn (string $code): array => [$code => trim($code.' - '.($descriptions[$code] ?? ''), ' -')])
+            ->all();
+    }
+
+    public function hasRecipeColumn(): bool
+    {
+        if (self::$hasRecipeColumn === null) {
+            try {
+                self::$hasRecipeColumn = Schema::hasColumn('document_references', 'recipe_code');
+            } catch (\Throwable) {
+                return false;
+            }
+        }
+
+        return self::$hasRecipeColumn;
     }
 
     public function hasSourceColumns(): bool
@@ -616,6 +680,12 @@ class DocumentSources
             $this->field('operator_name', 'Operator Name', 22, 'Adrian Lacki', fn (LabScaleCalibration|SaltMeterCalibration $row): string => (string) $row->operator_name),
             $this->field('deviation_reason', 'Deviation / Action', 32, '—', fn (LabScaleCalibration|SaltMeterCalibration $row): string => (string) ($row->deviation_reason ?? '—')),
         ];
+    }
+
+    /** A batch card ingredient column; its value is read from BatchCardBuilder's component row. */
+    private function componentField(string $key, string $label, float $width, string $sample): array
+    {
+        return $this->field($key, $label, $width, $sample, fn (array $component): string => (string) ($component[$key] ?? ''));
     }
 
     /** @return array{key: string, label: string, width: float, visible: bool, sample: string, value: Closure|null} */

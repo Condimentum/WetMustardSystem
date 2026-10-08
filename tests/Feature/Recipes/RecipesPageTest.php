@@ -40,14 +40,13 @@ class RecipesPageTest extends TestCase
 
         $this->actingAs($user);
 
+        // Document reference / revision / issue date / reason belong to the linked document, so saving here leaves them alone.
+        RecipeCard::create(['recipe_code' => '30010001', 'document_reference' => 'WM023', 'revision_no' => '3']);
+
         Volt::test('pages.recipes.index')
             ->set('selectedRecipeCode', '30010001')
             ->set('batchSizeInputs', ['800', '1000'])
             ->set('plcRecipeNumber', 'PLC-CPM001WG')
-            ->set('documentReference', 'wm023')
-            ->set('revisionNo', '3')
-            ->set('issueDate', '2026-07-24')
-            ->set('reasonForIssue', 'Formula alignment and process clarification.')
             ->set('stepInputs', ['Charge water', 'Add vinegar', 'Add salt', 'Add mustard seeds'])
             ->call('saveRecipeModal')
             ->assertHasNoErrors()
@@ -59,7 +58,6 @@ class RecipesPageTest extends TestCase
             'plc_recipe_number' => 'PLC-CPM001WG',
             'document_reference' => 'WM023',
             'revision_no' => '3',
-            'issue_date' => '2026-07-24 00:00:00',
         ]);
 
         $card = RecipeCard::query()->where('recipe_code', '30010001')->first();

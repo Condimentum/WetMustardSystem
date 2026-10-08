@@ -21,6 +21,7 @@ class DocumentReference extends Model
         'module',
         'source_type',
         'program_key',
+        'recipe_code',
         'trigger_material_codes',
         'status',
     ];

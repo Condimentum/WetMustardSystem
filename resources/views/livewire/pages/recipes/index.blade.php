@@ -1,7 +1,10 @@
 <?php
 
 use App\Domains\Batch\Jobs\ExtractBatchCardMetadataJob;
+use App\Domains\Reporting\Support\DocumentSources;
 use App\Domains\WinMan\Support\WinManConnection;
+use App\Models\DocumentReference;
+use App\Models\DocumentReferenceChange;
 use App\Models\Recipe;
 use App\Models\RecipeCard;
 use App\Models\RecipeIngredient;
@@ -39,13 +42,12 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
 
     public string $plcRecipeNumber = '';
 
+    /** Batch card document this recipe is linked to - set in Settings > Documents, shown read-only here. */
     public string $documentReference = '';
 
-    public string $revisionNo = '';
+    public string $documentTitle = '';
 
-    public string $issueDate = '';
-
-    public string $reasonForIssue = '';
+    public string $documentRevision = '';
 
     /** @var array<int, string> */
     public array $stepInputs = [''];
@@ -145,8 +147,6 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
                 $card = $cardsByCode->get($row['structure_product_id']);
 
                 $row['has_local_card'] = $card !== null;
-                $row['local_revision'] = $card?->revision_no;
-                $row['local_issue_date'] = $card?->issue_date?->format('Y-m-d');
 
                 return $row;
             }, $this->rows);
@@ -215,10 +215,7 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
             ? array_map(fn ($size): string => $this->formatBatchSize((float) $size), $storedBatchSizes)
             : [''];
         $this->plcRecipeNumber = (string) ($card?->plc_recipe_number ?? '');
-        $this->documentReference = (string) ($card?->document_reference ?? '');
-        $this->revisionNo = (string) ($card?->revision_no ?? '');
-        $this->issueDate = $card?->issue_date?->format('Y-m-d') ?? '';
-        $this->reasonForIssue = (string) ($card?->reason_for_issue ?? '');
+        $this->loadLinkedDocument($recipeCode, (string) ($card?->document_reference ?? ''));
         $this->stepInputs = $card !== null && is_array($card->steps) && $card->steps !== []
             ? array_values(array_map(static fn ($step): string => (string) $step, $card->steps))
             : [''];
@@ -226,6 +223,27 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
         $this->selectedRecipeComponents = $this->loadRecipeIngredientsForDisplay($recipeCode);
 
         $this->showRecipeModal = true;
+    }
+
+    private function loadLinkedDocument(string $recipeCode, string $cardDocumentReference): void
+    {
+        $sources = app(DocumentSources::class);
+
+        $document = $sources->hasRecipeColumn()
+            ? DocumentReference::query()->where('source_type', DocumentSources::TYPE_RECIPE)->where('recipe_code', $recipeCode)->first()
+            : null;
+
+        if ($document === null && trim($cardDocumentReference) !== '') {
+            $document = DocumentReference::query()->where('code', strtoupper(trim($cardDocumentReference)))->first();
+        }
+
+        $latestVersion = $document !== null && Schema::hasTable('document_reference_changes')
+            ? DocumentReferenceChange::query()->where('document_reference_id', $document->id)->orderByDesc('date_issued')->orderByDesc('id')->value('issue_version')
+            : null;
+
+        $this->documentReference = (string) ($document?->code ?? $cardDocumentReference);
+        $this->documentTitle = (string) ($document?->title ?? '');
+        $this->documentRevision = (string) ($latestVersion ?: ($document?->version ?? ''));
     }
 
     public function updatedRecipePdfUpload(): void
@@ -254,24 +272,8 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
         $result = app(ExtractBatchCardMetadataJob::class)($tempPath);
         $metadata = (array) ($result['metadata'] ?? []);
 
-        if (($metadata['document_code'] ?? null) && $this->documentReference === '') {
-            $this->documentReference = (string) $metadata['document_code'];
-        }
-
         if (($metadata['plc_recipe_number'] ?? null) && $this->plcRecipeNumber === '') {
             $this->plcRecipeNumber = (string) $metadata['plc_recipe_number'];
-        }
-
-        if (($metadata['revision'] ?? null) && $this->revisionNo === '') {
-            $this->revisionNo = (string) $metadata['revision'];
-        }
-
-        if (($metadata['issue_date'] ?? null) && $this->issueDate === '') {
-            $this->issueDate = (string) $metadata['issue_date'];
-        }
-
-        if (($metadata['reason_for_issue'] ?? null) && $this->reasonForIssue === '') {
-            $this->reasonForIssue = (string) $metadata['reason_for_issue'];
         }
 
         $extractedSteps = array_values(array_filter(array_map(
@@ -395,10 +397,6 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
             'batchSizeInputs' => ['array', 'max:20'],
             'batchSizeInputs.*' => ['nullable', 'numeric', 'gt:0'],
             'plcRecipeNumber' => ['nullable', 'string', 'max:255'],
-            'documentReference' => ['nullable', 'string', 'max:255'],
-            'revisionNo' => ['nullable', 'string', 'max:255'],
-            'issueDate' => ['nullable', 'date'],
-            'reasonForIssue' => ['nullable', 'string', 'max:4000'],
             'stepInputs' => ['array', 'max:40'],
             'stepInputs.*' => ['nullable', 'string', 'max:500'],
         ]);
@@ -414,40 +412,19 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
             'batch_size_kg' => $batchSizes !== [] ? $batchSizes[0] : null,
             'batch_sizes_kg' => $batchSizes !== [] ? $batchSizes : null,
             'plc_recipe_number' => trim((string) ($validated['plcRecipeNumber'] ?? '')) !== '' ? trim((string) $validated['plcRecipeNumber']) : null,
-            'revision_no' => trim((string) ($validated['revisionNo'] ?? '')) !== '' ? trim((string) $validated['revisionNo']) : null,
-            'issue_date' => ($validated['issueDate'] ?? '') !== '' ? $validated['issueDate'] : null,
-            'reason_for_issue' => trim((string) ($validated['reasonForIssue'] ?? '')) !== '' ? trim((string) $validated['reasonForIssue']) : null,
             'steps' => $steps === [] ? null : $steps,
             'layout_config' => null,
         ];
 
-        $documentReferenceSaved = false;
-        if ($this->recipeCardsColumnExists('document_reference')) {
-            $updateData['document_reference'] = trim((string) ($validated['documentReference'] ?? '')) !== ''
-                ? strtoupper(trim((string) $validated['documentReference']))
-                : null;
-            $documentReferenceSaved = true;
-        }
-
+        // Document reference, revision, issue date and reason are owned by the linked document (Settings > Documents).
         RecipeCard::query()->updateOrCreate(
             ['recipe_code' => $this->selectedRecipeCode],
             $updateData,
         );
 
-        session()->flash('status', $documentReferenceSaved
-            ? 'Recipe card information saved.'
-            : 'Recipe card information saved. Document Reference will be saved after running migrations.');
+        session()->flash('status', 'Recipe card information saved.');
         $this->showRecipeModal = false;
         $this->redirectRoute('settings.recipes', navigate: true);
-    }
-
-    private function recipeCardsColumnExists(string $column): bool
-    {
-        try {
-            return Schema::hasColumn('recipe_cards', $column);
-        } catch (\Throwable) {
-            return false;
-        }
     }
 
     private function recipeCardsTableExists(): bool
@@ -671,26 +648,26 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
                                 @error('plcRecipeNumber')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
                             </div>
                             <div>
-                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#6b5d42]">Document Reference (e.g. WM023)</label>
-                                <input type="text" wire:model.defer="documentReference" class="w-full rounded-md border-[#e6dcc5] text-sm shadow-sm focus:border-[#c9a24a] focus:ring-[#c9a24a]" placeholder="WM023" />
-                                @error('documentReference')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
+                                <div class="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#6b5d42]">Batch card document</div>
+                                <div class="rounded-md border border-[#e6dcc5] bg-[#fffdf8] px-3 py-2 text-sm">
+                                    @if ($documentReference !== '')
+                                        <span class="font-semibold text-[#1f3f4f]">{{ $documentReference }}</span>
+                                        @if ($documentTitle !== '')
+                                            <span class="text-[#6b5d42]">- {{ $documentTitle }}</span>
+                                        @endif
+                                        @if ($documentRevision !== '')
+                                            <span class="text-xs text-[#9a8b6d]">(rev {{ $documentRevision }})</span>
+                                        @endif
+                                    @else
+                                        <span class="text-[#9a8b6d]">Not linked yet</span>
+                                    @endif
+                                </div>
+                                <div class="mt-1 text-xs text-[#9a8b6d]">
+                                    Revision, issue date and reason are managed on the document in
+                                    <a href="{{ route('settings.documents') }}" class="underline hover:text-[#1f3f4f]">Settings &rsaquo; Documents</a>
+                                    (Data source: Recipe batch card).
+                                </div>
                             </div>
-                            <div>
-                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#6b5d42]">Revision No</label>
-                                <input type="text" wire:model.defer="revisionNo" class="w-full rounded-md border-[#e6dcc5] text-sm shadow-sm focus:border-[#c9a24a] focus:ring-[#c9a24a]" />
-                                @error('revisionNo')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
-                            </div>
-                            <div>
-                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#6b5d42]">Issue Date</label>
-                                <input type="date" wire:model.defer="issueDate" class="w-full rounded-md border-[#e6dcc5] text-sm shadow-sm focus:border-[#c9a24a] focus:ring-[#c9a24a]" />
-                                @error('issueDate')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-[#6b5d42]">Reason for Issue</label>
-                            <textarea wire:model.defer="reasonForIssue" rows="3" class="w-full rounded-md border-[#e6dcc5] text-sm shadow-sm focus:border-[#c9a24a] focus:ring-[#c9a24a]"></textarea>
-                            @error('reasonForIssue')<div class="mt-1 text-xs text-red-600">{{ $message }}</div>@enderror
                         </div>
 
                         <div class="rounded-lg border border-[#ebe2cd] bg-[#fffdf8] p-3">
