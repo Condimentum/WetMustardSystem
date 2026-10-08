@@ -555,6 +555,22 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                     'updated_by' => auth()->id(),
                 ],
             );
+        } elseif ($validated['source_type'] === DocumentSources::TYPE_PROGRAM && app(DocumentSources::class)->isTableBacked($validated['program_key'])) {
+            // Created disabled (and never re-enabled here) so it can't duplicate an existing emailed report;
+            // switch it on and pick recipients in Reporting Admin.
+            $scheduledReport = ReportConfig::query()->firstOrCreate(
+                ['report_key' => 'doc_'.$normalizedCode],
+                [
+                    'report_name' => $normalizedCode.' - '.$normalizedTitle,
+                    'report_type' => 'scheduled',
+                    'schedule_time' => '06:00',
+                    'date_offset_from_days' => -1,
+                    'date_offset_to_days' => -1,
+                    'enabled' => false,
+                ],
+            );
+            $scheduledReport->update(['report_name' => $normalizedCode.' - '.$normalizedTitle, 'updated_by' => auth()->id()]);
+            $scheduledReportCreated = $scheduledReport->wasRecentlyCreated;
         } else {
             ReportConfig::query()->where('report_key', 'doc_'.$normalizedCode)->delete();
         }
@@ -611,6 +627,11 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
             $this->flash = 'Document metadata updated. History entry recorded.';
         } else {
             $this->flash = null;
+        }
+
+        if ($scheduledReportCreated ?? false) {
+            $this->flashLevel = 'success';
+            $this->flash = trim(($this->flash ?? 'Document saved.').' A scheduled report "doc_'.$normalizedCode.'" was added in Reporting Admin - it is off until you enable it.');
         }
 
         $this->documentModalOpen = false;
@@ -946,7 +967,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                             <select wire:model.live="program_key" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
                                                 <option value="">Select a program...</option>
                                                 @foreach ($this->programOptions as $programKey => $program)
-                                                    <option value="{{ $programKey }}">{{ $program['code'] }} - {{ $program['label'] }}</option>
+                                                    <option value="{{ $programKey }}">{{ $program['code'] !== '' ? $program['code'].' - ' : '' }}{{ $program['label'] }}</option>
                                                 @endforeach
                                             </select>
                                             @error('program_key') <span class="text-xs text-red-600">{{ $message }}</span> @enderror

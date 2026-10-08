@@ -3,10 +3,12 @@
 namespace Tests\Feature\Reporting;
 
 use App\Domains\Reporting\ReportRegistry;
+use App\Domains\Reporting\Reports\ProgramDocumentReport;
 use App\Domains\Reporting\Reports\Wm002SaltMeterCalibrationReport;
 use App\Domains\Reporting\Support\DocumentSources;
 use App\Models\DocumentLayoutSetting;
 use App\Models\DocumentReference;
+use App\Models\MetalDetectorCheck;
 use App\Models\ReportConfig;
 use App\Models\SaltMeterCalibration;
 use App\Models\User;
@@ -113,6 +115,63 @@ class DocumentSourcesTest extends TestCase
         $this->assertSame('wm002_salt_meter', $document->program_key);
         $this->assertNull($document->trigger_material_codes);
         $this->assertFalse(ReportConfig::query()->where('report_key', 'doc_WM002')->exists());
+    }
+
+    public function test_metal_detector_document_is_generated_from_discovered_table_fields(): void
+    {
+        $operator = User::factory()->create(['name' => 'Metal Operator']);
+
+        DocumentReference::create([
+            'code' => 'WM008',
+            'title' => 'Metal Detector Verification',
+            'source_type' => DocumentSources::TYPE_PROGRAM,
+            'program_key' => 'metal_detector_daily',
+            'status' => 'Active',
+        ]);
+
+        MetalDetectorCheck::create([
+            'check_type' => MetalDetectorCheck::TYPE_START,
+            'check_time' => now(),
+            'fe10_pass' => true,
+            'non_fe15_pass' => false,
+            'ss20_pass' => true,
+            'overall_result' => MetalDetectorCheck::RESULT_FAIL,
+            'failure_action' => 'Stopped line',
+            'signed_by' => $operator->id,
+            'signed_at' => now(),
+        ]);
+
+        $report = app(ReportRegistry::class)->get('doc_WM008');
+        $this->assertInstanceOf(ProgramDocumentReport::class, $report);
+
+        $payload = $report->generate(now()->startOfDay(), now()->endOfDay());
+
+        $this->assertSame(1, $payload['row_count']);
+        $this->assertStringContainsString('Ferrous 1.0', $payload['html']);
+        $this->assertStringContainsString('Start Of Shift', $payload['html']);
+        $this->assertStringContainsString('Metal Operator', $payload['html']);
+        $this->assertMatchesRegularExpression('/Pass.*Fail.*Pass/s', $payload['html']);
+        $this->assertStringNotContainsString('Stopped line', $payload['html']); // hidden by default
+        $this->assertFileExists($payload['attachments'][0]['path']);
+    }
+
+    public function test_linking_a_document_to_a_table_backed_program_adds_a_disabled_scheduled_report(): void
+    {
+        $this->actingAsAdmin();
+
+        Volt::test('pages.settings.documents')
+            ->call('createDocument')
+            ->set('code', 'WM008')
+            ->set('title', 'Metal Detector Verification')
+            ->set('source_type', DocumentSources::TYPE_PROGRAM)
+            ->set('program_key', 'metal_detector_daily')
+            ->assertSet('setup_columns.0.key', 'check_time')
+            ->call('saveDocumentMetadata')
+            ->assertHasNoErrors();
+
+        $config = ReportConfig::query()->where('report_key', 'doc_WM008')->firstOrFail();
+        $this->assertFalse((bool) $config->enabled);
+        $this->assertTrue(app(ReportRegistry::class)->has('doc_WM008'));
     }
 
     public function test_settings_page_requires_trigger_codes_for_material_triggered_documents(): void
