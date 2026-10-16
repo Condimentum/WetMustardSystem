@@ -58,6 +58,39 @@
     .wm-picon { flex: none; width: 40px; height: 40px; object-fit: contain; }
     .wm-note { font-size: .8rem; color: #4b4636; text-align: right; }
 
+    /* Forms, sections and modals (Settings pages). */
+    .wm-label { display: block; margin-bottom: 4px; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #6b5d42; }
+    .wm-input { width: 100%; border-radius: 8px; border: 1px solid #e6dcc5; background-color: #fffdf8; color: #1f2a33; font-size: .875rem; box-shadow: 0 1px 2px rgba(110, 85, 35, .06); }
+    .wm-input:focus { border-color: #c9a24a; --tw-ring-color: #c9a24a; outline: none; }
+    .wm-input--sm { font-size: .75rem; padding-top: 5px; padding-bottom: 5px; }
+    .wm-check { border-radius: 4px; border-color: #d9cba8; color: #b8892f; }
+    .wm-check:focus { --tw-ring-color: #c9a24a; }
+    .wm-hint { font-size: .75rem; color: #9a8b6d; }
+    .wm-section { border: 1px solid #ebe2cd; border-radius: 14px; background: #fffdf8; padding: 20px; box-shadow: 0 2px 8px rgba(110, 85, 35, .06); }
+    .wm-section-title { font-size: 1rem; font-weight: 800; color: #1f3f4f; }
+    .wm-subhead { font-size: .85rem; font-weight: 800; color: #1f3f4f; }
+    .wm-btn-outline { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 10px; border: 1px solid #d9cba8; background: #fffdf7; color: #1f3f4f; font-size: .8rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .wm-btn-outline:hover { background: #fdf6e3; }
+    .wm-btn-outline:disabled { opacity: .5; cursor: not-allowed; }
+    .wm-btn-outline--sm { padding: 6px 11px; font-size: .72rem; letter-spacing: .03em; text-transform: none; font-weight: 700; }
+    .wm-btn-outline--gold { border-color: #c9a24a; background: linear-gradient(180deg, #fbf1d6, #f3e2b3); color: #4a3818; }
+    .wm-btn-outline--danger { border-color: #e7b4b4; color: #9b1c1c; }
+    .wm-btn-outline--danger:hover { background: #fdf0f0; }
+    .wm-band { background: linear-gradient(180deg, #2b3238, #171c20); color: #fff; font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .wm-choice { display: flex; cursor: pointer; align-items: flex-start; gap: 8px; border: 1px solid #e6dcc5; border-radius: 10px; background: #fffdf8; padding: 9px 12px; font-size: .875rem; }
+    .wm-choice--on { border-color: #c9a24a; background: #fdf6e3; box-shadow: 0 0 0 1px #c9a24a; }
+    .wm-chip { display: inline-flex; align-items: center; border: 1px solid #e6dcc5; border-radius: 999px; background: #fffdf8; padding: 2px 10px; color: #6b5d42; }
+    .wm-chip:hover { background: #fdf6e3; }
+    .wm-chip--on { border-color: #c9a24a; background: #f3e2b3; color: #4a3818; }
+    .wm-doc-row { display: block; width: 100%; padding: 12px 20px; text-align: left; }
+    .wm-doc-row + .wm-doc-row { border-top: 1px solid #efe7d4; }
+    .wm-doc-row:hover { background: #fdf6e3; }
+    .wm-modal-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; background: rgba(15, 23, 42, .6); padding: 12px; }
+    .wm-modal { position: relative; display: flex; flex-direction: column; overflow: hidden; width: 100%; margin: 8px auto; max-height: calc(100vh - 1.5rem); border: 1px solid #e9dfc8; border-radius: 16px; background: #fffdf7; box-shadow: 0 20px 50px rgba(0, 0, 0, .3); }
+    .wm-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px 22px; background: linear-gradient(180deg, #2b3238, #171c20); color: #fff; }
+    .wm-modal-close { flex: none; border-radius: 8px; padding: 8px 12px; font-size: .875rem; color: rgba(255, 255, 255, .8); }
+    .wm-modal-close:hover { background: rgba(255, 255, 255, .1); color: #fff; }
+
     /* Order list pages (MO Search, Packed): header with medallion, navy column band, cream rows. */
     @font-face { font-family: 'Libre Baskerville'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('{{ asset('fonts/libre-baskerville-latin.woff2') }}') format('woff2'); }
     .wml-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }

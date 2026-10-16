@@ -886,7 +886,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
             <div class="flex items-center justify-between gap-2">
                 <h2 class="wm-title" style="font-size:1.05rem;">Document List</h2>
                 <div class="flex items-center gap-2">
-                    <select wire:model.live="moduleFilter" class="rounded-md border-gray-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500">
+                    <select wire:model.live="moduleFilter" class="wm-input" style="width:auto;">
                         <option value="">All categories</option>
                         @foreach ($this->moduleOptions as $moduleOption)
                             <option value="{{ $moduleOption }}">{{ $moduleOption }}</option>
@@ -897,7 +897,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                 </div>
             </div>
             <div class="wm-table" style="margin-top:14px;">
-            <div class="max-h-[560px] overflow-y-auto divide-y divide-gray-100">
+            <div class="max-h-[560px] overflow-y-auto">
                 @php
                     $currentModuleHeader = null;
                 @endphp
@@ -909,7 +909,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                     @endphp
 
                     @if ($moduleHeader !== $currentModuleHeader)
-                        <div class="sticky top-0 z-10 bg-slate-50/95 backdrop-blur px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600 border-y border-gray-100">
+                        <div class="wm-band sticky top-0 z-10" style="padding: 10px 20px;">
                             {{ $moduleHeader }}
                         </div>
                         @php
@@ -917,37 +917,37 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                         @endphp
                     @endif
 
-                    <button type="button" wire:click="editDocument({{ $document->id }})" class="w-full text-left px-5 py-3 hover:bg-gray-50">
-                        <div class="flex items-center justify-between gap-2">
-                            <div>
-                                <div class="font-medium text-gray-800">{{ $document->code }} - {{ $document->title }}</div>
-                                <div class="text-xs text-gray-500">{{ $document->module ?: 'No module' }} | Version {{ $document->version ?: 'N/A' }} | {{ $document->status ?: 'Unknown' }}</div>
+                    <button type="button" wire:click="editDocument({{ $document->id }})" class="wm-doc-row">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="font-semibold text-[#1f2a33]"><span class="text-[#1f3f4f]">{{ $document->code }}</span> - {{ $document->title }}</div>
+                                <div class="wm-sub">{{ $document->module ?: 'No module' }} · Version {{ $document->version ?: 'N/A' }} · {{ $document->status ?: 'Unknown' }}</div>
                             </div>
-                            <span class="text-xs text-gray-500">{{ $document->changes_count }} change{{ $document->changes_count === 1 ? '' : 's' }}</span>
+                            <span class="wm-chip text-xs whitespace-nowrap">{{ $document->changes_count }} change{{ $document->changes_count === 1 ? '' : 's' }}</span>
                         </div>
                     </button>
                 @empty
-                    <div class="px-5 py-6 text-sm text-gray-500">No documents created yet.</div>
+                    <div class="px-5 py-6 text-sm text-[#9a8b6d]">No documents created yet.</div>
                 @endforelse
             </div>
             </div>
         </section>
 
         @if ($documentModalOpen)
-            <div class="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6">
-                <div class="absolute inset-0 bg-black/40" wire:click="closeDocumentModal"></div>
-                <div class="relative mx-auto my-2 sm:my-4 w-full max-w-5xl max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-3rem)] rounded-xl bg-white border border-gray-200 shadow-2xl flex flex-col overflow-hidden">
-                    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
+            <div class="wm-modal-backdrop sm:p-6">
+                <div class="absolute inset-0" wire:click="closeDocumentModal"></div>
+                <div class="wm-modal max-w-5xl">
+                    <div class="wm-modal-head shrink-0">
                         <div>
-                            <h3 class="text-lg font-semibold text-gray-800">{{ $editingDocumentId ? 'Edit document' : 'New document' }}</h3>
-                            <p class="text-xs text-gray-500">Manage metadata and document issue history in one place.</p>
+                            <h3 class="wm-title" style="font-size:1.15rem;color:#fff;">{{ $editingDocumentId ? 'Edit document' : 'New document' }}{{ $editingDocumentId && $code !== '' ? ' - '.$code : '' }}</h3>
+                            <p class="mt-1 text-sm text-white/80">Manage metadata, layout and document issue history in one place.</p>
                         </div>
-                        <button type="button" wire:click="closeDocumentModal" class="text-sm text-gray-500 hover:text-gray-700">Close</button>
+                        <button type="button" wire:click="closeDocumentModal" class="wm-modal-close">Close</button>
                     </div>
 
-                    <div class="p-6 space-y-6 overflow-y-auto min-h-0">
-                        <div class="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
-                            <div class="font-medium text-gray-800">Document Metadata</div>
+                    <div class="p-4 sm:p-6 space-y-6 overflow-y-auto min-h-0">
+                        <div class="wm-section space-y-4">
+                            <div class="wm-section-title">Document Metadata</div>
 
                             @unless ($editingDocumentId)
                                 <div
@@ -964,59 +964,59 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                             $refs.pdfInput.dispatchEvent(new Event('change'));
                                         }
                                     "
-                                    :class="dragging ? 'border-sky-500 bg-sky-100' : 'border-sky-300 bg-sky-50/50'"
+                                    :class="dragging ? 'border-[#c9a24a] bg-[#f3e2b3]' : 'border-[#d9cba8] bg-[#fdf6e3]'"
                                     class="rounded-lg border-2 border-dashed p-4 text-center transition"
                                 >
                                     <label class="cursor-pointer block">
                                         <input type="file" x-ref="pdfInput" wire:model="pdfUpload" accept="application/pdf" class="hidden" />
-                                        <div class="text-sm font-medium text-sky-800">Drag &amp; drop a PDF here, or click to choose a file</div>
-                                        <div class="text-xs text-sky-600 mt-1">We'll scan it to pre-fill the code, title, version, issue date and reason for change below - review before saving.</div>
+                                        <div class="text-sm font-semibold text-[#1f3f4f]">Drag &amp; drop a PDF here, or click to choose a file</div>
+                                        <div class="wm-hint mt-1">We'll scan it to pre-fill the code, title, version, issue date and reason for change below - review before saving.</div>
                                     </label>
-                                    <div wire:loading wire:target="pdfUpload" class="mt-2 text-xs text-sky-700">Scanning PDF...</div>
+                                    <div wire:loading wire:target="pdfUpload" class="mt-2 text-xs font-semibold text-[#6b5d42]">Scanning PDF...</div>
                                     @if ($pdfUpload)
-                                        <div class="mt-2 text-xs text-gray-600">Selected: {{ $pdfUpload->getClientOriginalName() }}</div>
+                                        <div class="mt-2 wm-hint">Selected: {{ $pdfUpload->getClientOriginalName() }}</div>
                                     @endif
                                     @error('pdfUpload') <div class="mt-1 text-xs text-red-600">{{ $message }}</div> @enderror
                                 </div>
                                 @if ($extractInfo)
-                                    <div class="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">{{ $extractInfo }}</div>
+                                    <div class="rounded-md border border-[#e6dcc5] bg-[#fdf6e3] px-3 py-2 text-xs text-[#4a3818]">{{ $extractInfo }}</div>
                                 @endif
                             @endunless
 
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Document code</label>
-                                    <input wire:model.defer="code" class="w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="MINT005" />
+                                    <label class="wm-label">Document code</label>
+                                    <input wire:model.defer="code" class="wm-input" placeholder="MINT005" />
                                     @error('code') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Version</label>
-                                    <input wire:model.defer="version" class="w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="5" />
+                                    <label class="wm-label">Version</label>
+                                    <input wire:model.defer="version" class="wm-input" placeholder="5" />
                                     @error('version') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                                 </div>
                                 <div class="md:col-span-2">
-                                    <label class="block text-xs text-gray-600 mb-1">Title</label>
-                                    <input wire:model.defer="title" class="w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="Metal detector verification sheet" />
+                                    <label class="wm-label">Title</label>
+                                    <input wire:model.defer="title" class="wm-input" placeholder="Metal detector verification sheet" />
                                     @error('title') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Issue date</label>
-                                    <input type="date" wire:model.defer="issue_date" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+                                    <label class="wm-label">Issue date</label>
+                                    <input type="date" wire:model.defer="issue_date" class="wm-input" />
                                     @error('issue_date') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Issued by</label>
-                                    <input wire:model.defer="issued_by" class="w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="T Boyce" />
+                                    <label class="wm-label">Issued by</label>
+                                    <input wire:model.defer="issued_by" class="wm-input" placeholder="T Boyce" />
                                     @error('issued_by') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                                 </div>
                                 <div class="md:col-span-2">
-                                    <label class="block text-xs text-gray-600 mb-1">Reason for change</label>
-                                    <textarea wire:model.defer="reason_for_change" rows="3" class="w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="Describe what changed in this revision..."></textarea>
+                                    <label class="wm-label">Reason for change</label>
+                                    <textarea wire:model.defer="reason_for_change" rows="3" class="wm-input" placeholder="Describe what changed in this revision..."></textarea>
                                     @error('reason_for_change') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                                 </div>
                                 <div class="md:col-span-2">
-                                    <label class="block text-xs text-gray-600 mb-1">Category / module</label>
-                                    <select wire:model.defer="module" class="w-full border-gray-300 rounded-md shadow-sm text-sm focus:border-sky-500 focus:ring-sky-500">
+                                    <label class="wm-label">Category / module</label>
+                                    <select wire:model.defer="module" class="wm-input">
                                         <option value="">- uncategorised -</option>
                                         @foreach ($this->moduleOptions as $moduleOption)
                                             <option value="{{ $moduleOption }}">{{ $moduleOption }}</option>
@@ -1024,9 +1024,9 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                     </select>
                                     @error('module') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                                 </div>
-                                <div class="md:col-span-2 space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+                                <div class="md:col-span-2 space-y-3 rounded-xl border border-[#ebe2cd] bg-[#fbf6ea] p-3">
                                     <div>
-                                        <div class="block text-xs text-gray-600 mb-1">Data source</div>
+                                        <div class="wm-label">Data source</div>
                                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                                             @foreach ([
                                                 \App\Domains\Reporting\Support\DocumentSources::TYPE_PROGRAM => ['Program driven', 'Filled from a program in the app'],
@@ -1034,11 +1034,11 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                 \App\Domains\Reporting\Support\DocumentSources::TYPE_MATERIAL_TRIGGER => ['Material triggered', 'Generated when a material is issued to a batch'],
                                                 \App\Domains\Reporting\Support\DocumentSources::TYPE_NONE => ['Not linked', 'Reference document only'],
                                             ] as $sourceValue => [$sourceLabel, $sourceHint])
-                                                <label class="flex cursor-pointer items-start gap-2 rounded-md border bg-white px-3 py-2 text-sm {{ $source_type === $sourceValue ? 'border-sky-500 ring-1 ring-sky-500' : 'border-gray-300' }}">
-                                                    <input type="radio" wire:model.live="source_type" value="{{ $sourceValue }}" class="mt-0.5 border-gray-300 text-sky-600" />
+                                                <label class="wm-choice {{ $source_type === $sourceValue ? 'wm-choice--on' : '' }}">
+                                                    <input type="radio" wire:model.live="source_type" value="{{ $sourceValue }}" class="mt-0.5 wm-check" />
                                                     <span>
-                                                        <span class="block font-medium text-gray-800">{{ $sourceLabel }}</span>
-                                                        <span class="block text-xs text-gray-500">{{ $sourceHint }}</span>
+                                                        <span class="block font-semibold text-[#1f2a33]">{{ $sourceLabel }}</span>
+                                                        <span class="block wm-hint">{{ $sourceHint }}</span>
                                                     </span>
                                                 </label>
                                             @endforeach
@@ -1048,8 +1048,8 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
 
                                     @if ($source_type === \App\Domains\Reporting\Support\DocumentSources::TYPE_PROGRAM)
                                         <div>
-                                            <label class="block text-xs text-gray-600 mb-1">Linked program</label>
-                                            <select wire:model.live="program_key" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                                            <label class="wm-label">Linked program</label>
+                                            <select wire:model.live="program_key" class="wm-input">
                                                 <option value="">Select a program...</option>
                                                 @foreach ($this->programOptions as $programKey => $program)
                                                     <option value="{{ $programKey }}">{{ $program['code'] !== '' ? $program['code'].' - ' : '' }}{{ $program['label'] }}</option>
@@ -1062,21 +1062,21 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                         </div>
                                     @elseif ($source_type === \App\Domains\Reporting\Support\DocumentSources::TYPE_RECIPE)
                                         <div>
-                                            <label class="block text-xs text-gray-600 mb-1">Recipe</label>
-                                            <select wire:model.live="recipe_code" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                                            <label class="wm-label">Recipe</label>
+                                            <select wire:model.live="recipe_code" class="wm-input">
                                                 <option value="">Select a recipe...</option>
                                                 @foreach ($this->recipeOptions as $optionCode => $optionLabel)
                                                     <option value="{{ $optionCode }}">{{ $optionLabel }}</option>
                                                 @endforeach
                                             </select>
                                             @error('recipe_code') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
-                                            <p class="mt-1 text-xs text-gray-500">Ingredients, steps and PLC number come from the recipe; revision, issue date and reason come from this document. Sent as one email per manufacturing (wet bulk) MO run.</p>
+                                            <p class="mt-1 wm-hint">Ingredients, steps and PLC number come from the recipe; revision, issue date and reason come from this document. Sent as one email per manufacturing (wet bulk) MO run.</p>
                                         </div>
                                     @elseif ($source_type === \App\Domains\Reporting\Support\DocumentSources::TYPE_MATERIAL_TRIGGER)
                                         <div>
-                                            <label class="block text-xs text-gray-600 mb-1">Trigger material codes (WinMan Product IDs)</label>
-                                            <input wire:model="trigger_material_codes" class="w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="e.g. 90010012, 90010013" />
-                                            <p class="mt-1 text-xs text-gray-500">Comma-separated. When any of these materials is issued to a batch, this document auto-generates and emails for that day.</p>
+                                            <label class="wm-label">Trigger material codes (WinMan Product IDs)</label>
+                                            <input wire:model="trigger_material_codes" class="wm-input" placeholder="e.g. 90010012, 90010013" />
+                                            <p class="mt-1 wm-hint">Comma-separated. When any of these materials is issued to a batch, this document auto-generates and emails for that day.</p>
                                             @error('trigger_material_codes') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                                         </div>
                                     @endif
@@ -1089,69 +1089,69 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                         type="button"
                                         wire:click="deleteDocument"
                                         wire:confirm="Delete this document and its history entries? This cannot be undone."
-                                        class="inline-flex items-center rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50"
+                                        class="wm-btn-outline wm-btn-outline--danger"
                                     >
                                         Delete document
                                     </button>
                                 @endif
-                                <x-secondary-button type="button" wire:click="resetDocumentForm">Clear</x-secondary-button>
-                                <x-primary-button type="button" wire:click="saveDocumentMetadata">{{ $editingDocumentId ? 'Update document' : 'Create document' }}</x-primary-button>
+                                <button type="button" class="wm-btn-outline" wire:click="resetDocumentForm">Clear</button>
+                                <button type="button" class="wm-btn-dark" wire:click="saveDocumentMetadata">{{ $editingDocumentId ? 'Update document' : 'Create document' }}</button>
                             </div>
                         </div>
 
-                        <div class="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
+                        <div class="wm-section space-y-4">
                             <div class="flex items-center justify-between gap-3">
                                 <div>
-                                    <div class="font-medium text-gray-800">Document Setup</div>
-                                    <p class="text-xs text-gray-500">Per-document PDF settings used by preview and generated paperwork.</p>
+                                    <div class="wm-section-title">Document Setup</div>
+                                    <p class="wm-hint">Per-document PDF settings used by preview and generated paperwork.</p>
                                 </div>
                             </div>
 
                             <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Orientation</label>
-                                    <select wire:model.defer="setup_orientation" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                                    <label class="wm-label">Orientation</label>
+                                    <select wire:model.defer="setup_orientation" class="wm-input">
                                         <option value="portrait">Portrait</option>
                                         <option value="landscape">Landscape</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Paper size</label>
-                                    <select wire:model.defer="setup_paper_size" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                                    <label class="wm-label">Paper size</label>
+                                    <select wire:model.defer="setup_paper_size" class="wm-input">
                                         <option value="A4">A4</option>
                                         <option value="LETTER">Letter</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Base font size</label>
-                                    <input type="number" min="7" max="20" step="0.5" wire:model.defer="setup_base_font_size" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+                                    <label class="wm-label">Base font size</label>
+                                    <input type="number" min="7" max="20" step="0.5" wire:model.defer="setup_base_font_size" class="wm-input" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Header font size</label>
-                                    <input type="number" min="7" max="20" step="0.5" wire:model.defer="setup_table_header_font_size" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+                                    <label class="wm-label">Header font size</label>
+                                    <input type="number" min="7" max="20" step="0.5" wire:model.defer="setup_table_header_font_size" class="wm-input" />
                                 </div>
                             </div>
 
                             <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Margin top</label>
-                                    <input type="number" min="0" max="100" step="1" wire:model.defer="setup_margin_top" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+                                    <label class="wm-label">Margin top</label>
+                                    <input type="number" min="0" max="100" step="1" wire:model.defer="setup_margin_top" class="wm-input" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Margin right</label>
-                                    <input type="number" min="0" max="100" step="1" wire:model.defer="setup_margin_right" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+                                    <label class="wm-label">Margin right</label>
+                                    <input type="number" min="0" max="100" step="1" wire:model.defer="setup_margin_right" class="wm-input" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Margin bottom</label>
-                                    <input type="number" min="0" max="150" step="1" wire:model.defer="setup_margin_bottom" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+                                    <label class="wm-label">Margin bottom</label>
+                                    <input type="number" min="0" max="150" step="1" wire:model.defer="setup_margin_bottom" class="wm-input" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Margin left</label>
-                                    <input type="number" min="0" max="100" step="1" wire:model.defer="setup_margin_left" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+                                    <label class="wm-label">Margin left</label>
+                                    <input type="number" min="0" max="100" step="1" wire:model.defer="setup_margin_left" class="wm-input" />
                                 </div>
                                 <div>
-                                    <label class="block text-xs text-gray-600 mb-1">Line height</label>
-                                    <input type="number" min="1" max="2" step="0.05" wire:model.defer="setup_line_height" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+                                    <label class="wm-label">Line height</label>
+                                    <input type="number" min="1" max="2" step="0.05" wire:model.defer="setup_line_height" class="wm-input" />
                                 </div>
                             </div>
 
@@ -1160,42 +1160,42 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                             @endphp
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 @unless ($isBatchCard)
-                                    <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_logo" class="rounded border-gray-300 text-sky-600"> Show logo</label>
+                                    <label class="inline-flex items-center gap-2 text-sm text-[#1f2a33]"><input type="checkbox" wire:model.defer="setup_show_logo" class="wm-check"> Show logo</label>
                                 @endunless
-                                <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_ccp_block" class="rounded border-gray-300 text-sky-600"> {{ $isBatchCard ? 'Show HACCP / CCP line' : 'Show CCP block' }}</label>
-                                <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_qa_signoff" class="rounded border-gray-300 text-sky-600"> {{ $isBatchCard ? 'Show sign & date rows (weighed / tipping)' : 'Show QA signoff' }}</label>
-                                <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_issue_history" class="rounded border-gray-300 text-sky-600"> {{ $isBatchCard ? 'Show revision / issue date / reason' : 'Show document metadata' }}</label>
+                                <label class="inline-flex items-center gap-2 text-sm text-[#1f2a33]"><input type="checkbox" wire:model.defer="setup_show_ccp_block" class="wm-check"> {{ $isBatchCard ? 'Show HACCP / CCP line' : 'Show CCP block' }}</label>
+                                <label class="inline-flex items-center gap-2 text-sm text-[#1f2a33]"><input type="checkbox" wire:model.defer="setup_show_qa_signoff" class="wm-check"> {{ $isBatchCard ? 'Show sign & date rows (weighed / tipping)' : 'Show QA signoff' }}</label>
+                                <label class="inline-flex items-center gap-2 text-sm text-[#1f2a33]"><input type="checkbox" wire:model.defer="setup_show_issue_history" class="wm-check"> {{ $isBatchCard ? 'Show revision / issue date / reason' : 'Show document metadata' }}</label>
                                 @if ($isBatchCard)
-                                    <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_steps" class="rounded border-gray-300 text-sky-600"> Show recipe steps</label>
-                                    <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" wire:model.defer="setup_show_process_settings" class="rounded border-gray-300 text-sky-600"> Show process settings (mill gap, P1 / P2 speed)</label>
+                                    <label class="inline-flex items-center gap-2 text-sm text-[#1f2a33]"><input type="checkbox" wire:model.defer="setup_show_steps" class="wm-check"> Show recipe steps</label>
+                                    <label class="inline-flex items-center gap-2 text-sm text-[#1f2a33]"><input type="checkbox" wire:model.defer="setup_show_process_settings" class="wm-check"> Show process settings (mill gap, P1 / P2 speed)</label>
                                 @endif
                             </div>
 
                             @if ($isBatchCard)
                                 <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_12rem] gap-3">
                                     <div>
-                                        <label class="block text-xs text-gray-600 mb-1">Footnote</label>
-                                        <textarea wire:model.defer="setup_footnote" rows="2" class="w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="Printed in red under the sheet"></textarea>
+                                        <label class="wm-label">Footnote</label>
+                                        <textarea wire:model.defer="setup_footnote" rows="2" class="wm-input" placeholder="Printed in red under the sheet"></textarea>
                                     </div>
                                     <div>
-                                        <label class="block text-xs text-gray-600 mb-1">Batch columns width (% of page)</label>
-                                        <input type="number" min="20" max="80" step="1" wire:model.defer="setup_batch_area_percent" class="w-full border-gray-300 rounded-md shadow-sm text-sm" />
+                                        <label class="wm-label">Batch columns width (% of page)</label>
+                                        <input type="number" min="20" max="80" step="1" wire:model.defer="setup_batch_area_percent" class="wm-input" />
                                     </div>
                                 </div>
                             @endif
 
                             <div>
-                                <label class="block text-xs text-gray-600 mb-1">CCP / instruction message (one line per row)</label>
-                                <textarea wire:model.defer="setup_ccp_message" rows="5" class="w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="Enter instruction lines shown in the CCP block..."></textarea>
+                                <label class="wm-label">CCP / instruction message (one line per row)</label>
+                                <textarea wire:model.defer="setup_ccp_message" rows="5" class="wm-input" placeholder="Enter instruction lines shown in the CCP block..."></textarea>
                             </div>
 
                             <div class="space-y-3" x-data="documentColumnEditor">
-                                <div class="font-medium text-sm text-gray-800">Columns</div>
+                                <div class="wm-subhead">Columns</div>
 
                                 <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
                                     <div>
-                                        <label class="block text-xs text-gray-600 mb-1">Add field from corresponding form</label>
-                                        <select wire:model="setup_available_column_key" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                                        <label class="wm-label">Add field from corresponding form</label>
+                                        <select wire:model="setup_available_column_key" class="wm-input">
                                             <option value="">Select a field...</option>
                                             @foreach ($this->availableSetupColumns as $availableColumn)
                                                 <option value="{{ $availableColumn['key'] }}">{{ $availableColumn['label'] }} ({{ $availableColumn['key'] }})</option>
@@ -1203,10 +1203,10 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                         </select>
                                     </div>
                                     <div class="self-end">
-                                        <button type="button" wire:click="addSetupColumnFromAvailable" class="inline-flex items-center rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">Add selected field</button>
+                                        <button type="button" wire:click="addSetupColumnFromAvailable" class="wm-btn-outline wm-btn-outline--sm" style="padding-top:9px;padding-bottom:9px;">Add selected field</button>
                                     </div>
                                     <div class="self-end">
-                                        <button type="button" wire:click="addAllSetupColumns" @disabled($this->availableSetupColumns === []) class="inline-flex items-center rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-800 hover:bg-sky-100 disabled:opacity-50 disabled:cursor-not-allowed">Add all columns</button>
+                                        <button type="button" wire:click="addAllSetupColumns" @disabled($this->availableSetupColumns === []) class="wm-btn-outline wm-btn-outline--sm wm-btn-outline--gold" style="padding-top:9px;padding-bottom:9px;">Add all columns</button>
                                     </div>
                                 </div>
 
@@ -1224,16 +1224,16 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                         <div
                                             class="text-xs rounded-md border px-3 py-1.5"
-                                            :class="overLimit ? 'border-red-200 bg-red-50 text-red-700' : 'border-slate-200 bg-slate-50 text-slate-700'"
+                                            :class="overLimit ? 'border-red-200 bg-red-50 text-red-700' : 'border-[#e6dcc5] bg-[#fdf6e3] text-[#4a3818]'"
                                         >
                                             Visible total: <span class="font-semibold" x-text="fmt(visibleTotal) + '%'"></span>
                                             |
                                             Remaining: <span x-text="fmt(100 - visibleTotal) + '%'"></span>
                                         </div>
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <button type="button" x-on:click="fitToPage()" :disabled="visibleCols.length === 0" class="inline-flex items-center rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50" title="Scale visible widths so they total exactly 100%, keeping their proportions">Fit to 100%</button>
-                                            <button type="button" x-on:click="autoWidths()" :disabled="visibleCols.length === 0" class="inline-flex items-center rounded-md border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs text-sky-800 hover:bg-sky-100 disabled:opacity-50" title="Size each column to its header and sample content, totalling 100%">Auto-adjust widths</button>
-                                            <button type="button" x-on:click="addCustomColumn()" class="inline-flex items-center rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">+ Custom column</button>
+                                            <button type="button" x-on:click="fitToPage()" :disabled="visibleCols.length === 0" class="wm-btn-outline wm-btn-outline--sm" title="Scale visible widths so they total exactly 100%, keeping their proportions">Fit to 100%</button>
+                                            <button type="button" x-on:click="autoWidths()" :disabled="visibleCols.length === 0" class="wm-btn-outline wm-btn-outline--sm wm-btn-outline--gold" title="Size each column to its header and sample content, totalling 100%">Auto-adjust widths</button>
+                                            <button type="button" x-on:click="addCustomColumn()" class="wm-btn-outline wm-btn-outline--sm">+ Custom column</button>
                                         </div>
                                     </div>
 
@@ -1242,8 +1242,8 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                     </div>
 
                                     <div class="overflow-x-auto">
-                                        <table class="min-w-full divide-y divide-gray-200 text-xs">
-                                            <thead class="bg-gray-50 text-gray-500 uppercase">
+                                        <table class="min-w-full text-xs">
+                                            <thead class="wm-band">
                                                 <tr>
                                                     <th class="px-1 py-2"></th>
                                                     <th class="px-2 py-2 text-left">Show</th>
@@ -1254,7 +1254,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                     <th class="px-2 py-2 text-left"></th>
                                                 </tr>
                                             </thead>
-                                            <tbody class="divide-y divide-gray-100">
+                                            <tbody class="divide-y divide-[#efe7d4] text-[#1f2a33]">
                                                 <template x-for="(col, index) in cols" :key="index">
                                                     <tr
                                                         :draggable="rowArmed === index"
@@ -1264,30 +1264,30 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                         x-on:dragend="rowDragEnd()"
                                                         :class="{
                                                             'opacity-40': rowFrom === index,
-                                                            'bg-sky-50': rowFrom !== null && rowOver === index && rowFrom !== index,
-                                                            'bg-gray-50 text-gray-400': ! col.visible,
+                                                            'bg-[#fdf6e3]': rowFrom !== null && rowOver === index && rowFrom !== index,
+                                                            'bg-[#f6f0e2] text-[#9a8b6d]': ! col.visible,
                                                         }"
                                                     >
                                                         <td class="px-1 py-2">
                                                             <span
-                                                                class="cursor-grab select-none px-1 text-gray-400 hover:text-gray-700"
+                                                                class="cursor-grab select-none px-1 text-[#b8a77f] hover:text-[#1f3f4f]"
                                                                 title="Drag to reorder"
                                                                 x-on:pointerdown="rowArmed = index"
                                                                 x-on:pointerup="rowArmed = null"
                                                             >&#x2807;</span>
                                                         </td>
-                                                        <td class="px-2 py-2"><input type="checkbox" x-model="col.visible" class="rounded border-gray-300 text-sky-600"></td>
-                                                        <td class="px-2 py-2"><input x-model="col.key" class="w-full border-gray-300 rounded-md text-xs" placeholder="field_key" /></td>
-                                                        <td class="px-2 py-2"><input x-model="col.label" class="w-full border-gray-300 rounded-md text-xs" placeholder="Column label" /></td>
-                                                        <td class="px-2 py-2"><input type="number" min="1" max="100" step="0.5" x-model.number="col.width" class="w-24 border-gray-300 rounded-md text-xs" /></td>
-                                                        <td class="px-2 py-2" :class="runningTotal(index) > 100 ? 'text-red-700 font-semibold' : 'text-gray-600'" x-text="fmt(runningTotal(index)) + '%'"></td>
+                                                        <td class="px-2 py-2"><input type="checkbox" x-model="col.visible" class="wm-check"></td>
+                                                        <td class="px-2 py-2"><input x-model="col.key" class="wm-input wm-input--sm" placeholder="field_key" /></td>
+                                                        <td class="px-2 py-2"><input x-model="col.label" class="wm-input wm-input--sm" placeholder="Column label" /></td>
+                                                        <td class="px-2 py-2"><input type="number" min="1" max="100" step="0.5" x-model.number="col.width" class="wm-input wm-input--sm" style="width:6rem;" /></td>
+                                                        <td class="px-2 py-2" :class="runningTotal(index) > 100 ? 'text-red-700 font-semibold' : 'text-[#6b5d42]'" x-text="fmt(runningTotal(index)) + '%'"></td>
                                                         <td class="px-2 py-2">
                                                             <button type="button" x-on:click="removeColumn(index)" class="text-red-600 hover:text-red-700">Remove</button>
                                                         </td>
                                                     </tr>
                                                 </template>
                                                 <tr x-show="cols.length === 0">
-                                                    <td colspan="7" class="px-2 py-3 text-gray-500">No columns configured yet for this document.</td>
+                                                    <td colspan="7" class="px-2 py-3 text-[#9a8b6d]">No columns configured yet for this document.</td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -1295,34 +1295,34 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
 
                                     <div class="space-y-2">
                                         <div class="flex flex-wrap items-baseline justify-between gap-2">
-                                            <div class="font-medium text-sm text-gray-800">Layout preview</div>
-                                            <div class="text-xs text-gray-500">Drag a column header to move it. Drag the edge between two headers to resize them.</div>
+                                            <div class="wm-subhead">Layout preview</div>
+                                            <div class="wm-hint">Drag a column header to move it. Drag the edge between two headers to resize them.</div>
                                         </div>
 
                                         <div x-show="isBatchCard && ! recipe.recipe_code" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">Choose the recipe under Data source to preview its ingredients and steps - sample values shown for now.</div>
-                                        <div x-show="isBatchCard && recipe.recipe_code && ! recipe.batch_size_kg" class="text-xs text-gray-600 bg-slate-50 border border-slate-200 rounded-md px-3 py-2">The recipe card has no batch size, so quantities are shown per kg. The printed card uses each MO's batch size.</div>
-                                        <div x-show="isBatchCard && (recipe.batch_sizes || []).length > 1" class="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                                        <div x-show="isBatchCard && recipe.recipe_code && ! recipe.batch_size_kg" class="text-xs text-[#4a3818] bg-[#fdf6e3] border border-[#e6dcc5] rounded-md px-3 py-2">The recipe card has no batch size, so quantities are shown per kg. The printed card uses each MO's batch size.</div>
+                                        <div x-show="isBatchCard && (recipe.batch_sizes || []).length > 1" class="flex flex-wrap items-center gap-2 text-xs text-[#6b5d42]">
                                             <span>Preview batch size:</span>
                                             <template x-for="size in (recipe.batch_sizes || [])" :key="size">
                                                 <button
                                                     type="button"
-                                                    class="rounded-full border px-2.5 py-0.5"
-                                                    :class="Number(recipe.batch_size_kg) === Number(size) ? 'border-sky-500 bg-sky-50 text-sky-800' : 'border-gray-300 hover:bg-gray-50'"
+                                                    class="wm-chip"
+                                                    :class="Number(recipe.batch_size_kg) === Number(size) ? 'wm-chip--on' : ''"
                                                     x-on:click="$wire.set('preview_batch_size', String(size))"
                                                     x-text="`${size} kg`"
                                                 ></button>
                                             </template>
-                                            <span class="text-gray-400">Each batch size prints on its own sheet.</span>
+                                            <span class="text-[#9a8b6d]">Each batch size prints on its own sheet.</span>
                                         </div>
 
                                         <div x-show="hiddenCols.length > 0" class="flex flex-wrap items-center gap-1 text-xs">
-                                            <span class="text-gray-500">Hidden:</span>
+                                            <span class="text-[#9a8b6d]">Hidden:</span>
                                             <template x-for="hidden in hiddenCols" :key="hidden.index">
-                                                <button type="button" x-on:click="cols[hidden.index].visible = true" class="rounded-full border border-gray-300 px-2 py-0.5 text-gray-600 hover:bg-gray-50" title="Show this column" x-text="'+ ' + labelFor(hidden.col)"></button>
+                                                <button type="button" x-on:click="cols[hidden.index].visible = true" class="wm-chip" title="Show this column" x-text="'+ ' + labelFor(hidden.col)"></button>
                                             </template>
                                         </div>
 
-                                        <div x-ref="previewBox" class="relative rounded-md border border-gray-200 bg-slate-100" style="overflow: hidden; padding: 12px;">
+                                        <div x-ref="previewBox" class="relative rounded-xl border border-[#e6dcc5] bg-[#efe8d8]" style="overflow: hidden; padding: 12px;">
                                             <div :style="`width: ${page.w * scale}px; height: ${page.h * scale}px; margin: 0 auto; overflow: hidden;`">
                                                 <div
                                                     class="bg-white shadow relative"
@@ -1359,7 +1359,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                                             :class="{
                                                                                 'cursor-grab': ! resizing,
                                                                                 'opacity-40': headFrom === vi,
-                                                                                'outline outline-2 outline-sky-500': headFrom !== null && headOver === vi && headFrom !== vi,
+                                                                                'outline outline-2 outline-[#c9a24a]': headFrom !== null && headOver === vi && headFrom !== vi,
                                                                             }"
                                                                             :draggable="! resizing"
                                                                             x-on:dragstart="headDragStart($event, vi)"
@@ -1367,13 +1367,13 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                                             x-on:drop.prevent="headDrop(vi)"
                                                                             x-on:dragend="headFrom = null; headOver = null"
                                                                             :title="`${labelFor(item.col)} - ${fmt(Number(item.col.width) || 0)}%`"
-                                                                            :style="`border: 1px solid #111827; padding: 4px; vertical-align: top; background: ${headOver === vi && headFrom !== null ? '#e0f2fe' : '#f3f4f6'}; font-size: ${num('setup_table_header_font_size', 10)}px; text-transform: uppercase; letter-spacing: 0.02em; text-align: center; overflow-wrap: anywhere;`"
+                                                                            :style="`border: 1px solid #111827; padding: 4px; vertical-align: top; background: ${headOver === vi && headFrom !== null ? '#fdf6e3' : '#f3f4f6'}; font-size: ${num('setup_table_header_font_size', 10)}px; text-transform: uppercase; letter-spacing: 0.02em; text-align: center; overflow-wrap: anywhere;`"
                                                                         >
                                                                             <span x-text="labelFor(item.col)"></span>
                                                                             <span
                                                                                 x-show="vi < visibleCols.length - 1"
-                                                                                class="absolute top-0 bottom-0 z-10 cursor-col-resize hover:bg-sky-400/60"
-                                                                                :class="resizing && resizing.vi === vi ? 'bg-sky-500/70' : ''"
+                                                                                class="absolute top-0 bottom-0 z-10 cursor-col-resize hover:bg-[#c9a24a]/60"
+                                                                                :class="resizing && resizing.vi === vi ? 'bg-[#c9a24a]/80' : ''"
                                                                                 style="right: -5px; width: 10px;"
                                                                                 draggable="false"
                                                                                 x-on:pointerdown.stop.prevent="startResize($event, vi)"
@@ -1479,7 +1479,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                                             :class="{
                                                                                 'cursor-grab': ! resizing,
                                                                                 'opacity-40': headFrom === vi,
-                                                                                'outline outline-2 outline-sky-500': headFrom !== null && headOver === vi && headFrom !== vi,
+                                                                                'outline outline-2 outline-[#c9a24a]': headFrom !== null && headOver === vi && headFrom !== vi,
                                                                             }"
                                                                             :draggable="! resizing"
                                                                             x-on:dragstart="headDragStart($event, vi)"
@@ -1487,13 +1487,13 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                                             x-on:drop.prevent="headDrop(vi)"
                                                                             x-on:dragend="headFrom = null; headOver = null"
                                                                             :title="`${labelFor(item.col)} - ${fmt(Number(item.col.width) || 0)}%`"
-                                                                            :style="`border: 1px solid #222; padding: 2px 3px; background: ${headOver === vi && headFrom !== null ? '#e0f2fe' : '#f3f3f3'}; font-size: ${num('setup_table_header_font_size', 8)}px; text-transform: uppercase; text-align: ${isNumericKey(item.col.key) ? 'right' : 'left'}; overflow-wrap: anywhere;`"
+                                                                            :style="`border: 1px solid #222; padding: 2px 3px; background: ${headOver === vi && headFrom !== null ? '#fdf6e3' : '#f3f3f3'}; font-size: ${num('setup_table_header_font_size', 8)}px; text-transform: uppercase; text-align: ${isNumericKey(item.col.key) ? 'right' : 'left'}; overflow-wrap: anywhere;`"
                                                                         >
                                                                             <span x-text="labelFor(item.col)"></span>
                                                                             <span
                                                                                 x-show="vi < visibleCols.length - 1"
-                                                                                class="absolute top-0 bottom-0 z-10 cursor-col-resize hover:bg-sky-400/60"
-                                                                                :class="resizing && resizing.vi === vi ? 'bg-sky-500/70' : ''"
+                                                                                class="absolute top-0 bottom-0 z-10 cursor-col-resize hover:bg-[#c9a24a]/60"
+                                                                                :class="resizing && resizing.vi === vi ? 'bg-[#c9a24a]/80' : ''"
                                                                                 style="right: -5px; width: 10px;"
                                                                                 draggable="false"
                                                                                 x-on:pointerdown.stop.prevent="startResize($event, vi, 'batchCardTable', (100 - batchArea) / 100)"
@@ -1563,9 +1563,9 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                             </div>
                                         </div>
 
-                                        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                                        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#9a8b6d]">
                                             <template x-for="item in visibleCols" :key="item.index">
-                                                <span><span class="text-gray-700" x-text="labelFor(item.col)"></span> <span x-text="fmt(Number(item.col.width) || 0) + '%'"></span></span>
+                                                <span><span class="text-[#1f3f4f] font-semibold" x-text="labelFor(item.col)"></span> <span x-text="fmt(Number(item.col.width) || 0) + '%'"></span></span>
                                             </template>
                                         </div>
                                     </div>
@@ -1573,20 +1573,20 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                             </div>
 
                             <div class="flex items-center justify-end gap-2">
-                                <x-secondary-button type="button" wire:click="clearDocumentSetupDraft">Clear</x-secondary-button>
-                                <x-primary-button type="button" wire:click="saveDocumentSetup">Save changes</x-primary-button>
+                                <button type="button" class="wm-btn-outline" wire:click="clearDocumentSetupDraft">Clear</button>
+                                <button type="button" class="wm-btn-dark" wire:click="saveDocumentSetup">Save changes</button>
                             </div>
                         </div>
 
-                        <div class="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
-                            <div class="font-medium text-gray-800">Document Change History</div>
+                        <div class="wm-section space-y-4">
+                            <div class="wm-section-title">Document Change History</div>
 
                             @if (! $selectedDocumentId)
-                                <div class="text-sm text-gray-500">Save the document metadata first. History entries are recorded automatically on each save.</div>
+                                <div class="text-sm text-[#9a8b6d]">Save the document metadata first. History entries are recorded automatically on each save.</div>
                             @else
                                 <div class="overflow-x-auto">
-                                    <table class="min-w-full divide-y divide-gray-200 text-sm">
-                                        <thead class="bg-gray-50 text-left text-xs text-gray-500 uppercase">
+                                    <table class="min-w-full text-sm">
+                                        <thead class="wm-band text-left">
                                             <tr>
                                                 <th class="px-3 py-2">Issue Version</th>
                                                 <th class="px-3 py-2">Date Issued</th>
@@ -1595,7 +1595,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                 <th class="px-3 py-2">Recorded By</th>
                                             </tr>
                                         </thead>
-                                        <tbody class="divide-y divide-gray-100">
+                                        <tbody class="divide-y divide-[#efe7d4] text-[#1f2a33]">
                                             @forelse ($this->selectedDocumentChanges as $change)
                                                 <tr>
                                                     <td class="px-3 py-2">{{ $change->issue_version ?: '—' }}</td>
@@ -1606,7 +1606,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                 </tr>
                                             @empty
                                                 <tr>
-                                                    <td colspan="5" class="px-3 py-5 text-center text-gray-500">No change history recorded for this document yet.</td>
+                                                    <td colspan="5" class="px-3 py-5 text-center text-[#9a8b6d]">No change history recorded for this document yet.</td>
                                                 </tr>
                                             @endforelse
                                         </tbody>
