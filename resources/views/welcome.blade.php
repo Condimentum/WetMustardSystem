@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <x-view-mode-boot />
     <title>Sign In - {{ config('app.name', 'WetMustardSystem') }}</title>
     <style>
         * {
@@ -113,6 +114,8 @@
     </style>
 </head>
 <body>
+    <x-view-mode-toggle />
+
     <div class="login-container">
         <div class="login-logo">
             <img src="{{ asset('assets/condimentum-logo.png') }}" alt="Condimentum Logo">
@@ -121,7 +124,7 @@
         <h1>Welcome Back</h1>
         <p class="login-subtitle">{{ config('app.name', 'WetMustardSystem') }}</p>
 
-        <a href="{{ route('auth.microsoft.redirect') }}" class="btn-microsoft">
+        <a href="{{ route('auth.microsoft.redirect') }}" target="_top" class="btn-microsoft">
             <img src="https://learn.microsoft.com/en-us/entra/identity-platform/media/howto-add-branding-in-apps/ms-symbollockup_mssymbol_19.png" alt="Microsoft">
             Sign in with Microsoft
         </a>

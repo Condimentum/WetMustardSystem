@@ -5,6 +5,8 @@
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
+        <x-view-mode-boot />
+
         <!-- Add-to-home-screen / standalone app behaviour on tablets -->
         <link rel="manifest" href="{{ asset('manifest.json') }}">
         <meta name="theme-color" content="#1c2552">
@@ -26,6 +28,7 @@
     </head>
     <body class="font-sans text-gray-900 antialiased">
         <x-loading-indicator />
+        <x-view-mode-toggle />
 
         <div class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0 bg-gray-100">
             <div>
