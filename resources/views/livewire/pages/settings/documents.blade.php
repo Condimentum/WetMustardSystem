@@ -874,13 +874,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
             <x-settings-subnav />
         </section>
 
-        @if ($flash)
-            <div @class([
-                'text-sm rounded-lg px-4 py-3 border',
-                'bg-green-50 border-green-200 text-green-800' => $flashLevel === 'success',
-                'bg-red-50 border-red-200 text-red-800' => $flashLevel === 'error',
-            ])>{{ $flash }}</div>
-        @endif
+        <x-flash-modal :message="$flash" :level="$flashLevel" />
 
         <section class="wm-card wm-card--gear-bl">
             <div class="flex items-center justify-between gap-2">

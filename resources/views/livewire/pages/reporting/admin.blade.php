@@ -166,14 +166,7 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
             <x-settings-subnav />
         </section>
 
-        @if ($flash)
-            <div @class([
-                'text-sm rounded-lg px-4 py-3 border',
-                'bg-green-50 border-green-200 text-green-800' => $flashLevel === 'success',
-                'bg-amber-50 border-amber-200 text-amber-800' => $flashLevel === 'warning',
-                'bg-red-50 border-red-200 text-red-800' => $flashLevel === 'error',
-            ])>{{ $flash }}</div>
-        @endif
+        <x-flash-modal :message="$flash" :level="$flashLevel" />
 
         {{-- Send Now range --}}
         <section class="wm-card wm-card--gear-bl" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;">

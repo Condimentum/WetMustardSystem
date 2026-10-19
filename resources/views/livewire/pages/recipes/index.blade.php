@@ -148,6 +148,14 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
 
                 $row['has_local_card'] = $card !== null;
 
+                // Active = at least one of: batch size(s), process steps, PLC recipe number.
+                $row['is_active'] = $card !== null && (
+                    (is_array($card->batch_sizes_kg) && $card->batch_sizes_kg !== [])
+                    || ($card->batch_size_kg !== null && (float) $card->batch_size_kg > 0)
+                    || (is_array($card->steps) && $card->steps !== [])
+                    || trim((string) $card->plc_recipe_number) !== ''
+                );
+
                 return $row;
             }, $this->rows);
 
@@ -161,6 +169,7 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
                         'structure_product_id' => (string) $recipeCode,
                         'structure_product_description' => (string) $first['structure_product_description'],
                         'has_local_card' => (bool) ($first['has_local_card'] ?? false),
+                        'is_active' => (bool) ($first['is_active'] ?? false),
                     ];
                 })
                 ->sortBy('structure_product_id')
@@ -538,9 +547,7 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
             <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ $error }}</div>
         @endif
 
-        @if ($flash)
-            <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{{ $flash }}</div>
-        @endif
+        <x-flash-modal :message="$flash" />
 
         @if ($info)
             <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{{ $info }}</div>
@@ -556,8 +563,17 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
             </div>
         </section>
 
-        <section class="wm-card wm-card--gear-tr">
-            <h2 class="wm-title" style="font-size:1.05rem;">Recipe List</h2>
+        @php
+            $recipeGroups = [
+                ['title' => 'Active Recipes', 'hint' => 'Have a batch size, steps or a PLC recipe set up.', 'rows' => array_values(array_filter($recipeRows, static fn (array $r): bool => $r['is_active'] ?? false)), 'empty' => 'No active recipes yet.'],
+                ['title' => 'Inactive Recipes', 'hint' => 'No batch size, no steps and no PLC recipe yet.', 'rows' => array_values(array_filter($recipeRows, static fn (array $r): bool => ! ($r['is_active'] ?? false))), 'empty' => 'No inactive recipes.'],
+            ];
+        @endphp
+
+        @foreach ($recipeGroups as $group)
+        <section class="wm-card {{ $loop->first ? 'wm-card--gear-tr' : 'wm-card--gear-bl' }}" wire:key="recipe-group-{{ $loop->index }}">
+            <h2 class="wm-title" style="font-size:1.05rem;">{{ $group['title'] }} <span style="font-weight:600;color:#6b7280;">({{ count($group['rows']) }})</span></h2>
+            <p class="mt-1 text-xs text-slate-500">{{ $group['hint'] }}</p>
             <div class="wm-table" style="margin-top:14px;">
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-200 text-sm">
@@ -569,8 +585,8 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
                     </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100 bg-white text-slate-700">
-                        @forelse ($recipeRows as $row)
-                            <tr>
+                        @forelse ($group['rows'] as $row)
+                            <tr wire:key="recipe-{{ $row['structure_product_id'] }}">
                                 <td class="px-3 py-2">{{ $row['structure_product'] }}</td>
                                 <td class="px-3 py-2 font-medium text-slate-900">
                                     <button type="button" wire:click="openRecipeModal('{{ $row['structure_product_id'] }}')" class="text-sky-700 hover:text-sky-900 hover:underline">
@@ -581,7 +597,7 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="3" class="px-4 py-6 text-center text-slate-500">No structures found for the current filter.</td>
+                                <td colspan="3" class="px-4 py-6 text-center text-slate-500">{{ $recipeRows === [] ? 'No structures found for the current filter.' : $group['empty'] }}</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -589,6 +605,7 @@ new #[Layout('layouts.app')] #[Title('Recipes')] class extends Component {
             </div>
             </div>
         </section>
+        @endforeach
 
         @if ($showRecipeModal)
             <div class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-2 sm:p-4">

@@ -89,13 +89,7 @@ new #[Layout('layouts.app')] #[Title('Settings Admin')] class extends Component 
             <x-settings-subnav />
         </section>
 
-        @if ($flash)
-            <div @class([
-                'text-sm rounded-lg px-4 py-3 border',
-                'bg-green-50 border-green-200 text-green-800' => $flashLevel === 'success',
-                'bg-red-50 border-red-200 text-red-800' => $flashLevel === 'error',
-            ])>{{ $flash }}</div>
-        @endif
+        <x-flash-modal :message="$flash" :level="$flashLevel" />
 
         <section class="wm-card wm-card--gear-bl">
             <h2 class="wm-title" style="font-size:1.05rem;">Feature Toggles</h2>

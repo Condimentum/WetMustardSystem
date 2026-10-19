@@ -106,9 +106,7 @@ new #[Layout('layouts.app')] #[Title('Notifications Setup')] class extends Compo
             <x-settings-subnav />
         </section>
 
-        @if ($flash)
-            <div class="bg-green-50 border border-green-200 text-green-800 text-sm rounded-lg px-4 py-3">{{ $flash }}</div>
-        @endif
+        <x-flash-modal :message="$flash" />
 
         {{-- Rules --}}
         <section class="wm-card wm-card--gear-bl">
