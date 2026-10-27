@@ -164,14 +164,14 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
                     <div class="wm-sub" style="text-transform:uppercase;letter-spacing:.1em;">Start of Shift &middot; Hourly &middot; End of Shift Checks</div>
                 </div>
 
-                <span class="wm-pill" style="margin-left:auto;background:linear-gradient(180deg,#2b6f86,#1d4f61);">
+                <span class="wm-pill" style="margin-left:auto;background:linear-gradient(180deg,#2a4d7d,#1f3b63);">
                     {{ $this->todayStats['total'] }} checks today
                 </span>
             </div>
 
             <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
-                <span class="wm-pill" style="background:linear-gradient(180deg,#3aa33a,#1d6b24);">Pass: {{ $this->todayStats['pass'] }}</span>
-                <span class="wm-pill" style="background:linear-gradient(180deg,#c0392b,#8a271b);">Fail: {{ $this->todayStats['fail'] }}</span>
+                <span class="wm-pill" style="background:linear-gradient(180deg,#9bc12f,#7aa01f);">Pass: {{ $this->todayStats['pass'] }}</span>
+                <span class="wm-pill" style="background:linear-gradient(180deg,#d0663a,#b04a22);">Fail: {{ $this->todayStats['fail'] }}</span>
             </div>
 
             <div style="margin-top:18px;">
@@ -181,7 +181,7 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
         @endif
 
         <form wire:submit="record" class="wm-table" style="margin-top:0;">
-            <div class="flex items-center justify-between px-6 py-4" style="background:linear-gradient(180deg,#2b3238,#171c20);border-radius:16px 16px 0 0;">
+            <div class="flex items-center justify-between px-6 py-4" style="background:#0b4a3a;border-radius:16px 16px 0 0;">
                 <h2 class="text-lg font-semibold text-white">Record a check</h2>
                 <svg class="h-6 w-6 text-white/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
@@ -291,7 +291,7 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
         </form>
 
         <div class="wm-table">
-            <div class="flex items-center justify-between px-6 py-4" style="background:linear-gradient(180deg,#2b3238,#171c20);border-radius:16px 16px 0 0;">
+            <div class="flex items-center justify-between px-6 py-4" style="background:#0b4a3a;border-radius:16px 16px 0 0;">
                 <h3 class="text-lg font-semibold text-white">Today&apos;s Check Summary</h3>
                 <svg class="h-6 w-6 text-white/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
                     <rect x="3.5" y="5" width="17" height="15" rx="2" />
@@ -302,7 +302,7 @@ new #[Layout('layouts.app')] #[Title('Daily Metal Detection')] class extends Com
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-200 text-sm">
                     <thead>
-                        <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
+                        <tr style="background:#7cc0a2;color:#0b4a3a;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
                             <th class="px-4 py-3">Time</th>
                             <th class="px-4 py-3">Type</th>
                             <th class="px-4 py-3">Context</th>

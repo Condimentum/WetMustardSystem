@@ -11,7 +11,7 @@
         padding: 6px 12px;
         border: 2px solid #c9a24a;
         border-radius: 999px;
-        background: radial-gradient(circle at 35% 30%, #3a4686, #1c2552 70%);
+        background: radial-gradient(circle at 35% 30%, #1f8a6a, #0b4a3a 70%);
         color: #f3d98a;
         font-size: .72rem;
         font-weight: 700;

@@ -9,7 +9,7 @@
 
         <!-- Add-to-home-screen / standalone app behaviour on tablets -->
         <link rel="manifest" href="{{ asset('manifest.json') }}">
-        <meta name="theme-color" content="#1c2552">
+        <meta name="theme-color" content="#0b4a3a">
         <meta name="mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,14 +26,16 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
         @livewireStyles
 
-        {{-- Cream/gear backdrop behind every page's content, so no plain-gray background shows around the edges --}}
+        {{-- Mint backdrop with large green discs and a faint gear behind every page's content --}}
         <style>
             .min-h-screen.bg-gray-100 {
-                background-color: #f8f4ea;
-                background-image: url('{{ asset('gear-graphic.png') }}'), url('{{ asset('workspace-bg.png') }}?v={{ filemtime(public_path('workspace-bg.png')) }}');
-                background-repeat: no-repeat, no-repeat;
-                background-position: right -40px top -30px, center;
-                background-size: 280px, cover;
+                background-color: #ffffff;
+                background-image:
+                    url('{{ asset('gear-graphic.png') }}'),
+                    radial-gradient(circle at 100% 0, #0b4a3a 0, #0b4a3a 190px, transparent 191px);
+                background-repeat: no-repeat;
+                background-position: right 60px top 20px, 100% 0;
+                background-size: 280px, auto;
                 background-attachment: fixed;
             }
         </style>

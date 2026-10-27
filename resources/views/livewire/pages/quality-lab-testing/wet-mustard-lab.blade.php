@@ -172,7 +172,7 @@ new #[Layout('layouts.app')] #[Title('WM005 Wet Mustard Lab Testing')] class ext
         @endif
 
         <form wire:submit="save" class="wm-table">
-            <div class="flex items-center justify-between px-6 py-4" style="background:linear-gradient(180deg,#2b3238,#171c20);border-radius:16px 16px 0 0;">
+            <div class="flex items-center justify-between px-6 py-4" style="background:#0b4a3a;border-radius:16px 16px 0 0;">
                 <h2 class="text-lg font-semibold text-white">New lab test row</h2>
             </div>
 
@@ -220,13 +220,13 @@ new #[Layout('layouts.app')] #[Title('WM005 Wet Mustard Lab Testing')] class ext
         </form>
 
         <div class="wm-table">
-            <div class="flex items-center justify-between px-6 py-4" style="background:linear-gradient(180deg,#2b3238,#171c20);border-radius:16px 16px 0 0;">
+            <div class="flex items-center justify-between px-6 py-4" style="background:#0b4a3a;border-radius:16px 16px 0 0;">
                 <h3 class="text-lg font-semibold text-white">Recent WM005 entries</h3>
             </div>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-200 text-sm">
                     <thead>
-                        <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
+                        <tr style="background:#7cc0a2;color:#0b4a3a;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
                             <th class="px-4 py-3">Date</th>
                             <th class="px-4 py-3">Time</th>
                             <th class="px-4 py-3">Batch</th>

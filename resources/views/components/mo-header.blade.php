@@ -45,8 +45,8 @@
 <style>
     @font-face { font-family: 'Libre Baskerville'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('{{ asset('fonts/libre-baskerville-latin.woff2') }}') format('woff2'); }
 
-    .moh { position: relative; overflow: hidden; border: 1px solid #e3d8bf; border-radius: 18px; padding: 24px 28px 20px; container-type: inline-size; box-shadow: 0 8px 24px rgba(110, 85, 35, .12);
-        background: #f8f4ea url('{{ asset('workspace-bg.png') }}?v={{ filemtime(public_path('workspace-bg.png')) }}') center / cover no-repeat; }
+    .moh { position: relative; overflow: hidden; border: 1px solid #d3e6de; border-radius: 18px; padding: 24px 28px 20px; container-type: inline-size; box-shadow: 0 8px 24px rgba(11, 74, 58, .12);
+        background: #ffffff url('{{ asset('gear-graphic.png') }}') no-repeat right -50px top -40px / 240px; }
     .moh-serif { font-family: 'Libre Baskerville', Georgia, 'Times New Roman', serif; font-variant-numeric: lining-nums; font-feature-settings: "lnum" 1; }
 
     .moh-top { display: grid; grid-template-columns: 150px minmax(0, 1fr); grid-template-areas: "photo head" "photo tiles"; column-gap: 26px; row-gap: 14px; align-items: center; }
@@ -55,13 +55,13 @@
 
     .moh-head { grid-area: head; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
     .moh-title { font-size: 1.7rem; font-weight: 700; line-height: 1.1; color: #1a1a1a; letter-spacing: .01em; }
-    .moh-sub { margin-top: 6px; font-size: .8rem; letter-spacing: .12em; color: #4b4636; }
+    .moh-sub { margin-top: 6px; font-size: .8rem; letter-spacing: .12em; color: #34524a; }
     .moh-status { display: inline-flex; flex: none; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 999px; color: #fff; font-size: .82rem; font-weight: 700; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 3px 8px rgba(0, 0, 0, .25); }
     .moh-status-dot { width: 8px; height: 8px; border-radius: 50%; }
 
     .moh-tiles { grid-area: tiles; display: flex; flex-wrap: wrap; gap: 12px; }
-    .moh-tile { flex: 1 1 auto; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 14px 16px; border: 1px solid rgba(214, 202, 176, .9); border-radius: 12px; background: linear-gradient(180deg, rgba(255, 255, 255, .8), rgba(247, 243, 233, .65)); box-shadow: 0 4px 10px rgba(110, 85, 35, .10), inset 0 1px 0 #fff; }
-    .moh-tile-icon { flex: none; color: #4b4636; }
+    .moh-tile { flex: 1 1 auto; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 14px 16px; border: 1px solid rgba(179, 214, 199, .9); border-radius: 12px; background: linear-gradient(180deg, rgba(255, 255, 255, .8), rgba(240, 246, 242, .65)); box-shadow: 0 4px 10px rgba(11, 74, 58, .10), inset 0 1px 0 #fff; }
+    .moh-tile-icon { flex: none; color: #34524a; }
     .moh-tile--desc { flex: 1.6 1 250px; }
     .moh-tile-plant { flex: none; width: 54px; height: 64px; object-fit: contain; }
     .moh-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: #3a3a3a; }
@@ -69,16 +69,16 @@
     .moh-value--desc { font-size: .9rem; line-height: 1.3; white-space: normal; }
 
     .moh-qty-bar { margin-top: 20px; padding: 11px 18px; border-radius: 12px 12px 0 0; color: #fff; font-size: .78rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
-        background: radial-gradient(ellipse 60% 140% at 25% 0%, rgba(90, 84, 170, .55), transparent 70%), radial-gradient(ellipse 50% 120% at 80% 100%, rgba(70, 64, 150, .4), transparent 70%), linear-gradient(180deg, #2a2766, #1b1946);
+        background: radial-gradient(ellipse 60% 140% at 25% 0%, rgba(60, 170, 130, .45), transparent 70%), radial-gradient(ellipse 50% 120% at 80% 100%, rgba(40, 140, 110, .35), transparent 70%), linear-gradient(180deg, #0f5642, #0a3f31);
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, .15); }
-    .moh-qty { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid #e3d8bf; border-top: 0; border-radius: 0 0 12px 12px; background: rgba(255, 253, 247, .88); }
-    .moh-qty-cell { display: flex; align-items: center; justify-content: center; gap: 12px; min-width: 0; padding: 14px 12px; border-left: 1px solid #e3d8bf; }
+    .moh-qty { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid #d3e6de; border-top: 0; border-radius: 0 0 12px 12px; background: rgba(251, 253, 251, .88); }
+    .moh-qty-cell { display: flex; align-items: center; justify-content: center; gap: 12px; min-width: 0; padding: 14px 12px; border-left: 1px solid #d3e6de; }
     .moh-qty-cell:first-child { border-left: 0; }
     .moh-qty-img { flex: none; width: 58px; height: 58px; object-fit: contain; }
     .moh-qty-value { margin-top: 3px; font-size: 1.15rem; font-weight: 700; }
-    .moh-coin { flex: none; display: flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 50%; border: 2px solid #a07a2c; color: #3b2a0a; font-weight: 700;
+    .moh-coin { flex: none; display: flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 50%; border: 2px solid #a07a2c; color: #0b4a3a; font-weight: 700;
         background: radial-gradient(circle at 35% 30%, #fff3c4, #e6bf55 45%, #b8892f 80%, #8a6420); box-shadow: inset 0 0 0 4px rgba(255, 240, 190, .45), 0 3px 6px rgba(0, 0, 0, .25); }
-    .moh-bar { width: 110px; height: 8px; margin-top: 6px; overflow: hidden; border: 1px solid #cfc6b0; border-radius: 999px; background: #fff; }
+    .moh-bar { width: 110px; height: 8px; margin-top: 6px; overflow: hidden; border: 1px solid #b2d3c7; border-radius: 999px; background: #fff; }
     .moh-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #2f6b3a, #4a8f4f); }
 
     .moh-flower { position: absolute; right: -4px; bottom: 0; height: 104px; pointer-events: none; }
@@ -89,7 +89,7 @@
     @container (max-width: 900px) {
         .moh-qty { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .moh-qty-cell:nth-child(odd) { border-left: 0; }
-        .moh-qty-cell:nth-child(n+3) { border-top: 1px solid #e3d8bf; }
+        .moh-qty-cell:nth-child(n+3) { border-top: 1px solid #d3e6de; }
         .moh-flower { display: none; }
     }
     @media (max-width: 767px) {
@@ -185,7 +185,7 @@
         <div class="moh-qty-cell">
             <svg class="moh-qty-img" viewBox="0 0 60 60" aria-hidden="true">
                 <circle cx="30" cy="30" r="28" fill="#3a3a3a"/>
-                <circle cx="30" cy="30" r="25.5" fill="#f7f1e1"/>
+                <circle cx="30" cy="30" r="25.5" fill="#f0f6f2"/>
                 @if ($outstandingShare >= 0.999)
                     <circle cx="30" cy="30" r="24" fill="#e3a82b" opacity=".85"/>
                 @elseif ($outstandingShare > 0)
@@ -200,7 +200,7 @@
             </svg>
             <div>
                 <div class="moh-label">Outstanding</div>
-                <div class="moh-qty-value moh-serif" style="color:#2b2a6b;">{{ $fmt((float) $outstanding) }}</div>
+                <div class="moh-qty-value moh-serif" style="color:#0f5642;">{{ $fmt((float) $outstanding) }}</div>
             </div>
         </div>
 

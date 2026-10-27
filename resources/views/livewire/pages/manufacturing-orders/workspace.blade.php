@@ -523,7 +523,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                                 $isCompleted = (string) $batch['status'] === \App\Models\BatchRecord::STATUS_COMPLETED;
                                 $batchTone = match ((string) $batch['status']) {
                                     \App\Models\BatchRecord::STATUS_IN_PROGRESS => ['strip' => '#c9a24a', 'pill' => 'linear-gradient(180deg,#d4ad55,#b8913a)', 'dot' => '#fdf3d0'],
-                                    \App\Models\BatchRecord::STATUS_COMPLETED => ['strip' => '#1f5c61', 'pill' => '#1f5c61', 'dot' => '#7fd1bf'],
+                                    \App\Models\BatchRecord::STATUS_COMPLETED => ['strip' => '#0f5642', 'pill' => '#0f5642', 'dot' => '#7fd1bf'],
                                     \App\Models\BatchRecord::STATUS_QA_REVIEW => ['strip' => '#6d5a96', 'pill' => '#6d5a96', 'dot' => '#d6ccf0'],
                                     \App\Models\BatchRecord::STATUS_CLOSED => ['strip' => '#6b7280', 'pill' => '#6b7280', 'dot' => '#d1d5db'],
                                     default => ['strip' => '#9b3b3b', 'pill' => '#9b3b3b', 'dot' => '#f5c2c2'],
@@ -589,27 +589,27 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                     </div>
                 @else
                     <h2 class="wm-title">Batch Workspace</h2>
-                    <div class="wm-row" style="--wm-strip:#c9a24a;margin-top:12px;">
+                    <div class="wm-row" style="--wm-strip:#3f8f98;margin-top:12px;">
                         <div style="display:flex;align-items:stretch;gap:0;flex-wrap:wrap;row-gap:14px;">
-                            <div style="padding:0 26px 0 0;min-width:180px;border-right:1px solid #ebe2cd;">
-                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#8a7a5c;font-weight:700;">Reference</div>
-                                <div style="margin-top:8px;font-size:24px;line-height:1.05;font-weight:800;color:#1f3f4f;">Not Created</div>
+                            <div style="padding:0 26px 0 0;min-width:180px;border-right:1px solid #d3e6de;">
+                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#6f8c83;font-weight:700;">Reference</div>
+                                <div style="margin-top:8px;font-size:24px;line-height:1.05;font-weight:800;color:#0b4a3a;">Not Created</div>
                             </div>
 
-                            <div style="padding:0 26px;min-width:150px;border-right:1px solid #ebe2cd;">
-                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#8a7a5c;font-weight:700;">Batch Qty</div>
-                                <div style="margin-top:8px;font-size:24px;line-height:1.05;font-weight:800;color:#1f3f4f;">{{ $batchPlannedQuantity !== '' ? $batchPlannedQuantity : '0' }}</div>
+                            <div style="padding:0 26px;min-width:150px;border-right:1px solid #d3e6de;">
+                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#6f8c83;font-weight:700;">Batch Qty</div>
+                                <div style="margin-top:8px;font-size:24px;line-height:1.05;font-weight:800;color:#0b4a3a;">{{ $batchPlannedQuantity !== '' ? $batchPlannedQuantity : '0' }}</div>
                             </div>
 
                             <div style="padding:0 26px;display:flex;flex-direction:column;justify-content:center;">
-                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#8a7a5c;font-weight:700;">Status</div>
+                                <div style="font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#6f8c83;font-weight:700;">Status</div>
                                 <span class="wm-pill" style="margin-top:8px;width:max-content;background:linear-gradient(180deg,#d4ad55,#b8913a);">
                                     <span class="wm-pill-dot" style="background:#fdf3d0;"></span>
                                     Awaiting First Batch
                                 </span>
                             </div>
 
-                            <div style="margin-left:auto;display:flex;align-items:center;color:#8a7a5c;font-size:14px;font-weight:600;">
+                            <div style="margin-left:auto;display:flex;align-items:center;color:#6f8c83;font-size:14px;font-weight:600;">
                                 No batches exist yet for this MO.
                             </div>
                         </div>
@@ -687,7 +687,7 @@ new #[Layout('layouts.app')] #[Title('MO Workspace')] class extends Component {
                     $palleconTone = fn (string $s): array => match ($s) {
                         'filling' => ['pill' => 'linear-gradient(180deg,#d4ad55,#b8913a)', 'dot' => '#fdf3d0'],
                         'open' => ['pill' => '#3d6a8a', 'dot' => '#c7e0f2'],
-                        'sealed' => ['pill' => '#1f5c61', 'dot' => '#7fd1bf'],
+                        'sealed' => ['pill' => '#0f5642', 'dot' => '#7fd1bf'],
                         'consumed' => ['pill' => '#6b7280', 'dot' => '#d1d5db'],
                         'on_hold' => ['pill' => '#9b3b3b', 'dot' => '#f5c2c2'],
                         default => ['pill' => '#6b7280', 'dot' => '#d1d5db'],

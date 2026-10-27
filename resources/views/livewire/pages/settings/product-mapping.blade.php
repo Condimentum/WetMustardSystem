@@ -300,10 +300,24 @@ new #[Layout('layouts.app')] #[Title('Product Mapping')] class extends Component
             </div>
 
             <div class="wm-table" style="margin-top:14px;">
-            <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <style>
+                .wm-resolved-table th, .wm-resolved-table td { overflow-wrap: anywhere; word-break: normal; vertical-align: top; }
+                .wm-resolved-table th { text-align: left; }
+                @media (max-width: 860px) {
+                    .wm-resolved-table, .wm-resolved-table tbody, .wm-resolved-table tr, .wm-resolved-table td { display: block; width: 100%; }
+                    .wm-resolved-table colgroup, .wm-resolved-table thead { display: none; }
+                    .wm-resolved-table tr { padding: 8px 0; }
+                    .wm-resolved-table td[data-label] { display: grid; grid-template-columns: 9rem 1fr; gap: 8px; padding: 4px 16px; }
+                    .wm-resolved-table td[data-label]::before { content: attr(data-label); font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #6b7280; }
+                }
+            </style>
+            <table class="wm-resolved-table w-full table-fixed divide-y divide-slate-200 text-sm">
+                <colgroup>
+                    <col style="width:12%"><col style="width:24%"><col style="width:10%"><col style="width:9%">
+                    <col style="width:11%"><col style="width:12%"><col style="width:22%">
+                </colgroup>
                 <thead>
-                    <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
+                    <tr style="background:#7cc0a2;color:#0b4a3a;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
                         <th class="px-3 py-3">Structure ProductId</th>
                         <th class="px-3 py-3">Product Description</th>
                         <th class="px-3 py-3">Unit Of Measure</th>
@@ -316,13 +330,13 @@ new #[Layout('layouts.app')] #[Title('Product Mapping')] class extends Component
                 <tbody class="divide-y divide-slate-100 bg-white text-slate-700">
                     @forelse ($resolvedRows as $row)
                         <tr class="{{ ($row['has_mapping_issue'] ?? false) ? 'animate-pulse bg-red-100 text-red-900' : '' }}">
-                            <td class="px-3 py-2 font-medium text-slate-900">{{ $row['structure_product_id'] }}</td>
-                            <td class="px-3 py-2">{{ $row['structure_product_description'] }}</td>
-                            <td class="px-3 py-2">{{ $row['structure_unit_of_measure_description'] !== '' ? $row['structure_unit_of_measure_description'] : '—' }}</td>
-                            <td class="px-3 py-2">{{ $row['structure_boxes_per_pallet'] !== null ? $row['structure_boxes_per_pallet'] : '—' }}</td>
-                            <td class="px-3 py-2">{{ $row['structure_batch_size_kg'] !== null ? number_format((float) $row['structure_batch_size_kg'], 5, '.', '') : '—' }}</td>
-                            <td class="px-3 py-2">{{ $row['recipe_product_id'] ?? '—' }}</td>
-                            <td class="px-3 py-2">{{ $row['recipe_product_description'] ?? '—' }}</td>
+                            <td data-label="Structure ProductId" class="px-3 py-2 font-medium text-slate-900">{{ $row['structure_product_id'] }}</td>
+                            <td data-label="Product Description" class="px-3 py-2">{{ $row['structure_product_description'] }}</td>
+                            <td data-label="Unit Of Measure" class="px-3 py-2">{{ $row['structure_unit_of_measure_description'] !== '' ? $row['structure_unit_of_measure_description'] : '—' }}</td>
+                            <td data-label="Boxes / Pallet" class="px-3 py-2">{{ $row['structure_boxes_per_pallet'] !== null ? $row['structure_boxes_per_pallet'] : '—' }}</td>
+                            <td data-label="Batch Size KG" class="px-3 py-2">{{ $row['structure_batch_size_kg'] !== null ? number_format((float) $row['structure_batch_size_kg'], 5, '.', '') : '—' }}</td>
+                            <td data-label="Recipe ProductId" class="px-3 py-2">{{ $row['recipe_product_id'] ?? '—' }}</td>
+                            <td data-label="Recipe Description" class="px-3 py-2">{{ $row['recipe_product_description'] ?? '—' }}</td>
                         </tr>
                     @empty
                         <tr>
@@ -331,7 +345,6 @@ new #[Layout('layouts.app')] #[Title('Product Mapping')] class extends Component
                     @endforelse
                 </tbody>
             </table>
-            </div>
             </div>
         </section>
 

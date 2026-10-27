@@ -24,12 +24,12 @@ new #[Layout('layouts.app')] #[Title('Quality & Lab Testing')] class extends Com
             </div>
 
             <div class="wm-rows">
-                <a href="{{ route('quality.lab-testing.wet-mustard-lab') }}" wire:navigate class="wm-row" style="display:block;text-decoration:none;--wm-strip:#c9a24a;">
+                <a href="{{ route('quality.lab-testing.wet-mustard-lab') }}" wire:navigate class="wm-row" style="display:block;text-decoration:none;--wm-strip:#3f8f98;">
                     <div class="wm-ref-text">Wet Mustard Lab Testing</div>
                     <div class="wm-sub">WM005 Quality analytical checks</div>
                 </a>
 
-                <a href="{{ route('quality.lab-testing.rinse-water-test') }}" wire:navigate class="wm-row" style="display:block;text-decoration:none;--wm-strip:#c9a24a;">
+                <a href="{{ route('quality.lab-testing.rinse-water-test') }}" wire:navigate class="wm-row" style="display:block;text-decoration:none;--wm-strip:#3f8f98;">
                     <div class="wm-ref-text">Rinse Water Test</div>
                     <div class="wm-sub">WM010 Chemical &amp; sulphite checks</div>
                 </a>

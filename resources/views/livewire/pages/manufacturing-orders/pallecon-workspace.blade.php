@@ -599,7 +599,7 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
 
             $palleconTone = static fn (Pallecon $p): array => match (true) {
                 $p->isOnHold() => ['bg' => '#9b3b3b', 'dot' => '#f5c2c2', 'label' => 'On hold'],
-                $p->status === Pallecon::STATUS_SEALED => ['bg' => '#1f5c61', 'dot' => '#7fd1bf', 'label' => ucfirst($p->status)],
+                $p->status === Pallecon::STATUS_SEALED => ['bg' => '#0f5642', 'dot' => '#7fd1bf', 'label' => ucfirst($p->status)],
                 $p->status === Pallecon::STATUS_CONSUMED => ['bg' => '#6b7280', 'dot' => '#d1d5db', 'label' => ucfirst($p->status)],
                 $p->status === Pallecon::STATUS_FILLING => ['bg' => 'linear-gradient(180deg,#d4ad55,#b8913a)', 'dot' => '#fdf3d0', 'label' => ucfirst($p->status)],
                 default => ['bg' => '#3d6a8a', 'dot' => '#c7e0f2', 'label' => ucfirst($p->status)],
@@ -779,7 +779,7 @@ new #[Layout('layouts.app')] #[Title('Pallecon Workspace')] class extends Compon
                             <span class="pw-serial">{{ $active->serial_number ?? 'Pallecon #'.$active->id }}</span>
                             <span class="wm-pill" style="margin-left:8px;background:{{ $tone['bg'] }};"><span class="wm-pill-dot" style="background:{{ $tone['dot'] }};"></span>{{ ucfirst($active->status) }}</span>
                             @if ($isFull)
-                                <span class="wm-pill" style="margin-left:6px;background:#1f5c61;"><span class="wm-pill-dot" style="background:#7fd1bf;"></span>Full &mdash; ready to complete</span>
+                                <span class="wm-pill" style="margin-left:6px;background:#0f5642;"><span class="wm-pill-dot" style="background:#7fd1bf;"></span>Full &mdash; ready to complete</span>
                             @endif
                             @if ($active->winman_reference)
                                 <div class="pw-ref" style="margin-top:4px;">Ref: <code>{{ $active->winman_reference }}</code></div>

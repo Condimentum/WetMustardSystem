@@ -168,7 +168,7 @@ new #[Layout('layouts.app')] #[Title('Waste / Scrap')] class extends Component {
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-100 text-sm">
                     <thead>
-                        <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
+                        <tr style="background:#7cc0a2;color:#0b4a3a;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
                             <th class="px-5 py-3">When</th>
                             <th class="px-5 py-3">Category</th>
                             <th class="px-5 py-3">Quantity</th>

@@ -266,7 +266,7 @@ new #[Layout('layouts.app')] #[Title('Record Shift Data')] class extends Compone
                 </div>
             @endunless
 
-            <div class="mt-8 pt-6" style="border-top:1px solid #e6dcc5;">
+            <div class="mt-8 pt-6" style="border-top:1px solid #c3ddd3;">
                 <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
                     <h3 class="wm-title" style="font-size:.95rem;">Downtime Events</h3>
                     @unless ($downtimeSubmitted)

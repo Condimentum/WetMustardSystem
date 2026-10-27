@@ -9,7 +9,7 @@
 
         <!-- Add-to-home-screen / standalone app behaviour on tablets -->
         <link rel="manifest" href="{{ asset('manifest.json') }}">
-        <meta name="theme-color" content="#1c2552">
+        <meta name="theme-color" content="#0b4a3a">
         <meta name="mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">

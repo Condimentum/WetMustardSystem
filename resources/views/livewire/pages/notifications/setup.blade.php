@@ -115,7 +115,7 @@ new #[Layout('layouts.app')] #[Title('Notifications Setup')] class extends Compo
             <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead>
-                    <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Rule</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">Severity</th><th class="px-4 py-3">Threshold</th><th class="px-4 py-3">Cooldown</th><th class="px-4 py-3">Enabled</th><th class="px-4 py-3"></th></tr>
+                    <tr style="background:#7cc0a2;color:#0b4a3a;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Rule</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">Severity</th><th class="px-4 py-3">Threshold</th><th class="px-4 py-3">Cooldown</th><th class="px-4 py-3">Enabled</th><th class="px-4 py-3"></th></tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     @foreach ($this->rules as $rule)
@@ -189,7 +189,7 @@ new #[Layout('layouts.app')] #[Title('Notifications Setup')] class extends Compo
             <div class="wm-table" style="margin-top:14px;">
             <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead><tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Rule</th><th class="px-4 py-3">Recipient</th><th class="px-4 py-3"></th></tr></thead>
+                <thead><tr style="background:#7cc0a2;color:#0b4a3a;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Rule</th><th class="px-4 py-3">Recipient</th><th class="px-4 py-3"></th></tr></thead>
                 <tbody class="divide-y divide-gray-100">
                     @forelse ($this->recipients as $r)
                         <tr>

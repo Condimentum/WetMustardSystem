@@ -115,7 +115,7 @@ new #[Layout('layouts.app')] #[Title('Operator Sync')] class extends Component {
             </div>
 
             <div class="wm-table" style="margin-top:14px;">
-                <div class="px-5 py-3 wm-sub" style="font-weight:700;color:#1f3f4f;">Synced operators ({{ count($operators) }})</div>
+                <div class="px-5 py-3 wm-sub" style="font-weight:700;color:#0b4a3a;">Synced operators ({{ count($operators) }})</div>
 
                 @if ($operators === [])
                     <p class="px-5 pb-4 text-sm text-gray-600">No users are available yet. Run Sync Microsoft Users.</p>
@@ -123,7 +123,7 @@ new #[Layout('layouts.app')] #[Title('Operator Sync')] class extends Component {
                     <div class="overflow-x-auto">
                     <table class="min-w-full text-sm text-left">
                         <thead>
-                            <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
+                            <tr style="background:#7cc0a2;color:#0b4a3a;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">
                                 <th class="px-3 py-3">Name</th>
                                 <th class="px-3 py-3">Email</th>
                             </tr>

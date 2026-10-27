@@ -96,7 +96,7 @@ new #[Layout('layouts.app')] #[Title('Settings Admin')] class extends Component 
 
             <div class="wm-rows" style="margin-top:14px;">
                 @foreach ($this->definitions() as $definition)
-                    <div class="wm-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;--wm-strip:#c9a24a;">
+                    <div class="wm-row" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;--wm-strip:#3f8f98;">
                         <div>
                             <div class="wm-ref-text">{{ $definition['label'] }}</div>
                             <div class="wm-sub" style="margin-top:4px;">{{ $definition['description'] }}</div>

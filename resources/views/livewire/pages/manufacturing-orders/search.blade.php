@@ -665,7 +665,7 @@ new #[Layout('layouts.app')] #[Title('MO Search')] class extends Component {
                 @empty
                     <div class="wml-empty">
                         No eligible outstanding MOs found.
-                        <div style="margin-top:4px;font-size:.75rem;color:#9a8b6d;">The ProductMaster WinMan mapping may be empty (pending WM024).</div>
+                        <div style="margin-top:4px;font-size:.75rem;color:#6f8c83;">The ProductMaster WinMan mapping may be empty (pending WM024).</div>
                     </div>
                 @endforelse
             </div>

@@ -5,8 +5,8 @@
     "scope": "/WetMustardSystem/public/",
     "display": "standalone",
     "orientation": "any",
-    "background_color": "#f8f4ea",
-    "theme_color": "#1c2552",
+    "background_color": "#ffffff",
+    "theme_color": "#0b4a3a",
     "icons": [
         {
             "src": "/WetMustardSystem/public/wet-mustard-booking-icon.png",

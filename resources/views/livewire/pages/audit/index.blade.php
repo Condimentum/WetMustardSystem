@@ -59,7 +59,7 @@ new #[Layout('layouts.app')] #[Title('Audit Trail')] class extends Component {
             <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead>
-                    <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Timestamp</th><th class="px-4 py-3">Entity</th><th class="px-4 py-3">Action</th><th class="px-4 py-3">Field</th><th class="px-4 py-3">Old → New</th><th class="px-4 py-3">Reason</th><th class="px-4 py-3">User</th></tr>
+                    <tr style="background:#7cc0a2;color:#0b4a3a;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Timestamp</th><th class="px-4 py-3">Entity</th><th class="px-4 py-3">Action</th><th class="px-4 py-3">Field</th><th class="px-4 py-3">Old → New</th><th class="px-4 py-3">Reason</th><th class="px-4 py-3">User</th></tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     @forelse ($this->entries as $entry)

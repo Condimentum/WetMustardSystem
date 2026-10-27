@@ -182,7 +182,7 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
             <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead>
-                    <tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Report</th><th class="px-4 py-3">Schedule</th><th class="px-4 py-3">Offsets</th><th class="px-4 py-3">Enabled</th><th class="px-4 py-3"></th></tr>
+                    <tr style="background:#7cc0a2;color:#0b4a3a;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Report</th><th class="px-4 py-3">Schedule</th><th class="px-4 py-3">Offsets</th><th class="px-4 py-3">Enabled</th><th class="px-4 py-3"></th></tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     @foreach ($this->configs as $config)
@@ -262,7 +262,7 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
             <div class="wm-table" style="margin-top:14px;">
             <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead><tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Scope</th><th class="px-4 py-3">Recipient</th><th class="px-4 py-3">To/CC</th><th class="px-4 py-3"></th></tr></thead>
+                <thead><tr style="background:#7cc0a2;color:#0b4a3a;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Scope</th><th class="px-4 py-3">Recipient</th><th class="px-4 py-3">To/CC</th><th class="px-4 py-3"></th></tr></thead>
                 <tbody class="divide-y divide-gray-100">
                     @forelse ($this->recipients as $r)
                         <tr>
@@ -286,7 +286,7 @@ new #[Layout('layouts.app')] #[Title('Reporting Admin')] class extends Component
             <div class="wm-table" style="margin-top:14px;">
             <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
-                <thead><tr style="background:linear-gradient(180deg,#2b3238,#171c20);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Report</th><th class="px-4 py-3">Trigger</th><th class="px-4 py-3">Range</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Rows</th><th class="px-4 py-3">When</th></tr></thead>
+                <thead><tr style="background:#7cc0a2;color:#0b4a3a;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;"><th class="px-4 py-3">Report</th><th class="px-4 py-3">Trigger</th><th class="px-4 py-3">Range</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Rows</th><th class="px-4 py-3">When</th></tr></thead>
                 <tbody class="divide-y divide-gray-100">
                     @forelse ($this->sendLogs as $log)
                         <tr>

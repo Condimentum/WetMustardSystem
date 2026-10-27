@@ -887,7 +887,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                         @endforeach
                     </select>
                     <button type="button" wire:click="createDocument" class="wm-btn-dark">New document</button>
-                    <button type="button" wire:click="createDocument" class="wm-btn-dark" style="background:linear-gradient(180deg,#2b6f86,#1d4f61);">Upload from PDF</button>
+                    <button type="button" wire:click="createDocument" class="wm-btn-dark" style="background:linear-gradient(180deg,#2a4d7d,#1f3b63);">Upload from PDF</button>
                 </div>
             </div>
             <div class="wm-table" style="margin-top:14px;">
@@ -914,14 +914,14 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                     <button type="button" wire:click="editDocument({{ $document->id }})" class="wm-doc-row">
                         <div class="flex items-center justify-between gap-3">
                             <div class="min-w-0">
-                                <div class="font-semibold text-[#1f2a33]"><span class="text-[#1f3f4f]">{{ $document->code }}</span> - {{ $document->title }}</div>
+                                <div class="font-semibold text-[#1f2a33]"><span class="text-[#0b4a3a]">{{ $document->code }}</span> - {{ $document->title }}</div>
                                 <div class="wm-sub">{{ $document->module ?: 'No module' }} · Version {{ $document->version ?: 'N/A' }} · {{ $document->status ?: 'Unknown' }}</div>
                             </div>
                             <span class="wm-chip text-xs whitespace-nowrap">{{ $document->changes_count }} change{{ $document->changes_count === 1 ? '' : 's' }}</span>
                         </div>
                     </button>
                 @empty
-                    <div class="px-5 py-6 text-sm text-[#9a8b6d]">No documents created yet.</div>
+                    <div class="px-5 py-6 text-sm text-[#6f8c83]">No documents created yet.</div>
                 @endforelse
             </div>
             </div>
@@ -958,22 +958,22 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                             $refs.pdfInput.dispatchEvent(new Event('change'));
                                         }
                                     "
-                                    :class="dragging ? 'border-[#c9a24a] bg-[#f3e2b3]' : 'border-[#d9cba8] bg-[#fdf6e3]'"
+                                    :class="dragging ? 'border-[#c9a24a] bg-[#f3e2b3]' : 'border-[#b2d3c7] bg-[#e8f4ee]'"
                                     class="rounded-lg border-2 border-dashed p-4 text-center transition"
                                 >
                                     <label class="cursor-pointer block">
                                         <input type="file" x-ref="pdfInput" wire:model="pdfUpload" accept="application/pdf" class="hidden" />
-                                        <div class="text-sm font-semibold text-[#1f3f4f]">Drag &amp; drop a PDF here, or click to choose a file</div>
+                                        <div class="text-sm font-semibold text-[#0b4a3a]">Drag &amp; drop a PDF here, or click to choose a file</div>
                                         <div class="wm-hint mt-1">We'll scan it to pre-fill the code, title, version, issue date and reason for change below - review before saving.</div>
                                     </label>
-                                    <div wire:loading wire:target="pdfUpload" class="mt-2 text-xs font-semibold text-[#6b5d42]">Scanning PDF...</div>
+                                    <div wire:loading wire:target="pdfUpload" class="mt-2 text-xs font-semibold text-[#4b6b62]">Scanning PDF...</div>
                                     @if ($pdfUpload)
                                         <div class="mt-2 wm-hint">Selected: {{ $pdfUpload->getClientOriginalName() }}</div>
                                     @endif
                                     @error('pdfUpload') <div class="mt-1 text-xs text-red-600">{{ $message }}</div> @enderror
                                 </div>
                                 @if ($extractInfo)
-                                    <div class="rounded-md border border-[#e6dcc5] bg-[#fdf6e3] px-3 py-2 text-xs text-[#4a3818]">{{ $extractInfo }}</div>
+                                    <div class="rounded-md border border-[#c3ddd3] bg-[#e8f4ee] px-3 py-2 text-xs text-[#0b4a3a]">{{ $extractInfo }}</div>
                                 @endif
                             @endunless
 
@@ -1018,7 +1018,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                     </select>
                                     @error('module') <span class="text-xs text-red-600">{{ $message }}</span> @enderror
                                 </div>
-                                <div class="md:col-span-2 space-y-3 rounded-xl border border-[#ebe2cd] bg-[#fbf6ea] p-3">
+                                <div class="md:col-span-2 space-y-3 rounded-xl border border-[#d3e6de] bg-[#fbfdfb] p-3">
                                     <div>
                                         <div class="wm-label">Data source</div>
                                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -1218,7 +1218,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                         <div
                                             class="text-xs rounded-md border px-3 py-1.5"
-                                            :class="overLimit ? 'border-red-200 bg-red-50 text-red-700' : 'border-[#e6dcc5] bg-[#fdf6e3] text-[#4a3818]'"
+                                            :class="overLimit ? 'border-red-200 bg-red-50 text-red-700' : 'border-[#c3ddd3] bg-[#e8f4ee] text-[#0b4a3a]'"
                                         >
                                             Visible total: <span class="font-semibold" x-text="fmt(visibleTotal) + '%'"></span>
                                             |
@@ -1248,7 +1248,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                     <th class="px-2 py-2 text-left"></th>
                                                 </tr>
                                             </thead>
-                                            <tbody class="divide-y divide-[#efe7d4] text-[#1f2a33]">
+                                            <tbody class="divide-y divide-[#e2efe9] text-[#1f2a33]">
                                                 <template x-for="(col, index) in cols" :key="index">
                                                     <tr
                                                         :draggable="rowArmed === index"
@@ -1258,13 +1258,13 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                         x-on:dragend="rowDragEnd()"
                                                         :class="{
                                                             'opacity-40': rowFrom === index,
-                                                            'bg-[#fdf6e3]': rowFrom !== null && rowOver === index && rowFrom !== index,
-                                                            'bg-[#f6f0e2] text-[#9a8b6d]': ! col.visible,
+                                                            'bg-[#e8f4ee]': rowFrom !== null && rowOver === index && rowFrom !== index,
+                                                            'bg-[#f0f6f2] text-[#6f8c83]': ! col.visible,
                                                         }"
                                                     >
                                                         <td class="px-1 py-2">
                                                             <span
-                                                                class="cursor-grab select-none px-1 text-[#b8a77f] hover:text-[#1f3f4f]"
+                                                                class="cursor-grab select-none px-1 text-[#6f8c83] hover:text-[#0b4a3a]"
                                                                 title="Drag to reorder"
                                                                 x-on:pointerdown="rowArmed = index"
                                                                 x-on:pointerup="rowArmed = null"
@@ -1274,14 +1274,14 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                         <td class="px-2 py-2"><input x-model="col.key" class="wm-input wm-input--sm" placeholder="field_key" /></td>
                                                         <td class="px-2 py-2"><input x-model="col.label" class="wm-input wm-input--sm" placeholder="Column label" /></td>
                                                         <td class="px-2 py-2"><input type="number" min="1" max="100" step="0.5" x-model.number="col.width" class="wm-input wm-input--sm" style="width:6rem;" /></td>
-                                                        <td class="px-2 py-2" :class="runningTotal(index) > 100 ? 'text-red-700 font-semibold' : 'text-[#6b5d42]'" x-text="fmt(runningTotal(index)) + '%'"></td>
+                                                        <td class="px-2 py-2" :class="runningTotal(index) > 100 ? 'text-red-700 font-semibold' : 'text-[#4b6b62]'" x-text="fmt(runningTotal(index)) + '%'"></td>
                                                         <td class="px-2 py-2">
                                                             <button type="button" x-on:click="removeColumn(index)" class="text-red-600 hover:text-red-700">Remove</button>
                                                         </td>
                                                     </tr>
                                                 </template>
                                                 <tr x-show="cols.length === 0">
-                                                    <td colspan="7" class="px-2 py-3 text-[#9a8b6d]">No columns configured yet for this document.</td>
+                                                    <td colspan="7" class="px-2 py-3 text-[#6f8c83]">No columns configured yet for this document.</td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -1294,8 +1294,8 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                         </div>
 
                                         <div x-show="isBatchCard && ! recipe.recipe_code" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">Choose the recipe under Data source to preview its ingredients and steps - sample values shown for now.</div>
-                                        <div x-show="isBatchCard && recipe.recipe_code && ! recipe.batch_size_kg" class="text-xs text-[#4a3818] bg-[#fdf6e3] border border-[#e6dcc5] rounded-md px-3 py-2">The recipe card has no batch size, so quantities are shown per kg. The printed card uses each MO's batch size.</div>
-                                        <div x-show="isBatchCard && (recipe.batch_sizes || []).length > 1" class="flex flex-wrap items-center gap-2 text-xs text-[#6b5d42]">
+                                        <div x-show="isBatchCard && recipe.recipe_code && ! recipe.batch_size_kg" class="text-xs text-[#0b4a3a] bg-[#e8f4ee] border border-[#c3ddd3] rounded-md px-3 py-2">The recipe card has no batch size, so quantities are shown per kg. The printed card uses each MO's batch size.</div>
+                                        <div x-show="isBatchCard && (recipe.batch_sizes || []).length > 1" class="flex flex-wrap items-center gap-2 text-xs text-[#4b6b62]">
                                             <span>Preview batch size:</span>
                                             <template x-for="size in (recipe.batch_sizes || [])" :key="size">
                                                 <button
@@ -1306,17 +1306,17 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                     x-text="`${size} kg`"
                                                 ></button>
                                             </template>
-                                            <span class="text-[#9a8b6d]">Each batch size prints on its own sheet.</span>
+                                            <span class="text-[#6f8c83]">Each batch size prints on its own sheet.</span>
                                         </div>
 
                                         <div x-show="hiddenCols.length > 0" class="flex flex-wrap items-center gap-1 text-xs">
-                                            <span class="text-[#9a8b6d]">Hidden:</span>
+                                            <span class="text-[#6f8c83]">Hidden:</span>
                                             <template x-for="hidden in hiddenCols" :key="hidden.index">
                                                 <button type="button" x-on:click="cols[hidden.index].visible = true" class="wm-chip" title="Show this column" x-text="'+ ' + labelFor(hidden.col)"></button>
                                             </template>
                                         </div>
 
-                                        <div x-ref="previewBox" class="relative rounded-xl border border-[#e6dcc5] bg-[#efe8d8]" style="overflow: hidden; padding: 12px;">
+                                        <div x-ref="previewBox" class="relative rounded-xl border border-[#c3ddd3] bg-[#f0f6f2]" style="overflow: hidden; padding: 12px;">
                                             <div :style="`width: ${page.w * scale}px; height: ${page.h * scale}px; margin: 0 auto; overflow: hidden;`">
                                                 <div
                                                     class="bg-white shadow relative"
@@ -1361,7 +1361,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                                             x-on:drop.prevent="headDrop(vi)"
                                                                             x-on:dragend="headFrom = null; headOver = null"
                                                                             :title="`${labelFor(item.col)} - ${fmt(Number(item.col.width) || 0)}%`"
-                                                                            :style="`border: 1px solid #111827; padding: 4px; vertical-align: top; background: ${headOver === vi && headFrom !== null ? '#fdf6e3' : '#f3f4f6'}; font-size: ${num('setup_table_header_font_size', 10)}px; text-transform: uppercase; letter-spacing: 0.02em; text-align: center; overflow-wrap: anywhere;`"
+                                                                            :style="`border: 1px solid #111827; padding: 4px; vertical-align: top; background: ${headOver === vi && headFrom !== null ? '#e8f4ee' : '#f3f4f6'}; font-size: ${num('setup_table_header_font_size', 10)}px; text-transform: uppercase; letter-spacing: 0.02em; text-align: center; overflow-wrap: anywhere;`"
                                                                         >
                                                                             <span x-text="labelFor(item.col)"></span>
                                                                             <span
@@ -1481,7 +1481,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                                             x-on:drop.prevent="headDrop(vi)"
                                                                             x-on:dragend="headFrom = null; headOver = null"
                                                                             :title="`${labelFor(item.col)} - ${fmt(Number(item.col.width) || 0)}%`"
-                                                                            :style="`border: 1px solid #222; padding: 2px 3px; background: ${headOver === vi && headFrom !== null ? '#fdf6e3' : '#f3f3f3'}; font-size: ${num('setup_table_header_font_size', 8)}px; text-transform: uppercase; text-align: ${isNumericKey(item.col.key) ? 'right' : 'left'}; overflow-wrap: anywhere;`"
+                                                                            :style="`border: 1px solid #222; padding: 2px 3px; background: ${headOver === vi && headFrom !== null ? '#e8f4ee' : '#f3f3f3'}; font-size: ${num('setup_table_header_font_size', 8)}px; text-transform: uppercase; text-align: ${isNumericKey(item.col.key) ? 'right' : 'left'}; overflow-wrap: anywhere;`"
                                                                         >
                                                                             <span x-text="labelFor(item.col)"></span>
                                                                             <span
@@ -1557,9 +1557,9 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                             </div>
                                         </div>
 
-                                        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#9a8b6d]">
+                                        <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6f8c83]">
                                             <template x-for="item in visibleCols" :key="item.index">
-                                                <span><span class="text-[#1f3f4f] font-semibold" x-text="labelFor(item.col)"></span> <span x-text="fmt(Number(item.col.width) || 0) + '%'"></span></span>
+                                                <span><span class="text-[#0b4a3a] font-semibold" x-text="labelFor(item.col)"></span> <span x-text="fmt(Number(item.col.width) || 0) + '%'"></span></span>
                                             </template>
                                         </div>
                                     </div>
@@ -1576,7 +1576,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                             <div class="wm-section-title">Document Change History</div>
 
                             @if (! $selectedDocumentId)
-                                <div class="text-sm text-[#9a8b6d]">Save the document metadata first. History entries are recorded automatically on each save.</div>
+                                <div class="text-sm text-[#6f8c83]">Save the document metadata first. History entries are recorded automatically on each save.</div>
                             @else
                                 <div class="overflow-x-auto">
                                     <table class="min-w-full text-sm">
@@ -1589,7 +1589,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                 <th class="px-3 py-2">Recorded By</th>
                                             </tr>
                                         </thead>
-                                        <tbody class="divide-y divide-[#efe7d4] text-[#1f2a33]">
+                                        <tbody class="divide-y divide-[#e2efe9] text-[#1f2a33]">
                                             @forelse ($this->selectedDocumentChanges as $change)
                                                 <tr>
                                                     <td class="px-3 py-2">{{ $change->issue_version ?: '—' }}</td>
@@ -1600,7 +1600,7 @@ new #[Layout('layouts.app')] #[Title('Settings - Documents')] class extends Comp
                                                 </tr>
                                             @empty
                                                 <tr>
-                                                    <td colspan="5" class="px-3 py-5 text-center text-[#9a8b6d]">No change history recorded for this document yet.</td>
+                                                    <td colspan="5" class="px-3 py-5 text-center text-[#6f8c83]">No change history recorded for this document yet.</td>
                                                 </tr>
                                             @endforelse
                                         </tbody>
