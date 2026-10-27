@@ -11,7 +11,9 @@ use App\Features\Batches\GetAvailableIngredientLotsFeature;
 use App\Features\Booking\BookFinishedGoodsFeature;
 use App\Domains\WinMan\Exceptions\WinManException;
 use App\Domains\WinMan\Jobs\FetchManufacturingOrderJob;
+use App\Domains\WinMan\Jobs\FindProductForLotJob;
 use App\Domains\WinMan\Jobs\ListIssuedLotsForWorkInProgressJob;
+use App\Domains\WinMan\Support\Sscc;
 use App\Domains\WinMan\Support\WinManHealthCheck;
 use App\Operations\AllocateBomIngredientOperation;
 use App\Support\FeatureSettings;
@@ -233,7 +235,12 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         $this->activeBomHistoricalLots = [];
     }
 
-    public function applyGrScanPayload(): void
+    /**
+     * Applies the scanned code. $type is how the operator scanned: 'qr' (a
+     * ProductID^Description^SupplierLot label) or 'sscc' (the pallet / IBC barcode,
+     * which WinMan holds as the stock line's lot number).
+     */
+    public function applyGrScanPayload(string $type = 'qr'): void
     {
         if (! $this->featureAllocationScannerEnabled) {
             $this->activeBomMessage = 'Scanner view is disabled by project settings.';
@@ -252,6 +259,12 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
             return;
         }
 
+        if ($type === 'sscc') {
+            $this->applySsccScan($raw);
+
+            return;
+        }
+
         $segments = array_map(static fn (string $value): string => trim($value), explode('^', $raw));
         $productId = $segments[0] ?? '';
         $productDescription = $segments[1] ?? '';
@@ -265,7 +278,9 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         );
 
         if ($productId === '' || $productDescription === '' || $supplierLotNumber === '') {
-            $this->activeBomMessage = 'Invalid scan format. Expected ProductID^ProductDescription^SupplierLotNumber^';
+            $this->activeBomMessage = Sscc::looksLikeSscc($raw)
+                ? 'That is an SSCC barcode, not a QR label. Switch the scanner to SSCC.'
+                : 'Invalid scan format. Expected ProductID^ProductDescription^SupplierLotNumber^';
 
             return;
         }
@@ -283,8 +298,8 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
         $matchedWinManLot = null;
         if ($this->featureAllocationWinmanLookupEnabled) {
             try {
-                // Explicitly re-check WinMan at scan time so operators can confirm the lot exists live.
-                $winmanLots = app(GetAvailableIngredientLotsFeature::class)((string) $this->activeBomMaterialCode, 500);
+                // Re-check WinMan at scan time for exactly this lot, so a lot is never missed because a product has many lots.
+                $winmanLots = app(GetAvailableIngredientLotsFeature::class)((string) $this->activeBomMaterialCode, 5, $supplierLotNumber);
                 $matchedWinManLot = collect($winmanLots)
                     ->first(fn (array $lot): bool => strcasecmp((string) ($lot['lot_number'] ?? ''), $supplierLotNumber) === 0);
             } catch (\Throwable $e) {
@@ -310,19 +325,95 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
             $this->activeBomWinManLookupMessage = 'WinMan lookup: skipped (disabled in project settings).';
         }
 
-        $matchedLot = collect($this->activeBomLotOptions)
+        $this->registerScannedLot($matchedWinManLot);
+        $this->activeBomMessage = null;
+    }
+
+    /**
+     * SSCC scan: the 18-digit SSCC is the WinMan lot number of the pallet / IBC, so it is
+     * looked up by lot and must belong to the product on this BOM line.
+     */
+    private function applySsccScan(string $raw): void
+    {
+        try {
+            $sscc = Sscc::extract($raw);
+        } catch (\InvalidArgumentException $e) {
+            $this->activeBomMessage = $e->getMessage();
+
+            return;
+        }
+
+        $this->activeBomScanDebug = 'Parsed scan -> SSCC (WinMan lot): '.$sscc;
+        $this->activeBomLotNumber = $sscc;
+
+        $matchedWinManLot = null;
+        if ($this->featureAllocationWinmanLookupEnabled) {
+            try {
+                $winmanLots = app(GetAvailableIngredientLotsFeature::class)((string) $this->activeBomMaterialCode, 5, $sscc);
+                $matchedWinManLot = collect($winmanLots)
+                    ->first(fn (array $lot): bool => strcasecmp((string) ($lot['lot_number'] ?? ''), $sscc) === 0);
+
+                $knownLot = $matchedWinManLot === null ? app(FindProductForLotJob::class)($sscc) : null;
+            } catch (\Throwable $e) {
+                report($e);
+                $this->activeBomWinManLookupMessage = 'WinMan lookup failed while validating this SSCC.';
+                $this->activeBomMessage = 'Could not validate this SSCC in WinMan right now. Try again.';
+
+                return;
+            }
+
+            if ($matchedWinManLot === null) {
+                $this->activeBomLotNumber = null;
+                $expectedCode = strtoupper(trim((string) $this->activeBomMaterialCode));
+
+                if ($knownLot === null) {
+                    $this->activeBomWinManLookupMessage = 'WinMan lookup: this SSCC was not found in stock.';
+                    $this->activeBomMessage = Sscc::checkDigitValid($sscc)
+                        ? 'This SSCC is not in WinMan stock. Check the label, or allocate by lot instead.'
+                        : 'This SSCC could not be read correctly (its check digit does not match) and WinMan does not know it. Scan it again.';
+                } elseif (strtoupper($knownLot['product_id']) !== $expectedCode) {
+                    $this->activeBomWinManLookupMessage = sprintf('WinMan lookup: SSCC belongs to %s - %s.', $knownLot['product_id'], $knownLot['product_description']);
+                    $this->activeBomMessage = 'This SSCC is for a different product than this BOM line.';
+                } else {
+                    $this->activeBomWinManLookupMessage = 'WinMan lookup: SSCC found but has no quantity outstanding.';
+                    $this->activeBomMessage = 'This SSCC has no stock left to issue.';
+                }
+
+                return;
+            }
+
+            $this->activeBomWinManLookupMessage = sprintf(
+                'WinMan lookup: SSCC found for this product, %s available.',
+                rtrim(rtrim(number_format((float) $matchedWinManLot['quantity_outstanding'], 3, '.', ''), '0'), '.')
+            );
+            $this->activeBomLotNumber = (string) $matchedWinManLot['lot_number'];
+        } elseif ($this->winManDown) {
+            $this->activeBomWinManLookupMessage = 'WinMan lookup: skipped (WinMan is currently unavailable - SSCC accepted unverified).';
+        } else {
+            $this->activeBomWinManLookupMessage = 'WinMan lookup: skipped (disabled in project settings).';
+        }
+
+        $this->registerScannedLot($matchedWinManLot);
+        $this->activeBomMessage = null;
+    }
+
+    /**
+     * Makes the scanned lot selectable on the allocation form.
+     *
+     * @param  array{lot_number?: string, quantity_outstanding?: float}|null  $matchedWinManLot
+     */
+    private function registerScannedLot(?array $matchedWinManLot): void
+    {
+        $alreadyListed = collect($this->activeBomLotOptions)
             ->contains(fn (array $lot): bool => strcasecmp((string) ($lot['lot_number'] ?? ''), (string) $this->activeBomLotNumber) === 0);
 
-        if (! $matchedLot) {
+        if (! $alreadyListed) {
             $this->activeBomLotOptions[] = [
                 'lot_number' => (string) $this->activeBomLotNumber,
                 'quantity_outstanding' => (float) ($matchedWinManLot['quantity_outstanding'] ?? 0),
             ];
         }
-
-        $this->activeBomMessage = null;
     }
-
     public function allocateBomIngredient(): void
     {
         $this->authorizeEditable();
@@ -2134,6 +2225,9 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                             isMobileViewport: false,
                             scanRaw: @entangle('activeBomGrScanRaw').live,
                             scanReviewOpen: false,
+                            scanType: 'qr',
+                            manualEntry: '',
+                            wrongKind: null,
                             scanPreview: {
                                 productId: '',
                                 productDescription: '',
@@ -2157,6 +2251,12 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                 }
                             },
                             init() {
+                                try {
+                                    this.scanType = window.localStorage.getItem('wm.allocScanType') === 'sscc' ? 'sscc' : 'qr';
+                                } catch (error) {
+                                    this.scanType = 'qr';
+                                }
+
                                 this.isMobileViewport = window.matchMedia('(max-width: 767px)').matches;
 
                                 const viewportListener = (event) => {
@@ -2224,9 +2324,17 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                 }
 
                                 try {
-                                    this.detector = new BarcodeDetector({
-                                        formats: ['qr_code', 'data_matrix', 'code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e'],
-                                    });
+                                    // SSCC pallet / IBC labels carry a GS1-128 (Code 128) barcode; QR labels are read as QR only.
+                                    const wanted = this.scanType === 'sscc' ? ['code_128'] : ['qr_code'];
+                                    const supported = BarcodeDetector.getSupportedFormats ? await BarcodeDetector.getSupportedFormats() : wanted;
+                                    const formats = wanted.filter((format) => supported.indexOf(format) !== -1);
+
+                                    if (formats.length === 0) {
+                                        this.scannerError = 'This camera cannot read this type of barcode. Type or hand-scan the code below instead.';
+                                        return;
+                                    }
+
+                                    this.detector = new BarcodeDetector({ formats });
 
                                     this.stream = await navigator.mediaDevices.getUserMedia({
                                         video: {
@@ -2251,10 +2359,17 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
                                 try {
                                     const results = await this.detector.detect(this.$refs.grScanVideo);
-                                    const value = (results[0]?.rawValue ?? '').trim();
+                                    // A pallet label has several barcodes: keep looking until one is the wanted kind.
+                                    const accepted = results
+                                        .map((result) => (result.rawValue ?? '').trim())
+                                        .find((value) => value !== '' && this.kindOf(value) === this.scanType);
 
-                                    if (value !== '') {
-                                        this.scanRaw = value;
+                                    if (accepted) {
+                                        if (navigator.vibrate) {
+                                            navigator.vibrate(60);
+                                        }
+
+                                        this.scanRaw = accepted;
                                         this.stopCamera();
                                         this.reviewCurrentScan();
                                         return;
@@ -2309,9 +2424,109 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                     valid: productId !== '' && productDescription !== '' && supplierLotNumber !== '',
                                 };
                             },
+                            parseSscc(raw) {
+                                let text = (raw ?? '').trim();
+                                if (text === '') {
+                                    return { ok: false, error: 'Nothing was scanned.' };
+                                }
+                                if (text.indexOf('^') !== -1) {
+                                    return { ok: false, error: 'That is a QR label, not an SSCC barcode.' };
+                                }
+                                // Scanner prefix (]C1), group separators and (00) brackets are not part of the data.
+                                text = text.replace(/^\][A-Za-z][0-9A-Za-z]/, '').replace(/[\x1d() ]/g, '');
+                                const wrapped = /^00(\d{18})/.exec(text);
+                                if (wrapped) {
+                                    return { ok: true, sscc: wrapped[1] };
+                                }
+                                if (text.indexOf('0205') === 0) {
+                                    return { ok: false, error: 'That looks like the IBC serial barcode. Scan the SSCC barcode instead (the bottom one).' };
+                                }
+                                if (/^\d{18}$/.test(text)) {
+                                    return { ok: true, sscc: text };
+                                }
+                                return { ok: false, error: 'That is not an SSCC barcode: expected 00 followed by 18 digits. Scan it again.' };
+                            },
+                            kindOf(raw) {
+                                if ((raw ?? '').indexOf('^') !== -1) {
+                                    return 'qr';
+                                }
+                                return this.parseSscc(raw).ok ? 'sscc' : '';
+                            },
+                            setScanType(type) {
+                                if (type === this.scanType) {
+                                    return;
+                                }
+
+                                const cameraWasOn = this.cameraRunning;
+                                this.stopCamera();
+                                this.scanType = type;
+                                this.scannerError = '';
+                                this.wrongKind = null;
+
+                                try {
+                                    window.localStorage.setItem('wm.allocScanType', type);
+                                } catch (error) {
+                                    // The choice just is not remembered on this device.
+                                }
+
+                                if (cameraWasOn) {
+                                    this.startCamera();
+                                }
+                            },
+                            submitManualEntry() {
+                                const value = (this.manualEntry ?? '').trim();
+                                if (value === '') {
+                                    return;
+                                }
+
+                                this.manualEntry = '';
+                                this.stopCamera();
+                                this.scanRaw = value;
+                                this.reviewCurrentScan();
+                            },
+                            useWrongKindScan() {
+                                if (!this.wrongKind) {
+                                    return;
+                                }
+
+                                const { target, raw } = this.wrongKind;
+                                this.setScanType(target);
+                                this.scanRaw = raw;
+                                this.reviewCurrentScan();
+                            },
                             reviewCurrentScan() {
                                 this.scannerError = '';
-                                this.scanPreview = this.parsePreview(this.scanRaw);
+                                this.wrongKind = null;
+                                const raw = (this.scanRaw ?? '').trim();
+                                const kind = this.kindOf(raw);
+
+                                // Scanned the other kind of code: say so and offer to switch and use it.
+                                if (kind !== '' && kind !== this.scanType) {
+                                    this.wrongKind = {
+                                        target: kind,
+                                        raw,
+                                        message: kind === 'sscc' ? 'That is an SSCC barcode, not a QR label.' : 'That is a QR label, not an SSCC barcode.',
+                                    };
+                                    this.scanReviewOpen = false;
+                                    return;
+                                }
+
+                                if (this.scanType === 'sscc') {
+                                    const parsed = this.parseSscc(raw);
+                                    this.scanPreview = { ...this.scanPreview, productId: '', productDescription: '', supplierLotNumber: parsed.sscc ?? '', notes: '', valid: parsed.ok };
+
+                                    if (!parsed.ok) {
+                                        this.scannerError = parsed.error;
+                                        this.scanReviewOpen = false;
+                                        return;
+                                    }
+
+                                    this.scanRaw = parsed.sscc;
+                                    this.scanReviewOpen = true;
+                                    return;
+                                }
+
+                                this.scanPreview = this.parsePreview(raw);
 
                                 if (!this.scanPreview.valid) {
                                     this.scannerError = 'Invalid scan format. Expected ProductID^ProductDescription^SupplierLotNumber^';
@@ -2327,7 +2542,7 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                 }
 
                                 this.scanReviewOpen = false;
-                                await this.$wire.applyGrScanPayload();
+                                await this.$wire.applyGrScanPayload(this.scanType);
                             },
                             retryScanReview() {
                                 this.scanReviewOpen = false;
@@ -2381,11 +2596,30 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                 @if ($activeBomAllocationMode === 'gr_scan' && $featureAllocationScannerEnabled)
                                     <div class="rounded-lg border border-slate-200 bg-white p-4 space-y-4 shadow-sm">
                                         <div class="flex items-center justify-between gap-2">
-                                            <p class="text-xs font-semibold tracking-wide uppercase text-slate-700">QR Scanner</p>
+                                            <p class="text-xs font-semibold tracking-wide uppercase text-slate-700" x-text="scanType === 'sscc' ? 'SSCC Scanner' : 'QR Scanner'"></p>
                                             <div class="flex items-center gap-2">
                                                 <x-secondary-button type="button" x-show="!cameraRunning" @click="startCamera">Open camera</x-secondary-button>
                                                 <x-secondary-button type="button" x-show="cameraRunning" @click="stopCamera">Stop camera</x-secondary-button>
                                             </div>
+                                        </div>
+
+                                        <div class="inline-flex w-full rounded-md border border-slate-300 overflow-hidden" role="group" aria-label="What are you scanning?">
+                                            <button
+                                                type="button"
+                                                @click="setScanType('qr')"
+                                                class="flex-1 px-4 py-2 text-sm font-medium"
+                                                :class="scanType === 'qr' ? 'bg-slate-800 text-white' : 'bg-white text-slate-700'"
+                                            >
+                                                QR label
+                                            </button>
+                                            <button
+                                                type="button"
+                                                @click="setScanType('sscc')"
+                                                class="flex-1 px-4 py-2 text-sm font-medium border-l border-slate-300"
+                                                :class="scanType === 'sscc' ? 'bg-slate-800 text-white' : 'bg-white text-slate-700'"
+                                            >
+                                                SSCC barcode
+                                            </button>
                                         </div>
 
                                         <div class="rounded-md border border-slate-300 bg-black/90 overflow-hidden" x-show="cameraRunning" x-transition>
@@ -2394,7 +2628,31 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
 
                                         <div x-show="scannerError" class="text-xs text-rose-700" x-text="scannerError"></div>
 
-                                        <p class="text-xs text-slate-500">Point camera to the QR code. A confirmation popup will appear after a successful read.</p>
+                                        <div x-show="wrongKind" x-cloak class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                                            <span x-text="wrongKind ? wrongKind.message : ''"></span>
+                                            <button type="button" class="ml-1 font-semibold underline" @click="useWrongKindScan">
+                                                <span x-text="wrongKind && wrongKind.target === 'sscc' ? 'Switch to SSCC and use this scan' : 'Switch to QR and use this scan'"></span>
+                                            </button>
+                                        </div>
+
+                                        <p class="text-xs text-slate-500" x-show="scanType === 'qr'">Point camera to the QR code. A confirmation popup will appear after a successful read.</p>
+                                        <p class="text-xs text-slate-500" x-show="scanType === 'sscc'" x-cloak>Point camera at the SSCC barcode on the pallet or IBC label (the one starting 00). The stock is matched in WinMan by its SSCC.</p>
+
+                                        <div>
+                                            <label class="block text-xs text-slate-600 mb-1">Or type / hand-scan the code</label>
+                                            <div class="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    x-model="manualEntry"
+                                                    @keydown.enter.prevent="submitManualEntry"
+                                                    inputmode="text"
+                                                    autocomplete="off"
+                                                    class="w-full rounded-md border-slate-300 text-sm shadow-sm"
+                                                    :placeholder="scanType === 'sscc' ? '00 + 18-digit SSCC' : 'ProductID^Description^SupplierLot^'"
+                                                />
+                                                <x-secondary-button type="button" @click="submitManualEntry">Check</x-secondary-button>
+                                            </div>
+                                        </div>
 
                                         @if ($featureAllocationScanDebugEnabled && $activeBomScanDebug)
                                             <details class="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">
@@ -2423,69 +2681,6 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                                     </div>
                                 @endif
 
-                                <div
-                                    x-show="scanReviewOpen"
-                                    x-cloak
-                                    class="fixed inset-0 z-[100] flex items-center justify-center px-4"
-                                >
-                                    <div class="absolute inset-0 bg-slate-900/45" @click="cancelScanReview"></div>
-                                    <div class="relative w-full max-w-lg rounded-xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
-                                        <div class="px-5 py-4 border-b border-slate-200 bg-slate-50">
-                                            <h4 class="text-sm font-semibold text-slate-900">Confirm scanned QR</h4>
-                                            <p class="mt-1 text-xs text-slate-600">Please check the extracted details before confirming.</p>
-                                        </div>
-
-                                        <div class="px-5 py-4 space-y-3 text-sm">
-                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                <div>
-                                                    <p class="text-xs text-slate-500">Product ID</p>
-                                                    <p class="font-medium text-slate-900" x-text="scanPreview.productId || '—'"></p>
-                                                </div>
-                                                <div>
-                                                    <p class="text-xs text-slate-500">Supplier Lot</p>
-                                                    <p class="font-medium text-slate-900" x-text="scanPreview.supplierLotNumber || '—'"></p>
-                                                </div>
-                                            </div>
-
-                                            <div>
-                                                <p class="text-xs text-slate-500">Description</p>
-                                                <p class="font-medium text-slate-900" x-text="scanPreview.productDescription || '—'"></p>
-                                            </div>
-
-                                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                                <div>
-                                                    <p class="text-xs text-slate-500">Qty</p>
-                                                    <p class="font-medium text-slate-900" x-text="scanPreview.quantity || '—'"></p>
-                                                </div>
-                                                <div>
-                                                    <p class="text-xs text-slate-500">Location</p>
-                                                    <p class="font-medium text-slate-900" x-text="scanPreview.location || '—'"></p>
-                                                </div>
-                                                <div>
-                                                    <p class="text-xs text-slate-500">Line</p>
-                                                    <p class="font-medium text-slate-900" x-text="scanPreview.line || '—'"></p>
-                                                </div>
-                                                <div>
-                                                    <p class="text-xs text-slate-500">Expiry</p>
-                                                    <p class="font-medium text-slate-900" x-text="scanPreview.expiryDate || '—'"></p>
-                                                </div>
-                                            </div>
-
-                                            <template x-if="scanPreview.notes">
-                                                <div class="rounded-md bg-slate-50 border border-slate-200 px-3 py-2">
-                                                    <p class="text-[11px] text-slate-500 mb-1">Additional payload</p>
-                                                    <p class="text-xs text-slate-700 break-words" x-text="scanPreview.notes"></p>
-                                                </div>
-                                            </template>
-                                        </div>
-
-                                        <div class="px-5 py-4 border-t border-slate-200 flex items-center justify-end gap-2">
-                                            <x-secondary-button type="button" @click="cancelScanReview">Cancel</x-secondary-button>
-                                            <x-secondary-button type="button" @click="retryScanReview">Retry</x-secondary-button>
-                                            <x-primary-button type="button" @click="confirmScanReview">Confirm</x-primary-button>
-                                        </div>
-                                    </div>
-                                </div>
 
                                 @if ($activeBomAllocationMode === 'manual')
                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2532,6 +2727,73 @@ new #[Layout('layouts.app')] #[Title('Batch Record')] class extends Component {
                             <div class="px-6 py-4 border-t border-gray-200 flex justify-end gap-2" :class="{ 'hidden': scanReviewOpen }">
                                 <x-secondary-button type="button" wire:click="closeAllocateModal">Cancel</x-secondary-button>
                                 <x-primary-button type="button" wire:click="allocateBomIngredient" :disabled="count($activeBomLotOptions) === 0">Allocate</x-primary-button>
+                            </div>
+                        </div>
+
+                        {{-- Kept outside the dimmed/pointer-events-none form area so Confirm/Retry stay clickable --}}
+                        <div
+                            x-show="scanReviewOpen"
+                            x-cloak
+                            class="fixed inset-0 z-[100] flex items-center justify-center px-4"
+                        >
+                            <div class="absolute inset-0 bg-slate-900/45" @click="cancelScanReview"></div>
+                            <div class="relative w-full max-w-lg rounded-xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+                                <div class="px-5 py-4 border-b border-slate-200 bg-slate-50">
+                                    <h4 class="text-sm font-semibold text-slate-900" x-text="scanType === 'sscc' ? 'Confirm scanned SSCC' : 'Confirm scanned QR'"></h4>
+                                    <p class="mt-1 text-xs text-slate-600">Please check the extracted details before confirming.</p>
+                                </div>
+
+                                <div class="px-5 py-4 space-y-3 text-sm">
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div x-show="scanType === 'qr'">
+                                            <p class="text-xs text-slate-500">Product ID</p>
+                                            <p class="font-medium text-slate-900" x-text="scanPreview.productId || '—'"></p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-slate-500" x-text="scanType === 'sscc' ? 'SSCC (WinMan lot)' : 'Supplier Lot'"></p>
+                                            <p class="font-medium text-slate-900 break-all" x-text="scanPreview.supplierLotNumber || '—'"></p>
+                                        </div>
+                                    </div>
+
+                                    <p class="text-xs text-slate-600" x-show="scanType === 'sscc'">The product and quantity available are checked in WinMan when you confirm.</p>
+
+                                    <div x-show="scanType === 'qr'">
+                                        <p class="text-xs text-slate-500">Description</p>
+                                        <p class="font-medium text-slate-900" x-text="scanPreview.productDescription || '—'"></p>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" x-show="scanType === 'qr'">
+                                        <div>
+                                            <p class="text-xs text-slate-500">Qty</p>
+                                            <p class="font-medium text-slate-900" x-text="scanPreview.quantity || '—'"></p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-slate-500">Location</p>
+                                            <p class="font-medium text-slate-900" x-text="scanPreview.location || '—'"></p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-slate-500">Line</p>
+                                            <p class="font-medium text-slate-900" x-text="scanPreview.line || '—'"></p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-slate-500">Expiry</p>
+                                            <p class="font-medium text-slate-900" x-text="scanPreview.expiryDate || '—'"></p>
+                                        </div>
+                                    </div>
+
+                                    <template x-if="scanType === 'qr' && scanPreview.notes">
+                                        <div class="rounded-md bg-slate-50 border border-slate-200 px-3 py-2">
+                                            <p class="text-[11px] text-slate-500 mb-1">Additional payload</p>
+                                            <p class="text-xs text-slate-700 break-words" x-text="scanPreview.notes"></p>
+                                        </div>
+                                    </template>
+                                </div>
+
+                                <div class="px-5 py-4 border-t border-slate-200 flex items-center justify-end gap-2">
+                                    <x-secondary-button type="button" @click="cancelScanReview">Cancel</x-secondary-button>
+                                    <x-secondary-button type="button" @click="retryScanReview">Retry</x-secondary-button>
+                                    <x-primary-button type="button" @click="confirmScanReview">Confirm</x-primary-button>
+                                </div>
                             </div>
                         </div>
                     </div>

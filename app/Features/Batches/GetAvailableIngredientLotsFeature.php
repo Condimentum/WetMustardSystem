@@ -20,12 +20,12 @@ class GetAvailableIngredientLotsFeature
     /**
      * @return array<int, array{lot_number: string, quantity_outstanding: float}>
      */
-    public function __invoke(?string $productId, int $limit = 100): array
+    public function __invoke(?string $productId, int $limit = 100, ?string $lotNumber = null): array
     {
         if ($productId === null || trim($productId) === '') {
             return [];
         }
 
-        return ($this->listLots)($productId, $limit);
+        return ($this->listLots)($productId, $limit, $lotNumber);
     }
 }

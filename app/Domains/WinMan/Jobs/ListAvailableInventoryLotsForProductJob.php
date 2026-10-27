@@ -20,9 +20,11 @@ class ListAvailableInventoryLotsForProductJob
     }
 
     /**
+     * @param string|null $lotNumber When set, restricts the result to that exact lot (case-insensitive per WinMan collation).
+     *
      * @return array<int, array{lot_number: string, quantity_outstanding: float}>
      */
-    public function __invoke(string $productId, int $limit = 100): array
+    public function __invoke(string $productId, int $limit = 100, ?string $lotNumber = null): array
     {
         $productId = trim($productId);
 
@@ -30,19 +32,27 @@ class ListAvailableInventoryLotsForProductJob
             return [];
         }
 
-                $rows = $this->winman->connection()->select(
-                        "SELECT TOP (?)
-                                        i.LotNumber,
-                                        SUM(i.QuantityOutstanding) AS QuantityOutstanding
-                         FROM Inventory i
-                         JOIN Products p ON p.Product = i.Product
-                         WHERE p.ProductId = ?
-                             AND i.QuantityOutstanding > 0
-                             AND i.LotNumber IS NOT NULL
-                             AND i.LotNumber <> ''
-                         GROUP BY i.LotNumber
-                         ORDER BY i.LotNumber ASC",
-            [$limit, $productId],
+        $lotNumber = $lotNumber !== null ? trim($lotNumber) : null;
+        $lotFilter = $lotNumber !== null && $lotNumber !== '' ? 'AND LTRIM(RTRIM(i.LotNumber)) = ?' : '';
+        $bindings = [$limit, $productId];
+        if ($lotFilter !== '') {
+            $bindings[] = $lotNumber;
+        }
+
+        $rows = $this->winman->connection()->select(
+            "SELECT TOP (?)
+                    i.LotNumber,
+                    SUM(i.QuantityOutstanding) AS QuantityOutstanding
+             FROM Inventory i
+             JOIN Products p ON p.Product = i.Product
+             WHERE p.ProductId = ?
+                 AND i.QuantityOutstanding > 0
+                 AND i.LotNumber IS NOT NULL
+                 AND i.LotNumber <> ''
+                 {$lotFilter}
+             GROUP BY i.LotNumber
+             ORDER BY i.LotNumber ASC",
+            $bindings,
         );
 
         return array_map(static fn (object $row): array => [
